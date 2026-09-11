@@ -68,6 +68,12 @@ class LLM:
             result.append(item)
         return result
 
+    def relationship_instructions(self, scope):
+        special = (scope.guild_id is None and self.settings.special_dm_user_id is not None
+                   and scope.user_id == self.settings.special_dm_user_id)
+        filename = "special_dm.md" if special else "ordinary_relationship.md"
+        return files("hina_bot").joinpath("prompts/" + filename).read_text(encoding="utf-8")
+
     async def answer(self, store: Store, scope: Scope, name: str, content: str,
                      public_context: list | None = None, channel_context: list | None = None,
                      emoji_catalog: list | None = None, use_memory: bool = True) -> str:
@@ -88,7 +94,7 @@ class LLM:
                              {"role": "assistant", "content": turn["reply"]}])
         messages.append({"role": "user", "content": content})
         response = await self.client.responses.create(
-            model=self.settings.model, instructions=POLICY + "\n" + self.character,
+            model=self.settings.model, instructions=POLICY + "\n" + self.character + "\n" + self.relationship_instructions(scope),
             input=messages, max_output_tokens=self.settings.output_tokens, store=False)
         if response.status != "completed" or not response.output_text.strip():
             raise ValueError("No completed model response")

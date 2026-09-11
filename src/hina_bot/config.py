@@ -22,6 +22,7 @@ class Settings:
     summary_every: int = 8
     history_turns: int = 12
     channel_context_chars: int = 6000
+    special_dm_user_id: int | None = None
     bot_admin_ids: frozenset[int] = frozenset()
 
     @classmethod
@@ -39,6 +40,8 @@ class Settings:
             raise ValueError("PUBLIC_SERVER_MEMORY_IN_DM은 true 또는 false여야 합니다.")
         s = cls(
             api_key=api_key, discord_token=token,
+            special_dm_user_id=int(os.environ["SPECIAL_DM_USER_ID"])
+            if os.getenv("SPECIAL_DM_USER_ID", "").strip() else None,
             bot_admin_ids=frozenset(int(x.strip()) for x in
                                    os.getenv("BOT_ADMIN_IDS", "").split(",") if x.strip()),
             model=os.getenv("OPENAI_MODEL", "gpt-4.1-mini"),
@@ -56,6 +59,8 @@ class Settings:
             channel_context_chars=int(os.getenv("CHANNEL_CONTEXT_CHARS", "6000")),
             history_turns=int(os.getenv("HISTORY_TURNS", "12")),
         )
+        if s.special_dm_user_id is not None and s.special_dm_user_id <= 0:
+            raise ValueError("SPECIAL_DM_USER_ID는 양의 Discord 사용자 ID여야 합니다.")
         if not (0 <= s.cooldown <= 3600 and 1 <= s.concurrency <= 20
                 and 128 <= s.output_tokens <= 4096
                 and 0 <= s.channel_context_chars <= 12000

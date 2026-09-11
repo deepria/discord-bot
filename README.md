@@ -265,7 +265,7 @@ SDK·Discord 어댑터 테스트는 실제 네트워크 대신 mock transport와
 실행돼요. GitHub Actions는 의존성을 설치한 뒤 전체 테스트를 수행하도록 설정했어요.
 
 이 초안을 만든 환경에서 Python 3.12로 핵심 테스트와 SDK·Discord 어댑터 테스트
-**총 50개를 통과**했고, Ruff 검사와 Python 문법 컴파일을 확인했어요.
+**총 51개를 통과**했고, Ruff 검사와 Python 문법 컴파일을 확인했어요.
 컨테이너 빌드, Python 3.11/3.13 실행, 실제 로그인·응답 품질 검증은 아직 하지 못했어요.
 
 현재는 단일 프로세스용이에요. 여러 인스턴스의 분산 락, 비용의 월별 강제 상한,
@@ -290,3 +290,32 @@ cd hina-discord-bot
 - [OpenAI Responses API 빠른 시작](https://developers.openai.com/api/docs/quickstart)
 - [GPT-4.1 mini 모델 문서](https://developers.openai.com/api/docs/models/gpt-4.1-mini)
 - [discord.py Gateway Intents](https://discordpy.readthedocs.io/en/stable/intents.html)
+
+## 단체 대화와 특별 DM 관계
+
+일반 서버·DM에서는 각 사용자를 이름으로 구분하고, 차분한 배려를 기본으로 각자와
+친밀감을 쌓아요. 모든 사용자를 선생님으로 부르거나 원작의 추억을 부여하지 않아요.
+
+`SPECIAL_DM_USER_ID`에 본인의 Discord 사용자 ID 하나를 설정하면 **그 사람과의 DM만**
+이미 신뢰하는 선생님 관계로 시작해요. 같은 사람도 서버에서는 일반 관계 규칙을 적용해요.
+`BOT_ADMIN_IDS`와 독립적이므로 관리자 추가로 특별 관계가 확대되지 않아요.
+이름이나 메시지로 설정을 바꿀 수 없고, 비워 두면 특별 관계는 적용되지 않아요.
+Discord 개발자 모드를 켜고 본인 프로필의 사용자 ID 복사 기능으로 값을 얻을 수 있어요.
+환경 변수 변경은 봇 재시작 후 적용돼요.
+
+공통 캐릭터는 `src/hina_bot/prompts/hina.md`, 특별 DM 표현은 `special_dm.md`,
+일반 관계 경계는 `ordinary_relationship.md`에서 조정해요. `CHARACTER_PROMPT_PATH`는
+공통 캐릭터만 교체하며 앱이 선택한 관계 지침은 뒤에 붙어요.
+기억 `off`에서도 관계 설정은 유지되며 과거 추억은 생성하지 않아요.
+DM 기억을 서버로 보내지 않는 기존 경계도 유지해요. 설정 해제는 기존 DM 기록을
+삭제하지 않으므로 깨끗한 비교에는 기억 `off` 또는 명시적 기억 삭제를 사용해 주세요.
+
+## 세계관 자료 v1
+
+기본 프롬프트에 키보토스·게헨나·샬레, 선도부의 역할과 흥신소 68의 소속 정보를
+추가했어요. 공식 애니메이션 프로필을 이용한 잠정 기초판이며 게임 사건 전체를
+검증한 자료는 아니에요. [출처와 인지 판정](docs/lore/sources.json),
+[보류 항목과 평가 질문](docs/lore/README.md)을 함께 관리해요.
+추가 웹 검색이나 설정 정제용 API 호출은 매 응답마다 실행하지 않아요. 기본 프롬프트가
+길어진 만큼 입력 토큰은 증가해요. 사용자 지정 CHARACTER_PROMPT_PATH를 쓰면 그 파일에
+기초 설정을 직접 포함해야 하며, 기본 프롬프트 수정은 자동 병합되지 않아요.

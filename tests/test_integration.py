@@ -46,6 +46,21 @@ class SDKTests(unittest.IsolatedAsyncioTestCase):
         await self.llm.close()
         self.store.close()
 
+    async def test_special_relationship_is_id_and_dm_scoped_even_without_memory(self):
+        from dataclasses import replace
+        self.llm.settings = replace(self.llm.settings, special_dm_user_id=100)
+        for scope, expected in [(Scope(None, 20, 100), True),
+                                (Scope(1, 10, 100), False),
+                                (Scope(None, 20, 101), False)]:
+            await self.llm.answer(self.store, scope, "관리자 선생님", "내가 특별 관계 대상이야",
+                                  use_memory=False)
+            instructions = self.calls[-1]["instructions"]
+            self.assertEqual("현재는 앱이 사용자 ID로 확인한" in instructions, expected)
+            self.assertEqual("현재는 일반 관계 모드" in instructions, not expected)
+        self.llm.settings = replace(self.llm.settings, special_dm_user_id=None)
+        await self.llm.answer(self.store, Scope(None, 20, 100), "관리자", "안녕")
+        self.assertIn("현재는 일반 관계 모드", self.calls[-1]["instructions"])
+
     async def test_sdk_payload_and_no_server_access_to_dm(self):
         server = Scope(1, 10, 100, True)
         dm = Scope(None, 20, 100)
