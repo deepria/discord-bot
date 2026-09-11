@@ -220,6 +220,15 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(calls), 1)
         self.assertNotIn("A의 일반 발언", str(dict(calls[0])))
 
+    async def test_emoji_message_bypasses_llm_and_memory_and_slash_tree(self):
+        self.bot.emoji_admin_ids.add(self.author.id)
+        await self.bot.on_message(self.message("히나야 /이모지 목록"))
+        self.llm.answer.assert_not_awaited()
+        self.assertFalse(self.store.seen(1))
+        self.assertEqual(self.bot.recent.context(Scope(1, 10, 100), 2), [])
+        self.assertIsNone(self.bot.tree.get_command("emoji"))
+        self.assertIsNotNone(self.bot.tree.get_command("memory"))
+
     async def test_management_commands_do_not_enter_recent_context(self):
         await self.bot.on_message(self.message("히나야 /메모 비밀처럼보이는메모", id=1))
         self.assertEqual(self.bot.recent.context(Scope(1, 10, 100), 2), [])

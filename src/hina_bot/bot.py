@@ -26,7 +26,8 @@ HELP = """호출: @봇 멘션, 핑을 켠 답장, 또는 메시지 맨 앞의 `�
 공개 서버에서 같은 사용자가 나눈 대화는 DM에서 참고할 수 있어요. DM 기억은 서버로 넘어가지 않아요.
 같은 채널의 일반 대화도 최근 문맥으로 잠시 보관하고, 호출 시 OpenAI에 함께 보내요.
 공개 채널에서 직접 호출한 발화만 같은 서버의 다른 사용자·채널에서 장기 기억으로 참고해요.
-첨부파일·이미지·답장 원문을 읽는 기능은 아직 없어요.
+`/이모지 등록·목록·수정·삭제` — 봇 관리자 전용 (이미지 등록은 파일 첨부 가능)
+일반 대화에서는 첨부파일·이미지·답장 원문을 읽지 못해요.
 봇 관리자는 실제 슬래시 명령 /memory mode, /memory status로 채널별 기억을 제어할 수 있어요."""
 
 
@@ -43,7 +44,7 @@ class HinaClient(discord.Client):
         self.emoji_registry = EmojiRegistry(self, self.store)
         self.emoji_admin_ids = set(settings.bot_admin_ids)
         self.tree = discord.app_commands.CommandTree(self)
-        self.tree.add_command(EmojiCommands(self))
+        self.emoji_commands = EmojiCommands(self)
         self.tree.add_command(MemoryCommands(self))
         self.locks = weakref.WeakValueDictionary()
         self.cooldowns = {}
@@ -96,6 +97,8 @@ class HinaClient(discord.Client):
     async def command(self, message, scope, text):
         cmd, _, arg = text.partition(" ")
         arg = arg.strip()
+        if cmd == "/이모지":
+            return await self.emoji_commands.handle(message, arg)
         if cmd == "/도움말":
             return HELP
         if cmd == "/기억":
@@ -194,7 +197,7 @@ class HinaClient(discord.Client):
         received_mode = MemoryMode(self.store.memory_mode(scope))
         # Management commands must not enter the shared channel buffer.
         management = text is not None and text.startswith((
-            "/도움말", "/기억", "/메모", "/서버기억", "/서버메모"))
+            "/이모지", "/도움말", "/기억", "/메모", "/서버기억", "/서버메모"))
         if guild_id is not None and not management and received_mode.writes:
             self.recent.add(scope, message.id, message.author.display_name, message.content)
         if text is None:

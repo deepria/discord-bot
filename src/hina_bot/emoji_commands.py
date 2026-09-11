@@ -1,11 +1,10 @@
-"""Curated application emoji registry and owner-only slash commands."""
+"""Curated application emoji registry and owner-only message commands."""
 import asyncio
 import logging
 import re
 import time
 
 import discord
-from discord import app_commands
 
 log = logging.getLogger("hina")
 
@@ -62,7 +61,7 @@ class EmojiRegistry:
         async with self.lock:
             rows = self.store.emoji_rows()
             if any(r["alias"] == alias for r in rows):
-                raise ValueError("이미 등록된 별칭이에요. 설명 변경은 /emoji edit를 사용해 주세요.")
+                raise ValueError("이미 등록된 별칭이에요. 설명 변경은 히나야 /이모지 수정를 사용해 주세요.")
             if len(rows) >= 20:
                 raise ValueError("최대 20개까지 등록할 수 있어요. 먼저 하나를 목록에서 제외해 주세요.")
             if source is not None:
@@ -105,59 +104,57 @@ class EmojiRegistry:
                 raise ValueError("등록되지 않은 별칭이에요.")
 
 
-class EmojiCommands(app_commands.Group):
+class EmojiCommands:
+    HELP = ("히나야 /이모지 등록 별칭 <이모지 또는 ID> 사용 상황\n"
+            "히나야 /이모지 등록 별칭 사용 상황 + 이미지 한 개 첨부\n"
+            "히나야 /이모지 목록\n히나야 /이모지 수정 별칭 사용 상황\n"
+            "히나야 /이모지 삭제 별칭")
+
     def __init__(self, client):
-        super().__init__(name="emoji", description="히나가 사용할 이모지 관리 (봇 관리자 전용)")
         self.client = client
 
-    async def interaction_check(self, interaction):
-        if interaction.user.id not in self.client.emoji_admin_ids:
-            await interaction.response.send_message("봇 소유자 또는 지정된 관리자만 사용할 수 있어요.",
-                                                    ephemeral=True)
-            return False
-        return True
-
-    async def on_error(self, interaction, error):
-        original = getattr(error, "original", error)
-        log.warning("Emoji command failed (%s)", type(original).__name__)
-        text = str(original) if isinstance(original, ValueError) else "처리하지 못했어요. 잠시 후 다시 시도해 주세요."
-        if interaction.response.is_done():
-            await interaction.followup.send(text, ephemeral=True)
-        else:
-            await interaction.response.send_message(text, ephemeral=True)
-
-    @app_commands.command(name="add", description="기존 이모지 또는 이미지를 등록하고 별칭·의미 지정")
-    @app_commands.describe(alias="예: hina_happy", description="예: 기쁘거나 칭찬받았을 때",
-                           image="PNG·GIF·JPEG·WebP, 최대 256 KiB", source="기존 서버 이모지 또는 이모지 ID")
-    async def add(self, interaction: discord.Interaction, alias: str, description: str,
-                  image: discord.Attachment | None = None, source: str | None = None):
-        await interaction.response.defer(ephemeral=True)
-        markup = await self.client.emoji_registry.add(alias, description, image, source)
-        await interaction.followup.send(f"등록했어요: {markup} `:{alias}:`", ephemeral=True)
-
-    @app_commands.command(name="list", description="등록한 이모지와 사용 상황 확인")
-    async def list_emojis(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-        catalog = {e["name"]: e for e in await self.client.emoji_registry.catalog()}
-        rows = self.client.store.emoji_rows()
-        if not rows:
-            await interaction.followup.send("등록된 이모지가 없어요. /emoji add로 추가해 주세요.", ephemeral=True)
-            return
-        embed = discord.Embed(title=f"히나 이모지 {len(rows)}/20")
-        for row in rows:
-            live = catalog.get(row["alias"])
-            preview = live["markup"] if live else "(사용 불가)"
-            embed.add_field(name=f":{row['alias']}:", value=f"{preview} {row['description']}", inline=False)
-        await interaction.followup.send(embed=embed, ephemeral=True)
-
-    @app_commands.command(name="edit", description="등록한 별칭의 사용 상황 변경")
-    async def edit(self, interaction: discord.Interaction, alias: str, description: str):
-        await interaction.response.defer(ephemeral=True)
-        await self.client.emoji_registry.edit(alias, description)
-        await interaction.followup.send("사용 상황을 변경했어요.", ephemeral=True)
-
-    @app_commands.command(name="remove", description="히나가 사용하는 목록에서 제외 (원본 이미지는 유지)")
-    async def remove(self, interaction: discord.Interaction, alias: str):
-        await interaction.response.defer(ephemeral=True)
-        await self.client.emoji_registry.remove(alias)
-        await interaction.followup.send("사용 목록에서 제외했어요. 원본 서버 또는 앱의 이모지는 삭제하지 않아요.", ephemeral=True)
+    async def handle(self, message, text):
+        if message.author.id not in self.client.emoji_admin_ids:
+            return "봇 소유자 또는 지정된 관리자만 사용할 수 있어요."
+        parts = text.split(maxsplit=1)
+        action, rest = (parts[0], parts[1] if len(parts) > 1 else "") if parts else ("", "")
+        attachments = list(getattr(message, "attachments", []))
+        try:
+            if action == "등록":
+                args = rest.split(maxsplit=1 if attachments else 2)
+                if len(attachments) > 1 or len(args) != (2 if attachments else 3):
+                    return self.HELP
+                alias = args[0]
+                if attachments:
+                    if re.match(r"(?:<a?:|[0-9]{1,20}(?:\s|$))", args[1]):
+                        return "기존 이모지와 이미지 파일은 동시에 지정할 수 없어요."
+                    markup = await self.client.emoji_registry.add(alias, args[1], attachments[0])
+                else:
+                    markup = await self.client.emoji_registry.add(alias, args[2], source=args[1])
+                return f"등록했어요: {markup} `:{alias}:`"
+            if attachments:
+                return "이미지 첨부는 등록 명령에서만 사용할 수 있어요."
+            if action == "목록" and not rest:
+                catalog = {e["name"]: e for e in await self.client.emoji_registry.catalog(message.channel)}
+                rows = self.client.store.emoji_rows()
+                lines = [f"히나 이모지 {len(rows)}/20"]
+                for row in rows:
+                    preview = catalog.get(row["alias"], {}).get("markup", "(사용 불가)")
+                    description = discord.utils.escape_markdown(row["description"])
+                    lines.append(f"`:{row['alias']}:` {preview} — {description}")
+                return "\n".join(lines) if rows else "등록된 이모지가 없어요.\n" + self.HELP
+            if action == "수정":
+                args = rest.split(maxsplit=1)
+                if len(args) != 2:
+                    return self.HELP
+                await self.client.emoji_registry.edit(*args)
+                return "사용 상황을 변경했어요."
+            if action == "삭제" and rest and len(rest.split()) == 1:
+                await self.client.emoji_registry.remove(rest)
+                return "사용 목록에서 제외했어요. 원본 이모지는 삭제하지 않아요."
+            return self.HELP
+        except ValueError as exc:
+            return str(exc)
+        except Exception as exc:  # noqa: BLE001 - keep credentials and remote payloads out of replies
+            log.warning("Emoji command failed (%s)", type(exc).__name__)
+            return "처리하지 못했어요. 잠시 후 다시 시도해 주세요."
