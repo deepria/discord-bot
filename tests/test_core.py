@@ -97,6 +97,7 @@ class MemoryTests(unittest.TestCase):
     def test_public_to_dm_only_same_user(self):
         for i, scope in enumerate([self.a, self.other_user, self.dm], 1):
             self.store.add(scope, i, f"text{i}", "응")
+            self.store.add_shared_call(scope, i, "speaker", f"text{i}")
         candidates = self.store.public_candidates(100)
         self.assertEqual([s.conversation for s in candidates], [self.a.conversation])
         context = self.store.public_context(candidates)
@@ -115,6 +116,7 @@ class MemoryTests(unittest.TestCase):
 
     def test_public_then_private_only_exports_old_public_turn(self):
         self.store.add(self.a, 1, "공개", "응")
+        self.store.add_shared_call(self.a, 1, "speaker", "공개")
         private = Scope(1, 10, 100, False)
         self.store.add(private, 2, "비공개", "응")
         self.store.save_summary(private, "섞인 요약", 2)
@@ -137,3 +139,47 @@ class MemoryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SharedContextTests(unittest.TestCase):
+    def test_recent_context_budget_order_and_channel_isolation(self):
+        from hina_bot.recent import RecentMessages
+        recent = RecentMessages(budget=8)
+        a, b = Scope(1, 10, 100), Scope(1, 10, 200)
+        recent.add(a, 1, "A", "12345")
+        recent.add(b, 2, "B", "abcdef")
+        rows = recent.context(b, 3)
+        self.assertEqual([r["name"] for r in rows], ["A", "B"])
+        self.assertEqual(sum(len(r["content"]) for r in rows), 8)
+        self.assertEqual(rows[-1]["content"], "abcdef")
+        self.assertEqual(recent.context(Scope(1, 20, 200), 3), [])
+        self.assertEqual(recent.context(Scope(None, 10, 200), 3), [])
+        self.assertEqual([r["name"] for r in recent.context(a, 2)], ["A"])
+        recent.forget(a)
+        self.assertEqual(recent.context(b, 3), [])
+
+    def test_recent_ttl_and_capacity(self):
+        from unittest.mock import patch
+
+        from hina_bot.recent import RecentMessages
+        recent = RecentMessages(ttl=5, channels=1)
+        with patch("hina_bot.recent.time.monotonic", return_value=10):
+            recent.add(Scope(1, 10, 100), 1, "A", "old")
+            recent.add(Scope(1, 20, 100), 2, "A", "new")
+        self.assertEqual(len(recent.buffers), 1)
+        with patch("hina_bot.recent.time.monotonic", return_value=16):
+            self.assertEqual(recent.context(Scope(1, 20, 100), 3), [])
+
+    def test_shared_calls_cross_users_but_not_guilds_or_private(self):
+        store = Store(":memory:")
+        a, b = Scope(1, 10, 100, True), Scope(1, 20, 200, True)
+        for i, source in enumerate([a, b, Scope(2, 30, 300, True),
+                                    Scope(1, 40, 400, False), Scope(None, 50, 500)], 1):
+            store.add_shared_call(source, i, "speaker", "called")
+        self.assertEqual({s.user_id for s in store.public_candidates(200, 1)}, {100, 200})
+        self.assertEqual({s.user_id for s in store.public_candidates(200)}, {200})
+        store.save_shared_summary(a, "A", "A preference", 1)
+        store.forget(a)
+        self.assertEqual(store.shared_summary(a), ("", 0))
+        self.assertEqual({s.user_id for s in store.public_candidates(200, 1)}, {200})
+        store.close()

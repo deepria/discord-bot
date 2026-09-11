@@ -62,7 +62,7 @@ class SDKTests(unittest.IsolatedAsyncioTestCase):
     async def test_dm_reads_public_context_without_copying_to_summary_input(self):
         dm = Scope(None, 20, 100)
         await self.llm.answer(self.store, dm, "사용자", "안녕",
-                              public_context=[{"summary": "public-source-marker"}])
+                              public_context=[{"source": "guild:1:channel:10:user:100", "summary": "public-source-marker"}])
         self.assertIn("public-source-marker", str(self.calls[-1]["input"]))
         self.store.add(dm, 1, "안녕", "응")
         self.store.add(dm, 2, "반가워", "응")
@@ -70,17 +70,31 @@ class SDKTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("public-source-marker", self.calls[-1]["input"])
         self.assertEqual(self.store.summary(dm)[0], "응, 기억하고 있어.")
 
+    async def test_shared_summary_contains_only_direct_calls(self):
+        source = Scope(1, 10, 100, True)
+        self.store.add(source, 1, "first call", "passive-context-secret")
+        self.store.add_shared_call(source, 1, "A", "first call")
+        self.store.add(source, 2, "second call", "another-passive-secret")
+        self.store.add_shared_call(source, 2, "A", "second call")
+        await self.llm.summarize_shared(self.store, source)
+        payload = self.calls[-1]["input"]
+        self.assertIn("first call", payload)
+        self.assertNotIn("passive", payload)
+        self.assertEqual(self.store.shared_summary(source)[0], "응, 기억하고 있어.")
+        await self.llm.summarize(self.store, source)
+        self.assertNotIn("passive", self.calls[-1]["input"])
+
 
 @unittest.skipUnless(AVAILABLE, "Install project dev dependencies to test SDK/Discord adapters")
 class AdapterTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.store = Store(":memory:")
-        self.llm = NS(answer=AsyncMock(return_value="안녕"), summarize=AsyncMock(), close=AsyncMock())
+        self.llm = NS(answer=AsyncMock(return_value="안녕"), summarize=AsyncMock(), summarize_shared=AsyncMock(), close=AsyncMock())
         self.bot = HinaClient(Settings("test", "test", cooldown=0), store=self.store, llm=self.llm)
         self.bot._connection.user = NS(id=99)
         self.channel = MagicMock(spec=discord.TextChannel)
         self.channel.id = 10
-        self.channel.send = AsyncMock()
+        self.channel.send = AsyncMock(return_value=NS(id=1000))
         self.channel.typing.return_value.__aenter__ = AsyncMock(return_value=None)
         self.channel.typing.return_value.__aexit__ = AsyncMock(return_value=None)
         self.channel.permissions_for.return_value = NS(view_channel=True, read_message_history=True)
@@ -123,7 +137,7 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
         self.llm.answer.assert_not_awaited()
 
     async def test_current_visibility_and_membership_rechecked(self):
-        self.store.add(Scope(1, 10, 100, True), 500, "공개", "응")
+        self.store.add_shared_call(Scope(1, 10, 100, True), 500, "speaker", "공개")
         member = NS(id=100)
         self.guild.get_channel = MagicMock(return_value=self.channel)
         self.guild.fetch_member = AsyncMock(return_value=member)
@@ -136,7 +150,33 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.bot.public_sources(100), [])
 
     async def test_threads_excluded(self):
-        self.store.add(Scope(1, 10, 100, True), 500, "공개", "응")
+        self.store.add_shared_call(Scope(1, 10, 100, True), 500, "speaker", "공개")
         self.guild.get_channel = MagicMock(return_value=MagicMock(spec=discord.Thread))
         self.bot.get_guild = MagicMock(return_value=self.guild)
+        self.assertEqual(await self.bot.public_sources(100), [])
+
+    async def test_b_can_refer_to_a_without_a_calling_bot(self):
+        await self.bot.on_message(self.message("A의 일반 발언", id=1))
+        self.llm.answer.assert_not_awaited()
+        self.author = NS(id=200, bot=False, display_name="B",
+                         guild_permissions=NS(manage_guild=False))
+        await self.bot.on_message(self.message("히나야 방금 A가 한 말 이상하지 않아?", id=2))
+        context = self.llm.answer.call_args.kwargs["channel_context"]
+        self.assertEqual(context[0]["user_id"], "100")
+        self.assertEqual(context[0]["content"], "A의 일반 발언")
+        self.assertEqual(self.store.public_candidates(100), [])
+        calls = self.store.pending_shared(Scope(1, 10, 200))
+        self.assertEqual(len(calls), 1)
+        self.assertNotIn("A의 일반 발언", str(dict(calls[0])))
+
+    async def test_management_commands_do_not_enter_recent_context(self):
+        await self.bot.on_message(self.message("히나야 /메모 비밀처럼보이는메모", id=1))
+        self.assertEqual(self.bot.recent.context(Scope(1, 10, 100), 2), [])
+
+    async def test_other_speakers_public_sources_available_in_server(self):
+        self.store.add_shared_call(Scope(1, 10, 200, True), 500, "B", "나는 커피를 좋아해")
+        self.guild.get_channel = MagicMock(return_value=self.channel)
+        self.guild.fetch_member = AsyncMock(return_value=NS(id=100))
+        self.bot.get_guild = MagicMock(return_value=self.guild)
+        self.assertEqual([s.user_id for s in await self.bot.public_sources(100, 1)], [200])
         self.assertEqual(await self.bot.public_sources(100), [])

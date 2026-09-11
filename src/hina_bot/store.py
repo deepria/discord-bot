@@ -30,6 +30,17 @@ class Store:
                 scope TEXT PRIMARY KEY, realm TEXT NOT NULL, user_id TEXT NOT NULL,
                 text TEXT NOT NULL, through_id INTEGER NOT NULL, exportable INTEGER NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS shared_calls (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, scope TEXT NOT NULL,
+                realm TEXT NOT NULL, user_id TEXT NOT NULL, message_id TEXT UNIQUE NOT NULL,
+                name TEXT NOT NULL, content TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS shared_calls_scope ON shared_calls(scope, id);
+            CREATE TABLE IF NOT EXISTS shared_summaries (
+                scope TEXT PRIMARY KEY, realm TEXT NOT NULL, user_id TEXT NOT NULL,
+                name TEXT NOT NULL, text TEXT NOT NULL, through_id INTEGER NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS notes (scope TEXT PRIMARY KEY, text TEXT NOT NULL);
         """)
 
@@ -94,29 +105,55 @@ class Store:
     def forget(self, scope: Scope):
         """Delete this user's history and notes across channels in the current realm."""
         with self.db:
-            for table in ("turns", "summaries"):
+            for table in ("turns", "summaries", "shared_calls", "shared_summaries"):
                 self.db.execute(f"DELETE FROM {table} WHERE realm=? AND user_id=?",
                                 (scope.realm, str(scope.user_id)))
             self.db.execute("DELETE FROM notes WHERE scope=?", (scope.user_note,))
 
-    def public_candidates(self, user_id: int):
-        # Candidates only. The Discord adapter MUST recheck membership and visibility.
-        rows = self.db.execute(
-            "SELECT scope, MAX(id) AS recent FROM turns WHERE user_id=? "
-            "AND realm LIKE 'guild:%' AND exportable=1 "
-            "GROUP BY scope ORDER BY recent DESC LIMIT 30",
-            (str(user_id),)).fetchall()
-        return [Scope(int(row["scope"].split(":")[1]),
-                      int(row["scope"].split(":")[3]), user_id) for row in rows]
+    def add_shared_call(self, scope, message_id, name, content):
+        if scope.guild_id is None or not scope.public_at_capture:
+            return
+        with self.db:
+            self.db.execute("INSERT OR IGNORE INTO shared_calls "
+                            "(scope,realm,user_id,message_id,name,content) VALUES (?,?,?,?,?,?)",
+                            (scope.conversation, scope.realm, str(scope.user_id), str(message_id),
+                             name[:100], content))
+            self.db.execute("DELETE FROM shared_calls WHERE scope=? AND id NOT IN "
+                            "(SELECT id FROM shared_calls WHERE scope=? ORDER BY id DESC LIMIT ?)",
+                            (scope.conversation, scope.conversation, self.history_turns))
 
-    def public_context(self, allowed_scopes: list[Scope]):
+    def shared_summary(self, scope):
+        row = self.db.execute("SELECT text,through_id FROM shared_summaries WHERE scope=?",
+                              (scope.conversation,)).fetchone()
+        return (row[0], row[1]) if row else ("", 0)
+
+    def pending_shared(self, scope):
+        return self.db.execute("SELECT * FROM shared_calls WHERE scope=? AND id>? ORDER BY id",
+                               (scope.conversation, self.shared_summary(scope)[1])).fetchall()
+
+    def save_shared_summary(self, scope, name, text, through):
+        with self.db:
+            self.db.execute("INSERT OR REPLACE INTO shared_summaries VALUES (?,?,?,?,?,?)",
+                            (scope.conversation, scope.realm, str(scope.user_id), name,
+                             text[:1500], through))
+
+    def public_candidates(self, user_id: int, guild_id: int | None = None):
+        # Server queries include all speakers in this guild. DM queries include only its owner.
+        condition, value = (("realm=?", f"guild:{guild_id}") if guild_id is not None
+                            else ("user_id=?", str(user_id)))
+        rows = self.db.execute(
+            "SELECT scope, user_id, MAX(id) AS recent FROM shared_calls WHERE " + condition +
+            " GROUP BY scope,user_id ORDER BY recent DESC LIMIT 30", (value,)).fetchall()
+        return [Scope(int(r["scope"].split(":")[1]), int(r["scope"].split(":")[3]),
+                      int(r["user_id"])) for r in rows]
+
+    def public_context(self, allowed_scopes):
         context = []
         for source in allowed_scopes[:4]:
-            summary, _ = self.summary(source)
-            context.append({
-                "source": source.conversation,
-                "summary": summary if self.summary_exportable(source) else "",
-                "recent_user_messages": [row["content"] for row in self.history(source)
-                                         if row["exportable"]][-2:],
-            })
+            rows = self.db.execute("SELECT * FROM shared_calls WHERE scope=? ORDER BY id DESC LIMIT 2",
+                                   (source.conversation,)).fetchall()
+            context.append({"source": source.conversation, "user_id": str(source.user_id),
+                            "name": rows[0]["name"] if rows else "",
+                            "summary": self.shared_summary(source)[0],
+                            "recent_user_messages": [r["content"] for r in reversed(rows)]})
         return context

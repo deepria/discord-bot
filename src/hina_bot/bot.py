@@ -7,6 +7,7 @@ import discord
 
 from .config import Settings
 from .llm import LLM
+from .recent import RecentMessages
 from .routing import Scope, chunks, trigger_text
 from .store import Store
 
@@ -20,7 +21,8 @@ HELP = """호출: @봇 멘션, 핑을 켠 답장, 또는 메시지 맨 앞의 `�
 `/서버기억` — 서버 공통 메모 확인
 `/서버메모 내용` / `/서버메모삭제` — 서버 관리 권한으로 공통 메모 관리
 공개 서버에서 같은 사용자가 나눈 대화는 DM에서 참고할 수 있어요. DM 기억은 서버로 넘어가지 않아요.
-호출된 대화와 기억은 응답을 위해 OpenAI API로 전송돼요. 호출하지 않은 대화는 저장하지 않아요.
+같은 채널의 일반 대화도 최근 문맥으로 잠시 보관하고, 호출 시 OpenAI에 함께 보내요.
+공개 채널에서 직접 호출한 발화만 같은 서버의 다른 사용자·채널에서 장기 기억으로 참고해요.
 첨부파일·이미지·답장 원문을 읽는 기능은 아직 없어요."""
 
 
@@ -35,6 +37,8 @@ class HinaClient(discord.Client):
         self.llm = llm or LLM(settings)
         self.locks = weakref.WeakValueDictionary()
         self.cooldowns = {}
+        self.recent = RecentMessages(budget=settings.channel_context_chars)
+        self.channel_locks = weakref.WeakValueDictionary()
         self.slots = asyncio.Semaphore(settings.concurrency)
         self.pending_count = 0
         self.active_tasks = set()
@@ -85,6 +89,7 @@ class HinaClient(discord.Client):
             if arg != "확인":
                 return "현재 서버 또는 DM의 내 기억 전체를 삭제하려면 `히나야 /기억삭제 확인`을 보내 주세요."
             self.store.forget(scope)
+            self.recent.forget(scope)
             return "이 서버 또는 DM에서의 대화 기록, 자동 요약, 개인 메모를 삭제했어요."
         if cmd in {"/서버기억", "/서버메모", "/서버메모삭제"}:
             if scope.guild_id is None:
@@ -102,12 +107,12 @@ class HinaClient(discord.Client):
             return "서버 공통 메모를 삭제했어요."
         return None
 
-    async def public_sources(self, user_id: int):
+    async def public_sources(self, user_id: int, guild_id: int | None = None):
         """Fail closed; only ordinary public text channels, with live membership checks."""
-        if not self.settings.public_memory_in_dm:
+        if guild_id is None and not self.settings.public_memory_in_dm:
             return []
         allowed, members = [], {}
-        for scope in self.store.public_candidates(user_id):
+        for scope in self.store.public_candidates(user_id, guild_id):
             if (self.settings.allowed_guild_ids
                     and scope.guild_id not in self.settings.allowed_guild_ids):
                 continue
@@ -145,8 +150,6 @@ class HinaClient(discord.Client):
                 and guild_id not in self.settings.allowed_guild_ids):
             return
         text = trigger_text(message, self.user.id, self.settings.dm_always_reply)
-        if text is None:
-            return
         if self.pending_count >= 100:
             return
         public_at_capture = False
@@ -154,6 +157,20 @@ class HinaClient(discord.Client):
             permissions = message.channel.permissions_for(message.guild.default_role)
             public_at_capture = permissions.view_channel and permissions.read_message_history
         scope = Scope(guild_id, message.channel.id, message.author.id, public_at_capture)
+        if message.author.bot or message.webhook_id is not None:
+            return
+        # Management commands must not enter the shared channel buffer.
+        management = text is not None and text.startswith((
+            "/도움말", "/기억", "/메모", "/서버기억", "/서버메모"))
+        if guild_id is not None and not management:
+            self.recent.add(scope, message.id, message.author.display_name, message.content)
+        if text is None:
+            return
+        channel_key = (scope.realm, scope.channel_id)
+        channel_lock = self.channel_locks.get(channel_key)
+        if channel_lock is None:
+            channel_lock = asyncio.Lock()
+            self.channel_locks[channel_key] = channel_lock
         # One lock per realm+user, including all channels, so /기억삭제 cannot race a response.
         key = scope.user_note
         lock = self.locks.get(key)
@@ -164,7 +181,7 @@ class HinaClient(discord.Client):
         task = asyncio.current_task()
         self.active_tasks.add(task)
         try:
-            async with lock:
+            async with channel_lock, lock:
                 if self.store.seen(message.id):
                     return
                 if len(text) > 4000:
@@ -185,19 +202,26 @@ class HinaClient(discord.Client):
                     return
                 async with self.slots:
                     async with message.channel.typing():
-                        sources = (await self.public_sources(scope.user_id)
-                                   if guild_id is None else [])
+                        sources = await self.public_sources(scope.user_id, guild_id)
                         context = self.store.public_context(sources)
                         answer = await self.llm.answer(
                             self.store, scope, message.author.display_name, text,
-                            public_context=context)
-                        await self.send_text(message.channel, answer)
+                            public_context=context,
+                            channel_context=self.recent.context(scope, message.id))
+                        sent = await message.channel.send(
+                            next(chunks(answer)), allowed_mentions=discord.AllowedMentions.none())
+                        for part in list(chunks(answer))[1:]:
+                            await message.channel.send(part, allowed_mentions=discord.AllowedMentions.none())
+                        if guild_id is not None:
+                            self.recent.add(scope, sent.id, "히나", answer, role="assistant")
                     # Commit only after Discord delivery. Never memorize a failed model request.
                     self.store.add(scope, message.id, text, answer)
-                    try:
-                        await self.llm.summarize(self.store, scope)
-                    except Exception as exc:  # noqa: BLE001 - isolate event/summary failures; redact logs
-                        log.warning("Memory summary deferred (%s)", type(exc).__name__)
+                    self.store.add_shared_call(scope, message.id, message.author.display_name, text)
+                    for summarize in (self.llm.summarize, self.llm.summarize_shared):
+                        try:
+                            await summarize(self.store, scope)
+                        except Exception as exc:  # noqa: BLE001 - isolate summary failures; redact logs
+                            log.warning("Memory summary deferred (%s)", type(exc).__name__)
         except discord.HTTPException as exc:
             log.warning("Discord delivery failed (%s)", type(exc).__name__)
         except Exception as exc:  # noqa: BLE001 - isolate event/summary failures; redact logs

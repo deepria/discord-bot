@@ -19,6 +19,9 @@ POLICY = """당신은 디스코드에서 한국어로 대화하는 히나 역할
 정체를 직접 물으면 비공식 AI 역할극 봇임을 솔직히 짧게 설명하세요.
 학생 캐릭터의 성적 상황은 묘사하지 마세요. 애정 표현은 비성적인 범위에서 자연스럽게
 표현하세요. @everyone, @here, 사용자/역할 멘션을 생성하지 마세요.
+채널 최근 메시지는 여러 사람의 발언입니다. user_id와 name으로 화자를 구분하세요.
+'방금 A가 한 말'은 해당 채널의 발언을 참고하세요. 발언이 없으면 추측하지 말고 물어보세요.
+서버 공통 기억은 출처 화자의 주장으로 취급하며 현재 사용자의 사실로 바꾸지 마세요.
 일반 대화는 1~4문장, 자세한 설명을 요청하면 필요한 만큼 답변하되 3000자 이내로 작성하세요.
 """
 
@@ -47,17 +50,33 @@ class LLM:
     async def close(self):
         await self.client.close()
 
+    @staticmethod
+    def authorized_context(scope, context):
+        # Defence in depth: adapter checks channel permissions; here enforce realm/owner bounds.
+        result = []
+        for item in context:
+            source = item.get("source", "").split(":")
+            if len(source) != 6 or source[0] != "guild":
+                continue
+            if scope.guild_id is not None and source[1] != str(scope.guild_id):
+                continue
+            if scope.guild_id is None and source[5] != str(scope.user_id):
+                continue
+            result.append(item)
+        return result
+
     async def answer(self, store: Store, scope: Scope, name: str, content: str,
-                     public_context: list | None = None) -> str:
+                     public_context: list | None = None, channel_context: list | None = None) -> str:
         summary, _ = store.summary(scope)
         context = {"speaker_name": name[:100], "speaker_id": str(scope.user_id),
                    "space": "server" if scope.guild_id is not None else "DM",
                    "server_note": store.note(scope.realm) if scope.guild_id is not None else "",
                    "user_note": store.note(scope.user_note), "conversation_memory": summary,
-                   "public_server_context": (public_context or []) if scope.guild_id is None else []}
+                   "public_server_context": self.authorized_context(scope, public_context or []),
+                   "channel_recent_messages": channel_context or []}
         messages = [{"role": "user", "content": "참고 데이터(JSON):\n" +
                      json.dumps(context, ensure_ascii=False)}]
-        for turn in store.history(scope):
+        for turn in (store.history(scope) if scope.guild_id is None else []):
             messages.extend([{"role": "user", "content": turn["content"]},
                              {"role": "assistant", "content": turn["reply"]}])
         messages.append({"role": "user", "content": content})
@@ -74,9 +93,27 @@ class LLM:
             return
         old, _ = store.summary(scope)
         payload = {"previous_memory": old, "new_turns": [
-            {"at": t["created_at"], "user": t["content"], "hina": t["reply"]} for t in pending]}
+            {"at": t["created_at"], "user": t["content"],
+             **({"hina": t["reply"]} if scope.guild_id is None else {})} for t in pending]}
         response = await self.client.responses.create(
             model=self.settings.memory_model, instructions=SUMMARY_POLICY,
             input=json.dumps(payload, ensure_ascii=False), max_output_tokens=900, store=False)
         if response.status == "completed" and response.output_text.strip():
             store.save_summary(scope, response.output_text.strip()[:1500], pending[-1]["id"])
+
+    async def summarize_shared(self, store, scope):
+        pending = store.pending_shared(scope)
+        if len(pending) < self.settings.summary_every:
+            return
+        payload = {"previous_memory": store.shared_summary(scope)[0],
+                   "speaker_id": str(scope.user_id), "direct_calls": [
+                       {"at": t["created_at"], "user": t["content"]} for t in pending]}
+        response = await self.client.responses.create(
+            model=self.settings.memory_model,
+            instructions=SUMMARY_POLICY + "\n직접 호출한 발화만 요약하세요. 앞선 발언을 가리키는 "
+            "대명사나 인용의 빈 맥락을 보충하지 마세요. 화자 자신의 명시적 사실·선호·약속만 "
+            "기억하세요. 제3자의 발언이나 사실은 저장하지 마세요.",
+            input=json.dumps(payload, ensure_ascii=False), max_output_tokens=900, store=False)
+        if response.status == "completed" and response.output_text.strip():
+            store.save_shared_summary(scope, pending[-1]["name"], response.output_text.strip(),
+                                      pending[-1]["id"])

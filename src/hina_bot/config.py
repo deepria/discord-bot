@@ -21,6 +21,7 @@ class Settings:
     output_tokens: int = 1000
     summary_every: int = 8
     history_turns: int = 12
+    channel_context_chars: int = 6000
 
     @classmethod
     def load(cls):
@@ -49,10 +50,12 @@ class Settings:
             concurrency=int(os.getenv("MAX_CONCURRENT_REQUESTS", "3")),
             output_tokens=int(os.getenv("MAX_OUTPUT_TOKENS", "1000")),
             summary_every=int(os.getenv("SUMMARY_EVERY", "8")),
+            channel_context_chars=int(os.getenv("CHANNEL_CONTEXT_CHARS", "6000")),
             history_turns=int(os.getenv("HISTORY_TURNS", "12")),
         )
         if not (0 <= s.cooldown <= 3600 and 1 <= s.concurrency <= 20
                 and 128 <= s.output_tokens <= 4096
+                and 0 <= s.channel_context_chars <= 12000
                 and 2 <= s.summary_every <= s.history_turns <= 30):
             raise ValueError("설정 범위 오류: cooldown 0~3600, concurrency 1~20, "
                              "output_tokens 128~4096, 2 <= summary_every <= history_turns <= 30")
