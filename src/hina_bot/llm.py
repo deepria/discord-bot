@@ -70,20 +70,20 @@ class LLM:
 
     async def answer(self, store: Store, scope: Scope, name: str, content: str,
                      public_context: list | None = None, channel_context: list | None = None,
-                     emoji_catalog: list | None = None) -> str:
-        summary, _ = store.summary(scope)
+                     emoji_catalog: list | None = None, use_memory: bool = True) -> str:
+        summary, _ = store.summary(scope) if use_memory else ("", 0)
         context = {"speaker_name": name[:100], "speaker_id": str(scope.user_id),
                    "space": "server" if scope.guild_id is not None else "DM",
-                   "server_note": store.note(scope.realm) if scope.guild_id is not None else "",
-                   "user_note": store.note(scope.user_note), "conversation_memory": summary,
-                   "public_server_context": self.authorized_context(scope, public_context or []),
-                   "channel_recent_messages": channel_context or [],
+                   "server_note": store.note(scope.realm) if use_memory and scope.guild_id is not None else "",
+                   "user_note": store.note(scope.user_note) if use_memory else "", "conversation_memory": summary,
+                   "public_server_context": self.authorized_context(scope, public_context or []) if use_memory else [],
+                   "channel_recent_messages": (channel_context or []) if use_memory else [],
                    "available_custom_emojis": [{"alias": ":" + e["name"] + ":",
                                                 "description": e.get("description", "")}
                                                for e in emoji_catalog or []]}
         messages = [{"role": "user", "content": "참고 데이터(JSON):\n" +
                      json.dumps(context, ensure_ascii=False)}]
-        for turn in (store.history(scope) if scope.guild_id is None else []):
+        for turn in (store.history(scope) if use_memory and scope.guild_id is None else []):
             messages.extend([{"role": "user", "content": turn["content"]},
                              {"role": "assistant", "content": turn["reply"]}])
         messages.append({"role": "user", "content": content})

@@ -14,6 +14,10 @@ class Scope:
         return f"guild:{self.guild_id}" if self.guild_id is not None else f"dm:{self.user_id}"
 
     @property
+    def channel(self):
+        return f"{self.realm}:channel:{self.channel_id}"
+
+    @property
     def conversation(self):
         return f"{self.realm}:channel:{self.channel_id}:user:{self.user_id}"
 

@@ -45,6 +45,10 @@ class Store:
                 alias TEXT PRIMARY KEY, emoji_id TEXT NOT NULL UNIQUE, description TEXT NOT NULL,
                 source_guild_id TEXT
             );
+            CREATE TABLE IF NOT EXISTS memory_modes (
+                scope TEXT PRIMARY KEY,
+                mode TEXT NOT NULL CHECK(mode IN ('normal','read_only','write_only','off'))
+            );
             CREATE TABLE IF NOT EXISTS notes (scope TEXT PRIMARY KEY, text TEXT NOT NULL);
         """)
 
@@ -178,3 +182,13 @@ class Store:
     def remove_emoji(self, alias):
         with self.db:
             return self.db.execute("DELETE FROM emoji_registry WHERE alias=?", (alias,)).rowcount > 0
+
+    def memory_mode(self, scope):
+        row = self.db.execute("SELECT mode FROM memory_modes WHERE scope=?", (scope.channel,)).fetchone()
+        return row[0] if row else "normal"
+
+    def set_memory_mode(self, scope, mode):
+        if mode not in {"normal", "read_only", "write_only", "off"}:
+            raise ValueError("Invalid memory mode")
+        with self.db:
+            self.db.execute("INSERT OR REPLACE INTO memory_modes VALUES (?,?)", (scope.channel, mode))

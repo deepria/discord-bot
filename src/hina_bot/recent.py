@@ -49,3 +49,6 @@ class RecentMessages:
         for key in list(self.buffers):
             if key[0] == scope.realm:
                 del self.buffers[key]
+
+    def clear_channel(self, scope):
+        self.buffers.pop((scope.realm, scope.channel_id), None)

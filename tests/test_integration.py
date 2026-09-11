@@ -84,6 +84,19 @@ class SDKTests(unittest.IsolatedAsyncioTestCase):
         await self.llm.summarize(self.store, source)
         self.assertNotIn("passive", self.calls[-1]["input"])
 
+    async def test_disabled_reads_remove_every_memory_source_from_payload(self):
+        scope = Scope(None, 20, 100)
+        self.store.add(scope, 1, "secret-history", "secret-reply")
+        self.store.save_summary(scope, "secret-summary", 1)
+        self.store.set_note(scope.user_note, "secret-note")
+        await self.llm.answer(self.store, scope, "A", "current-only", use_memory=False,
+                              public_context=[{"source": "guild:1:channel:10:user:100",
+                                               "summary": "secret-public"}],
+                              channel_context=[{"content": "secret-channel"}])
+        payload = str(self.calls[-1]["input"])
+        self.assertNotIn("secret", payload)
+        self.assertIn("current-only", payload)
+
 
 @unittest.skipUnless(AVAILABLE, "Install project dev dependencies to test SDK/Discord adapters")
 class AdapterTests(unittest.IsolatedAsyncioTestCase):
@@ -180,3 +193,47 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
         self.bot.get_guild = MagicMock(return_value=self.guild)
         self.assertEqual([s.user_id for s in await self.bot.public_sources(100, 1)], [200])
         self.assertEqual(await self.bot.public_sources(100), [])
+
+    async def test_memory_off_skips_reads_writes_and_summaries(self):
+        scope = Scope(1, 10, 100)
+        self.store.set_memory_mode(scope, "off")
+        self.bot.public_sources = AsyncMock()
+        await self.bot.on_message(self.message("ordinary", id=1))
+        await self.bot.on_message(self.message("히나야 current", id=2))
+        self.bot.public_sources.assert_not_awaited()
+        self.assertFalse(self.llm.answer.call_args.kwargs["use_memory"])
+        self.assertEqual(self.llm.answer.call_args.kwargs["channel_context"], [])
+        self.assertEqual(self.store.history(scope), [])
+        self.assertEqual(self.store.pending_shared(scope), [])
+        self.assertEqual(self.bot.recent.context(scope, 9999), [])
+        self.llm.summarize.assert_not_awaited()
+        self.llm.summarize_shared.assert_not_awaited()
+
+    async def test_read_only_replies_without_persisting(self):
+        scope = Scope(1, 10, 100)
+        self.store.add(scope, 500, "old", "old reply")
+        self.store.set_memory_mode(scope, "read_only")
+        await self.bot.on_message(self.message())
+        self.assertTrue(self.llm.answer.call_args.kwargs["use_memory"])
+        self.assertEqual([r["content"] for r in self.store.history(scope)], ["old"])
+        self.assertFalse(self.store.seen(1))
+        self.assertEqual(self.store.pending_shared(scope), [])
+        self.llm.summarize.assert_not_awaited()
+
+    async def test_write_only_saves_without_response_context(self):
+        scope = Scope(1, 10, 100)
+        self.store.set_memory_mode(scope, "write_only")
+        await self.bot.on_message(self.message())
+        self.assertFalse(self.llm.answer.call_args.kwargs["use_memory"])
+        self.assertTrue(self.store.seen(1))
+        self.assertEqual(len(self.store.pending_shared(scope)), 1)
+        self.llm.summarize.assert_awaited_once()
+
+    async def test_disabled_writes_reject_manual_notes_but_allow_deletion(self):
+        scope = Scope(1, 10, 100)
+        self.store.set_note(scope.user_note, "old")
+        self.store.set_memory_mode(scope, "off")
+        await self.bot.on_message(self.message("히나야 /메모 new", id=1))
+        self.assertEqual(self.store.note(scope.user_note), "old")
+        await self.bot.on_message(self.message("히나야 /메모삭제", id=2))
+        self.assertEqual(self.store.note(scope.user_note), "")
