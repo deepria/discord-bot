@@ -159,6 +159,29 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(self.store.seen(1))
         self.llm.summarize.assert_not_awaited()
 
+    async def test_forget_permission_blocks_all_mutations(self):
+        scope = Scope(1, 10, 100)
+        self.store.add(scope, 900, "keep", "reply")
+        self.bot.recent.add(scope, 901, "A", "keep recent")
+        result = await self.bot.command(self.message(), scope, "/기억삭제 확인")
+        self.assertIn("권한", result)
+        self.assertTrue(self.store.history(scope))
+        self.assertTrue(self.bot.recent.context(scope, 999))
+
+    async def test_forget_allowed_for_bot_or_server_admin_and_dm_owner(self):
+        for kind in ("bot", "server", "dm"):
+            scope = Scope(None if kind == "dm" else 1, 10, 100)
+            other = Scope(scope.guild_id, 10, 200)
+            self.bot.emoji_admin_ids = {100} if kind == "bot" else set()
+            self.author.guild_permissions.manage_guild = kind == "server"
+            self.store.add(scope, 910, "delete", "reply")
+            self.store.set_note(other.user_note, "other stays")
+            self.bot.recent.add(scope, 911, "A", "recent")
+            await self.bot.command(self.message(), scope, "/기억삭제 확인")
+            self.assertEqual(self.store.history(scope), [])
+            self.assertEqual(self.bot.recent.context(scope, 999), [])
+            self.assertEqual(self.store.note(other.user_note), "other stays")
+
     async def test_non_admin_cannot_write_server_note(self):
         await self.bot.on_message(self.message("히나야 /서버메모 override"))
         self.assertEqual(self.store.note("guild:1"), "")

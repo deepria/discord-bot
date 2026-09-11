@@ -20,7 +20,7 @@ HELP = """호출: @봇 멘션, 핑을 켠 답장, 또는 메시지 맨 앞의 `�
 `/기억` — 현재 채널의 내 요약과 개인 메모 확인
 `/메모 내용` — 같은 서버 내 채널에서 공유할 내 메모 교체 (DM은 분리)
 `/메모삭제` — 개인 메모만 삭제
-`/기억삭제 확인` — 현재 서버의 모든 채널에서 내 대화·요약·메모 삭제 (DM에서는 내 DM 기억)
+`/기억삭제 확인` — 서버에서는 봇/서버 관리자만 내 기록 삭제·서버 단기 문맥 초기화; DM에서는 누구나 내 기억 삭제
 `/서버기억` — 서버 공통 메모 확인
 `/서버메모 내용` / `/서버메모삭제` — 서버 관리 권한으로 공통 메모 관리
 공개 서버에서 같은 사용자가 나눈 대화는 DM에서 참고할 수 있어요. DM 기억은 서버로 넘어가지 않아요.
@@ -113,8 +113,13 @@ class HinaClient(discord.Client):
             self.store.set_note(scope.user_note, "")
             return "개인 메모를 삭제했어요."
         if cmd == "/기억삭제":
+            if (scope.guild_id is not None
+                    and message.author.id not in self.emoji_admin_ids
+                    and not message.author.guild_permissions.manage_guild):
+                return "서버 단기 문맥 전체가 초기화되므로 봇 관리자 또는 서버 관리 권한이 필요해요."
             if arg != "확인":
-                return "현재 서버 또는 DM의 내 기억 전체를 삭제하려면 `히나야 /기억삭제 확인`을 보내 주세요."
+                return ("내 기억을 삭제하려면 `히나야 /기억삭제 확인`을 보내 주세요."
+                        + (" 현재 서버 전체의 단기 문맥도 초기화돼요." if scope.guild_id is not None else ""))
             self.store.forget(scope)
             self.recent.forget(scope)
             return "이 서버 또는 DM에서의 대화 기록, 자동 요약, 개인 메모를 삭제했어요."
