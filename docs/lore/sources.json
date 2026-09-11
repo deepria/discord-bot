@@ -12,7 +12,7 @@
     "knowledge_basis": "배경의 일반 상식으로 채택해요.",
     "disclosure": "public",
     "runtime_status": "accepted_basic_provisional",
-    "timeline": "basic_profiles_only_no_episode_claims"
+    "timeline": "profile_fact_not_a_story_cutoff"
   },
   {
     "id": "hina",
@@ -27,7 +27,7 @@
     "knowledge_basis": "자신의 직책과 성향이에요.",
     "disclosure": "public",
     "runtime_status": "accepted_basic_provisional",
-    "timeline": "basic_profiles_only_no_episode_claims"
+    "timeline": "profile_fact_not_a_story_cutoff"
   },
   {
     "id": "ako",
@@ -42,7 +42,7 @@
     "knowledge_basis": "본인을 보좌하는 사람의 업무는 안다고 보는 봇 설계상 추론이에요. 인지 장면을 확인한 것은 아니에요.",
     "disclosure": "public",
     "runtime_status": "accepted_basic_provisional",
-    "timeline": "basic_profiles_only_no_episode_claims"
+    "timeline": "profile_fact_not_a_story_cutoff"
   },
   {
     "id": "iori",
@@ -57,7 +57,7 @@
     "knowledge_basis": "직속 조직의 업무 분담을 안다고 보는 봇 설계상 추론이에요.",
     "disclosure": "public",
     "runtime_status": "accepted_basic_provisional",
-    "timeline": "basic_profiles_only_no_episode_claims"
+    "timeline": "profile_fact_not_a_story_cutoff"
   },
   {
     "id": "chinatsu",
@@ -72,7 +72,7 @@
     "knowledge_basis": "직속 조직의 업무 분담과 관찰 가능한 업무 태도를 안다고 보는 추론이에요.",
     "disclosure": "public",
     "runtime_status": "accepted_basic_provisional",
-    "timeline": "basic_profiles_only_no_episode_claims"
+    "timeline": "profile_fact_not_a_story_cutoff"
   },
   {
     "id": "sensei",
@@ -87,7 +87,7 @@
     "knowledge_basis": "봇의 선생님과 교류하는 기본 전제에서 직책은 안다고 채택해요. 애니메이션의 외모·성별은 채택하지 않아요.",
     "disclosure": "public",
     "runtime_status": "accepted_basic_provisional",
-    "timeline": "basic_profiles_only_no_episode_claims"
+    "timeline": "profile_fact_not_a_story_cutoff"
   },
   {
     "id": "aru",
@@ -102,7 +102,7 @@
     "knowledge_basis": "같은 학원의 조직과 공개 역할을 아는 범위로 채택해요. 개인적 친분은 추정하지 않아요.",
     "disclosure": "public",
     "runtime_status": "accepted_basic_provisional",
-    "timeline": "basic_profiles_only_no_episode_claims"
+    "timeline": "profile_fact_not_a_story_cutoff"
   },
   {
     "id": "kayoko",
@@ -117,7 +117,7 @@
     "knowledge_basis": "같은 학원의 조직 구성원 정도를 아는 설정상 추론이에요.",
     "disclosure": "public",
     "runtime_status": "accepted_basic_provisional",
-    "timeline": "basic_profiles_only_no_episode_claims"
+    "timeline": "profile_fact_not_a_story_cutoff"
   },
   {
     "id": "haruka",
@@ -132,7 +132,7 @@
     "knowledge_basis": "같은 학원의 조직 구성원 정도를 아는 설정상 추론이에요.",
     "disclosure": "public",
     "runtime_status": "accepted_basic_provisional",
-    "timeline": "basic_profiles_only_no_episode_claims"
+    "timeline": "profile_fact_not_a_story_cutoff"
   },
   {
     "id": "mutsuki",
@@ -147,6 +147,70 @@
     "knowledge_basis": "같은 학원의 조직 구성원 정도를 아는 설정상 추론이에요.",
     "disclosure": "public",
     "runtime_status": "accepted_basic_provisional",
-    "timeline": "basic_profiles_only_no_episode_claims"
+    "timeline": "profile_fact_not_a_story_cutoff"
+  },
+  {
+    "id": "makoto",
+    "source": "https://blue-utils.me/student/makoto?lang=ko",
+    "locator": "한국어 소개; 이로하 전차장 정보는 고유무기 설명",
+    "source_medium": "secondary_game_profile_mirror",
+    "checked_at": "2026-09-11",
+    "fact": "마코토는 게헨나 만마전 의장이에요.",
+    "canon_status": "explicit_in_secondary_source",
+    "game_text_crosscheck": "official_client_pending",
+    "hina_knowledge": "public_role_inference",
+    "knowledge_basis": "같은 학원 조직의 공개 직책을 아는 운영상 추론이며 특정 목격 장면은 미검증이에요.",
+    "disclosure": "public",
+    "runtime_status": "accepted_profile_provisional",
+    "timeline": "profile_fact_not_a_story_cutoff",
+    "release_evidence": "페이지에 글로벌 서버 정보 표시; 한국어 프로필 확인"
+  },
+  {
+    "id": "iroha",
+    "source": "https://blue-utils.me/student/iroha?lang=ko",
+    "locator": "한국어 소개; 이로하 전차장 정보는 고유무기 설명",
+    "source_medium": "secondary_game_profile_mirror",
+    "checked_at": "2026-09-11",
+    "fact": "이로하는 만마전 의원·실무자이며 전차 운용을 맡아요.",
+    "canon_status": "explicit_in_secondary_source",
+    "game_text_crosscheck": "official_client_pending",
+    "hina_knowledge": "public_role_inference",
+    "knowledge_basis": "공개 업무 역할만 채택하며 내면 독백은 히나의 지식에 넣지 않아요.",
+    "disclosure": "public",
+    "runtime_status": "accepted_profile_provisional",
+    "timeline": "profile_fact_not_a_story_cutoff",
+    "release_evidence": "페이지에 글로벌 서버 정보 표시; 한국어 프로필 확인"
+  },
+  {
+    "id": "ibuki",
+    "source": "https://blue-utils.me/student/ibuki?lang=ko",
+    "locator": "한국어 소개; 이로하 전차장 정보는 고유무기 설명",
+    "source_medium": "secondary_game_profile_mirror",
+    "checked_at": "2026-09-11",
+    "fact": "이부키는 만마전의 어린 의원이며 선배들에게 사랑받는 구성원이에요.",
+    "canon_status": "explicit_in_secondary_source",
+    "game_text_crosscheck": "official_client_pending",
+    "hina_knowledge": "public_role_inference",
+    "knowledge_basis": "조직 구성과 관찰 가능한 관계만 잠정 채택해요.",
+    "disclosure": "public",
+    "runtime_status": "accepted_profile_provisional",
+    "timeline": "profile_fact_not_a_story_cutoff",
+    "release_evidence": "페이지에 글로벌 서버 정보 표시; 한국어 프로필 확인"
+  },
+  {
+    "id": "hina_dress_piano",
+    "source": "https://x.com/EN_BlueArchive/status/1816397986118983866",
+    "locator": "2024-07-25 Student Intro: Hina (Dress), 검색 색인 소개문",
+    "source_medium": "official_global_social_search_excerpt",
+    "checked_at": "2026-09-11",
+    "fact": "히나는 게헨나 파티를 위해 드레스를 입고 피아노 연주를 연습했어요.",
+    "canon_status": "explicit_in_official_search_excerpt",
+    "game_text_crosscheck": "korean_scene_pending",
+    "hina_knowledge": "self",
+    "knowledge_basis": "본인이 하는 연주 준비만 채택하며 파티 사건 전체나 곡명은 미검증이에요.",
+    "disclosure": "public",
+    "runtime_status": "accepted_limited_premise",
+    "timeline": "dress_party_preparation",
+    "release_evidence": "한국 공식 2024-07-30 히나(드레스) 페스 모집 안내 검색 색인 확인; 정확한 공지 본문 URL은 미확보"
   }
 ]
