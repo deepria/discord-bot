@@ -5,6 +5,17 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 
+def parse_call_prefixes(value: str) -> tuple[str, ...]:
+    """Parse a comma-separated, ordered set of message prefixes."""
+    prefixes = tuple(dict.fromkeys(part.strip() for part in value.split(",") if part.strip()))
+    if not prefixes or len(prefixes) > 20:
+        raise ValueError("CALL_PREFIXES는 쉼표로 구분한 1~20개의 접두어여야 합니다.")
+    if any(len(prefix) > 32 or any(char in prefix for char in "\r\n\0")
+           for prefix in prefixes):
+        raise ValueError("각 호출 접두어는 줄바꿈 없이 1~32자여야 합니다.")
+    return prefixes
+
+
 @dataclass(frozen=True)
 class Settings:
     api_key: str
@@ -13,6 +24,7 @@ class Settings:
     memory_model: str = "gpt-4.1-mini"
     db_path: str = "data/hina.sqlite3"
     prompt_path: str = ""
+    call_prefixes: tuple[str, ...] = ("히나야",)
     dm_always_reply: bool = False
     public_memory_in_dm: bool = True
     allowed_guild_ids: frozenset[int] = frozenset()
@@ -48,6 +60,7 @@ class Settings:
             memory_model=os.getenv("MEMORY_MODEL", os.getenv("OPENAI_MODEL", "gpt-4.1-mini")),
             db_path=os.getenv("DATABASE_PATH", "data/hina.sqlite3"),
             prompt_path=os.getenv("CHARACTER_PROMPT_PATH", ""),
+            call_prefixes=parse_call_prefixes(os.getenv("CALL_PREFIXES", "히나야")),
             dm_always_reply=dm == "true",
             public_memory_in_dm=public_memory == "true",
             allowed_guild_ids=frozenset(int(x.strip()) for x in

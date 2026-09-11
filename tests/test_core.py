@@ -3,6 +3,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace as NS
 
+from hina_bot.config import parse_call_prefixes
 from hina_bot.routing import Scope, chunks, trigger_text
 from hina_bot.store import Store
 
@@ -17,6 +18,19 @@ class RoutingTests(unittest.TestCase):
         self.assertEqual(trigger_text(message("  히나야, 안녕"), 99), "안녕")
         self.assertIsNone(trigger_text(message("안녕 히나야"), 99))
         self.assertEqual(trigger_text(message("히나야안녕"), 99), "안녕")
+
+    def test_configurable_prefixes_and_overlapping_match(self):
+        prefixes = parse_call_prefixes("히나, 히나야, 히나쨩, 히나")
+        self.assertEqual(prefixes, ("히나", "히나야", "히나쨩"))
+        self.assertEqual(trigger_text(message("히나쨩! 안녕"), 99, prefixes=prefixes), "안녕")
+        self.assertEqual(trigger_text(message("히나야안녕"), 99, prefixes=prefixes), "안녕")
+        self.assertIsNone(trigger_text(message("안녕 히나쨩"), 99, prefixes=prefixes))
+
+    def test_invalid_prefix_configuration(self):
+        with self.assertRaises(ValueError):
+            parse_call_prefixes(" , ")
+        with self.assertRaises(ValueError):
+            parse_call_prefixes("x" * 33)
 
     def test_direct_mentions(self):
         self.assertEqual(trigger_text(message("안녕 <@99>", mentions=[99]), 99), "안녕")

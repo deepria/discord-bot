@@ -184,7 +184,8 @@ class HinaClient(discord.Client):
         if (guild_id is not None and self.settings.allowed_guild_ids
                 and guild_id not in self.settings.allowed_guild_ids):
             return
-        text = trigger_text(message, self.user.id, self.settings.dm_always_reply)
+        text = trigger_text(message, self.user.id, self.settings.dm_always_reply,
+                            self.settings.call_prefixes)
         if self.pending_count >= 100:
             return
         public_at_capture = False
