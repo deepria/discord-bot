@@ -98,7 +98,7 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
         self.channel.typing.return_value.__aenter__ = AsyncMock(return_value=None)
         self.channel.typing.return_value.__aexit__ = AsyncMock(return_value=None)
         self.channel.permissions_for.return_value = NS(view_channel=True, read_message_history=True)
-        self.guild = NS(id=1, default_role=NS(), unavailable=False)
+        self.guild = NS(id=1, default_role=NS(), unavailable=False, me=NS(), emojis=[])
         self.author = NS(id=100, bot=False, display_name="사용자",
                          guild_permissions=NS(manage_guild=False))
 

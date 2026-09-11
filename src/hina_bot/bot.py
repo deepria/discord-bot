@@ -6,6 +6,7 @@ import weakref
 import discord
 
 from .config import Settings
+from .emojis import available_emojis, render_emojis
 from .llm import LLM
 from .recent import RecentMessages
 from .routing import Scope, chunks, trigger_text
@@ -30,6 +31,7 @@ class HinaClient(discord.Client):
     def __init__(self, settings: Settings, *, store=None, llm=None):
         intents = discord.Intents.default()
         intents.message_content = True
+        intents.emojis_and_stickers = True
         super().__init__(intents=intents, allowed_mentions=discord.AllowedMentions.none(),
                          max_messages=None)
         self.settings = settings
@@ -204,10 +206,16 @@ class HinaClient(discord.Client):
                     async with message.channel.typing():
                         sources = await self.public_sources(scope.user_id, guild_id)
                         context = self.store.public_context(sources)
+                        emoji_catalog = available_emojis(message.guild)
                         answer = await self.llm.answer(
                             self.store, scope, message.author.display_name, text,
                             public_context=context,
-                            channel_context=self.recent.context(scope, message.id))
+                            channel_context=self.recent.context(scope, message.id),
+                            emoji_catalog=emoji_catalog)
+                        current = {e["id"] for e in available_emojis(message.guild)}
+                        answer = render_emojis(answer, [e for e in emoji_catalog if e["id"] in current])
+                        if not answer:
+                            answer = "응, 선생님."
                         sent = await message.channel.send(
                             next(chunks(answer)), allowed_mentions=discord.AllowedMentions.none())
                         for part in list(chunks(answer))[1:]:
