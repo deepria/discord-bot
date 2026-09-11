@@ -41,6 +41,10 @@ class Store:
                 scope TEXT PRIMARY KEY, realm TEXT NOT NULL, user_id TEXT NOT NULL,
                 name TEXT NOT NULL, text TEXT NOT NULL, through_id INTEGER NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS emoji_registry (
+                alias TEXT PRIMARY KEY, emoji_id TEXT NOT NULL UNIQUE, description TEXT NOT NULL,
+                source_guild_id TEXT
+            );
             CREATE TABLE IF NOT EXISTS notes (scope TEXT PRIMARY KEY, text TEXT NOT NULL);
         """)
 
@@ -157,3 +161,20 @@ class Store:
                             "summary": self.shared_summary(source)[0],
                             "recent_user_messages": [r["content"] for r in reversed(rows)]})
         return context
+
+    def emoji_rows(self):
+        return self.db.execute("SELECT * FROM emoji_registry ORDER BY alias").fetchall()
+
+    def add_emoji(self, alias, emoji_id, description, source_guild_id=None):
+        with self.db:
+            self.db.execute("INSERT INTO emoji_registry VALUES (?,?,?,?)",
+                            (alias, emoji_id, description, source_guild_id))
+
+    def edit_emoji(self, alias, description):
+        with self.db:
+            return self.db.execute("UPDATE emoji_registry SET description=? WHERE alias=?",
+                                   (description, alias)).rowcount > 0
+
+    def remove_emoji(self, alias):
+        with self.db:
+            return self.db.execute("DELETE FROM emoji_registry WHERE alias=?", (alias,)).rowcount > 0

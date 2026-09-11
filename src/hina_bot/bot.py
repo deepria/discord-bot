@@ -6,7 +6,8 @@ import weakref
 import discord
 
 from .config import Settings
-from .emojis import available_emojis, render_emojis
+from .emoji_commands import EmojiCommands, EmojiRegistry
+from .emojis import render_emojis
 from .llm import LLM
 from .recent import RecentMessages
 from .routing import Scope, chunks, trigger_text
@@ -37,6 +38,10 @@ class HinaClient(discord.Client):
         self.settings = settings
         self.store = store or Store(settings.db_path, settings.history_turns)
         self.llm = llm or LLM(settings)
+        self.emoji_registry = EmojiRegistry(self, self.store)
+        self.emoji_admin_ids = set(settings.bot_admin_ids)
+        self.tree = discord.app_commands.CommandTree(self)
+        self.tree.add_command(EmojiCommands(self))
         self.locks = weakref.WeakValueDictionary()
         self.cooldowns = {}
         self.recent = RecentMessages(budget=settings.channel_context_chars)
@@ -45,6 +50,13 @@ class HinaClient(discord.Client):
         self.pending_count = 0
         self.active_tasks = set()
         self.stopping = False
+
+    async def setup_hook(self):
+        info = await self.application_info()
+        owner_id = info.team.owner_id if info.team else info.owner.id
+        self.emoji_admin_ids.add(owner_id)
+        await self.emoji_registry.catalog()
+        await self.tree.sync()
 
     async def on_ready(self):
         log.info("Bot connected (id=%s)", self.user.id)
@@ -206,13 +218,13 @@ class HinaClient(discord.Client):
                     async with message.channel.typing():
                         sources = await self.public_sources(scope.user_id, guild_id)
                         context = self.store.public_context(sources)
-                        emoji_catalog = available_emojis(message.guild)
+                        emoji_catalog = await self.emoji_registry.catalog(message.channel)
                         answer = await self.llm.answer(
                             self.store, scope, message.author.display_name, text,
                             public_context=context,
                             channel_context=self.recent.context(scope, message.id),
                             emoji_catalog=emoji_catalog)
-                        current = {e["id"] for e in available_emojis(message.guild)}
+                        current = {e["id"] for e in await self.emoji_registry.catalog(message.channel)}
                         answer = render_emojis(answer, [e for e in emoji_catalog if e["id"] in current])
                         if not answer:
                             answer = "응, 선생님."

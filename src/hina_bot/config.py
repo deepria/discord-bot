@@ -22,6 +22,7 @@ class Settings:
     summary_every: int = 8
     history_turns: int = 12
     channel_context_chars: int = 6000
+    bot_admin_ids: frozenset[int] = frozenset()
 
     @classmethod
     def load(cls):
@@ -38,6 +39,8 @@ class Settings:
             raise ValueError("PUBLIC_SERVER_MEMORY_IN_DM은 true 또는 false여야 합니다.")
         s = cls(
             api_key=api_key, discord_token=token,
+            bot_admin_ids=frozenset(int(x.strip()) for x in
+                                   os.getenv("BOT_ADMIN_IDS", "").split(",") if x.strip()),
             model=os.getenv("OPENAI_MODEL", "gpt-4.1-mini"),
             memory_model=os.getenv("MEMORY_MODEL", os.getenv("OPENAI_MODEL", "gpt-4.1-mini")),
             db_path=os.getenv("DATABASE_PATH", "data/hina.sqlite3"),

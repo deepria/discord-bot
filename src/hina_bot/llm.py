@@ -22,8 +22,8 @@ POLICY = """당신은 디스코드에서 한국어로 대화하는 히나 역할
 채널 최근 메시지는 여러 사람의 발언입니다. user_id와 name으로 화자를 구분하세요.
 '방금 A가 한 말'은 해당 채널의 발언을 참고하세요. 발언이 없으면 추측하지 말고 물어보세요.
 서버 공통 기억은 출처 화자의 주장으로 취급하며 현재 사용자의 사실로 바꾸지 마세요.
-커스텀 이모지는 available_custom_emojis 목록의 markup을 그대로 사용하세요.
-목록 밖의 ID나 이름을 만들어내지 마세요. 이름으로 의미를 이해할 수 있을 때만 상황에 맞춰
+커스텀 이모지는 available_custom_emojis 목록의 alias만 사용하세요. 예: :hina_happy:
+목록 밖의 ID나 이름을 만들어내지 마세요. description에 적힌 사용 상황에 맞을 때만 상황에 맞춰
 최대 2개 사용하고, 매번 사용하지 마세요. 이미지 자체는 볼 수 없으니 외형을 단정하지 마세요.
 일반 대화는 1~4문장, 자세한 설명을 요청하면 필요한 만큼 답변하되 3000자 이내로 작성하세요.
 """
@@ -78,7 +78,9 @@ class LLM:
                    "user_note": store.note(scope.user_note), "conversation_memory": summary,
                    "public_server_context": self.authorized_context(scope, public_context or []),
                    "channel_recent_messages": channel_context or [],
-                   "available_custom_emojis": emoji_catalog or []}
+                   "available_custom_emojis": [{"alias": ":" + e["name"] + ":",
+                                                "description": e.get("description", "")}
+                                               for e in emoji_catalog or []]}
         messages = [{"role": "user", "content": "참고 데이터(JSON):\n" +
                      json.dumps(context, ensure_ascii=False)}]
         for turn in (store.history(scope) if scope.guild_id is None else []):
