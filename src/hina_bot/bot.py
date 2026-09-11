@@ -10,6 +10,7 @@ from .emoji_commands import EmojiCommands, EmojiRegistry
 from .emojis import render_emojis
 from .llm import LLM
 from .memory_commands import MemoryCommands, MemoryMode
+from .output_safety import neutralize_mentions
 from .recent import RecentMessages
 from .routing import Scope, chunks, trigger_text
 from .store import Store
@@ -91,7 +92,7 @@ class HinaClient(discord.Client):
             await super().close()
 
     async def send_text(self, channel, text):
-        for part in chunks(text):
+        for part in chunks(neutralize_mentions(text)):
             await channel.send(part, allowed_mentions=discord.AllowedMentions.none())
 
     async def command(self, message, scope, text):
@@ -249,6 +250,7 @@ class HinaClient(discord.Client):
                             emoji_catalog=emoji_catalog)
                         current = {e["id"] for e in await self.emoji_registry.catalog(message.channel)}
                         answer = render_emojis(answer, [e for e in emoji_catalog if e["id"] in current])
+                        answer = neutralize_mentions(answer)
                         if not answer:
                             answer = "응, 선생님."
                         sent = await message.channel.send(
