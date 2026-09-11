@@ -1,0 +1,12 @@
+services:
+  hina:
+    build: .
+    restart: unless-stopped
+    env_file: .env.local
+    environment:
+      DATABASE_PATH: /app/data/hina.sqlite3
+    volumes:
+      - hina-data:/app/data
+    stop_grace_period: 60s
+volumes:
+  hina-data:

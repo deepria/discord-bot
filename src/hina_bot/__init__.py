@@ -1,0 +1,1 @@
+"""Hina Discord bot."""
