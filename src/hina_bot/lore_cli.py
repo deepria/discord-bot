@@ -40,9 +40,7 @@ def _matches_scope(row: dict, args) -> bool:
         return False
     if args.title is not None and source.get("title") != args.title:
         return False
-    if args.fact_type is not None and fact_type(row) not in args.fact_type:
-        return False
-    return True
+    return args.fact_type is None or fact_type(row) in args.fact_type
 
 
 def _has_web_conflict(row: dict) -> bool:
