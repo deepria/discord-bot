@@ -5,6 +5,7 @@ from enum import Enum
 import discord
 from discord import app_commands
 
+from .instruction_commands import InstructionCommands
 from .routing import Scope
 
 log = logging.getLogger("hina")
@@ -36,6 +37,9 @@ class MemoryCommands(app_commands.Group):
     def __init__(self, client):
         super().__init__(name="memory", description="현재 채널의 기억 디버깅 모드 (봇 관리자 전용)")
         self.client = client
+        # HinaClient already has its CommandTree before this group is constructed.
+        # Register instruction management beside /memory without touching the chat command path.
+        client.tree.add_command(InstructionCommands(client))
 
     async def interaction_check(self, interaction):
         if interaction.user.id not in self.client.emoji_admin_ids:
