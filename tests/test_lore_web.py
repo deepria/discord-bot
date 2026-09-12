@@ -185,9 +185,9 @@ class LoreWebTests(unittest.TestCase):
             with (
                 patch.object(lore_pipeline, "QUEUE_PATH", queue_path),
                 patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}),
+                self.assertRaises(SystemExit),
             ):
-                with self.assertRaises(SystemExit):
-                    lore_cli.verify_web(args)
+                lore_cli.verify_web(args)
 
 
 if __name__ == "__main__":
