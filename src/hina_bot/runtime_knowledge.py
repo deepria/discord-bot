@@ -80,7 +80,7 @@ class RuntimeKnowledgeRegistry:
             if not isinstance(created_at, str):
                 raise TypeError("runtime knowledge의 created_at 값이 잘못되었습니다.")
             try:
-                datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+                datetime.fromisoformat(created_at)
             except ValueError as exc:
                 raise ValueError("runtime knowledge의 created_at 값이 잘못되었습니다.") from exc
         for key in ("keywords", "subjects"):
