@@ -8,8 +8,6 @@ from .instructions import InstructionRegistry
 log = logging.getLogger("hina")
 
 
-@app_commands.guild_only()
-@app_commands.default_permissions(administrator=True)
 class InstructionCommands(app_commands.Group):
     def __init__(self, client):
         super().__init__(name="instruction", description="동적 캐릭터 instruction 관리 (봇 관리자 전용)")
@@ -17,9 +15,8 @@ class InstructionCommands(app_commands.Group):
         self.registry = InstructionRegistry(client.settings.instruction_path)
 
     async def interaction_check(self, interaction):
-        # Discord hides this group from non-administrators by default. Keep the bot-owner/
-        # BOT_ADMIN_IDS check as an application-side backstop in case guild command permissions
-        # are overridden later.
+        # Bot ownership/BOT_ADMIN_IDS is the authority here, not guild Administrator permission.
+        # This lets the bot owner tune prompts in servers where they are not a server admin.
         if interaction.user.id not in self.client.emoji_admin_ids:
             await interaction.response.send_message(
                 "봇 소유자 또는 지정된 관리자만 사용할 수 있어요.", ephemeral=True)
