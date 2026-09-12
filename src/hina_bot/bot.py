@@ -26,12 +26,12 @@ HELP = """호출: @봇 멘션, 핑을 켠 답장, 또는 메시지 맨 앞의 `�
 `/서버기억` — 서버 공통 메모 확인
 `/서버메모 내용` / `/서버메모삭제` — 서버 관리 권한으로 공통 메모 관리
 공개 서버에서 같은 사용자가 나눈 대화는 DM에서 참고할 수 있어요. DM 기억은 서버로 넘어가지 않아요.
-같은 채널의 일반 대화도 최근 문맥으로 잠시 보관하고, 호출 시 OpenAI에 함께 보내요.
-최근 채널 문맥은 디버깅용 /memory 장기 기억 모드와 독립적으로 항상 유지돼요.
+같은 채널의 일반 대화는 최근 문맥으로 잠시 보관할 수 있고, 호출 시 OpenAI에 함께 보내요.
+장기 기억과 최근 채널 로그 읽기는 서로 독립적으로 켜고 끌 수 있어요.
 공개 채널에서 직접 호출한 발화만 같은 서버의 다른 사용자·채널에서 장기 기억으로 참고해요.
 `/이모지 등록·목록·수정·삭제` — 봇 관리자 전용 (이미지 등록은 파일 첨부 가능)
 일반 대화에서는 첨부파일·이미지·답장 원문을 읽지 못해요.
-봇 관리자는 실제 슬래시 명령 /memory mode, /memory status로 채널별 장기 기억을 제어할 수 있어요."""
+봇 관리자는 실제 슬래시 명령 /memory mode, /memory chatlog, /memory status로 설정을 제어할 수 있어요."""
 
 
 class HinaClient(discord.Client):
@@ -199,12 +199,12 @@ class HinaClient(discord.Client):
         if message.author.bot or message.webhook_id is not None:
             return
         received_mode = MemoryMode(self.store.memory_mode(scope))
+        received_chat_log = self.store.chat_log_enabled(scope)
         # Management commands must not enter the shared channel buffer.
         management = text is not None and text.startswith((
             "/이모지", "/도움말", "/기억", "/메모", "/서버기억", "/서버메모"))
-        # Recent channel context is ephemeral conversation state, not persistent memory.
-        # Keep collecting it even when /memory disables long-term reads/writes.
-        if guild_id is not None and not management:
+        # Recent chat context is independent from persistent memory and has its own switch.
+        if guild_id is not None and received_chat_log and not management:
             self.recent.add(scope, message.id, message.author.display_name, message.content)
         if text is None:
             return
@@ -223,6 +223,7 @@ class HinaClient(discord.Client):
                 mode = MemoryMode(self.store.memory_mode(scope))
                 use_memory = received_mode.reads and mode.reads
                 save_memory = received_mode.writes and mode.writes
+                use_chat_log = received_chat_log and self.store.chat_log_enabled(scope)
                 if self.store.seen(message.id):
                     return
                 if len(text) > 4000:
@@ -254,7 +255,7 @@ class HinaClient(discord.Client):
                                 self.store, scope, message.author.display_name, text,
                                 public_context=context,
                                 channel_context=(self.recent.context(scope, message.id)
-                                                 if guild_id is not None else []),
+                                                 if guild_id is not None and use_chat_log else []),
                                 use_memory=use_memory,
                                 emoji_catalog=emoji_catalog)
                             current = {e["id"] for e in await self.emoji_registry.catalog(message.channel)}
@@ -266,7 +267,7 @@ class HinaClient(discord.Client):
                                 next(chunks(answer)), allowed_mentions=discord.AllowedMentions.none())
                             for part in list(chunks(answer))[1:]:
                                 await message.channel.send(part, allowed_mentions=discord.AllowedMentions.none())
-                            if guild_id is not None:
+                            if guild_id is not None and use_chat_log:
                                 self.recent.add(scope, sent.id, "히나", answer, role="assistant")
                         # Commit only after Discord delivery. Never memorize a failed model request.
                         if save_memory:
