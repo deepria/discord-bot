@@ -4,6 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace as NS
 from unittest.mock import AsyncMock
 
+from hina_bot.admin_db import AdminDatabase
 from hina_bot.instruction_commands import InstructionCommands
 from hina_bot.instructions import InstructionRegistry
 
@@ -11,8 +12,8 @@ from hina_bot.instructions import InstructionRegistry
 class InstructionRegistryTests(unittest.TestCase):
     def test_crud_and_active_text(self):
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "instructions.json"
-            registry = InstructionRegistry(str(path))
+            database = AdminDatabase(str(Path(directory) / "hina.sqlite3"))
+            registry = InstructionRegistry(database)
 
             self.assertEqual(registry.list(), [])
             self.assertEqual(registry.active_text(), "")
@@ -23,6 +24,7 @@ class InstructionRegistryTests(unittest.TestCase):
             self.assertEqual([row["id"] for row in rows], ["meta_guard", "restraint"])
             self.assertTrue(all(row["enabled"] for row in rows))
             self.assertTrue(all(row.get("created_at") for row in rows))
+            self.assertTrue(all(row.get("updated_at") for row in rows))
             self.assertIn("meta_guard", registry.active_text())
             self.assertIn("restraint", registry.active_text())
 
@@ -36,16 +38,18 @@ class InstructionRegistryTests(unittest.TestCase):
 
             registry.remove("meta_guard")
             self.assertEqual([row["id"] for row in registry.list()], ["restraint"])
+            database.close()
 
     def test_validation_and_disabled_registry(self):
-        registry = InstructionRegistry("")
+        registry = InstructionRegistry(None)
         self.assertEqual(registry.list(), [])
         self.assertEqual(registry.active_text(), "")
         with self.assertRaises(ValueError):
             registry.add("valid-id", "저장할 수 없어야 합니다.")
 
         with tempfile.TemporaryDirectory() as directory:
-            registry = InstructionRegistry(str(Path(directory) / "instructions.json"))
+            database = AdminDatabase(str(Path(directory) / "hina.sqlite3"))
+            registry = InstructionRegistry(database)
             for identifier in ("a", "한글", "bad id", "UPPER CASE"):
                 with self.assertRaises(ValueError):
                     registry.add(identifier, "내용")
@@ -58,12 +62,28 @@ class InstructionRegistryTests(unittest.TestCase):
                 registry.add("valid-id", "중복")
             with self.assertRaises(ValueError):
                 registry.remove("missing-id")
+            database.close()
+
+    def test_legacy_import_keeps_unknown_created_at_null(self):
+        database = AdminDatabase(":memory:")
+        registry = InstructionRegistry(database)
+        registry.import_row({"id": "legacy-rule", "text": "예전 규칙", "enabled": True})
+        row = registry.get("legacy-rule")
+        self.assertIsNone(row["created_at"])
+        self.assertIsNone(row["updated_at"])
+        database.close()
 
 
 class InstructionCommandTests(unittest.IsolatedAsyncioTestCase):
+    @staticmethod
+    def client():
+        return NS(
+            llm=NS(instructions=InstructionRegistry(None)),
+            emoji_admin_ids={100, 101},
+        )
+
     async def test_access_control_uses_bot_admin_allowlist(self):
-        client = NS(settings=NS(instruction_path=""), emoji_admin_ids={100, 101})
-        group = InstructionCommands(client)
+        group = InstructionCommands(self.client())
         interaction = NS(user=NS(id=200), response=NS(send_message=AsyncMock()))
         self.assertFalse(await group.interaction_check(interaction))
         for admin_id in (100, 101):
@@ -71,8 +91,7 @@ class InstructionCommandTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(await group.interaction_check(interaction))
 
     def test_available_in_guilds_and_private_contexts(self):
-        client = NS(settings=NS(instruction_path=""), emoji_admin_ids={100})
-        group = InstructionCommands(client)
+        group = InstructionCommands(self.client())
         self.assertTrue(group.allowed_contexts.guild)
         self.assertTrue(group.allowed_contexts.dm_channel)
         self.assertTrue(group.allowed_contexts.private_channel)
