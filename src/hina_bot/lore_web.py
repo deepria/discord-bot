@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from urllib.parse import urlsplit
 
 VERIFY_STATUSES = {"corroborated", "conflict", "insufficient", "not_found"}
@@ -183,7 +183,7 @@ def verify_candidate(client, row: dict, *, model: str) -> dict:
         "kr_release": kr_release,
         "kr_release_note": kr_release_note[:600],
         "sources": sources,
-        "checked_at": datetime.now(timezone.utc).isoformat(),
+        "checked_at": datetime.now(UTC).isoformat(),
         "model": model,
         "search_calls": search_calls,
     }
