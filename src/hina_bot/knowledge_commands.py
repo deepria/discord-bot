@@ -3,10 +3,20 @@ import logging
 import discord
 from discord import app_commands
 
+from .admin_list import created_compact, created_label, fit_table, sort_rows
 from .knowledge_ingest import KnowledgeIngestor
 from .runtime_knowledge import RuntimeKnowledgeRegistry
 
 log = logging.getLogger("hina")
+
+_SORT_CHOICES = [
+    app_commands.Choice(name="추가 시간순", value="time"),
+    app_commands.Choice(name="최신 추가순", value="recent"),
+    app_commands.Choice(name="ID순", value="id"),
+    app_commands.Choice(name="상태순 (ON 먼저)", value="state"),
+    app_commands.Choice(name="종류순 (사실→해석)", value="kind"),
+]
+_SORT_LABELS = {choice.value: choice.name for choice in _SORT_CHOICES}
 
 
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
@@ -107,27 +117,71 @@ class KnowledgeCommands(app_commands.Group):
                 lines.append(f"- … 외 {len(held) - 6}개")
         await interaction.followup.send("\n".join(lines)[:1900], ephemeral=True)
 
-    @app_commands.command(name="list", description="자동 반영된 knowledge 목록 확인")
-    async def list_items(self, interaction: discord.Interaction):
+    @app_commands.command(name="list", description="knowledge 검색·정렬 및 전체 목록 확인")
+    @app_commands.describe(
+        search="ID·본문·키워드·대상·시점에서 찾을 검색어. 비워 두면 전체 표시",
+        sort="목록 정렬 방식. 기본은 추가 시간순",
+    )
+    @app_commands.choices(sort=_SORT_CHOICES)
+    async def list_items(
+        self,
+        interaction: discord.Interaction,
+        search: str | None = None,
+        sort: str = "time",
+    ):
         try:
             rows = self._all_rows()
         except (TypeError, ValueError) as exc:
             await interaction.response.send_message(str(exc), ephemeral=True)
             return
+        total = len(rows)
+        query = (search or "").strip().casefold()
+        if query:
+            filtered = []
+            for label, row in rows:
+                haystack = "\n".join([
+                    str(row.get("id", "")),
+                    str(row.get("content", "")),
+                    " ".join(row.get("keywords", [])),
+                    " ".join(row.get("subjects", [])),
+                    str(row.get("timeline", "")),
+                    "사실 world_fact" if label == "fact" else "해석 interpretation",
+                ]).casefold()
+                if query in haystack:
+                    filtered.append((label, row))
+            rows = filtered
         if not rows:
-            await interaction.response.send_message("자동 반영된 knowledge가 없어요.", ephemeral=True)
+            text = (f"`{discord.utils.escape_markdown(search.strip())}` 검색 결과가 없어요."
+                    if search and search.strip() else "자동 반영된 knowledge가 없어요.")
+            await interaction.response.send_message(text, ephemeral=True)
             return
-        lines = [f"knowledge {len(rows)}/200"]
-        for label, row in rows[:18]:
+
+        if sort == "kind":
+            rows = sorted(rows, key=lambda item: (item[0] != "fact", item[1]["id"].casefold()))
+        else:
+            rows = sort_rows(rows, sort, lambda item: item[1])
+        if query:
+            header = f"knowledge 검색 결과 {len(rows)}/{total} · {_SORT_LABELS.get(sort, '추가 시간순')}"
+        else:
+            header = f"knowledge {len(rows)}/200 · {_SORT_LABELS.get(sort, '추가 시간순')}"
+
+        table_rows = []
+        for label, row in rows:
             state = "ON" if row["enabled"] else "OFF"
             kind = "사실" if label == "fact" else "해석"
-            preview = discord.utils.escape_markdown(row["content"].replace("\n", " "))
-            if len(preview) > 80:
-                preview = preview[:77] + "..."
-            lines.append(f"`{row['id']}` [{kind}/{state}] — {preview}")
-        if len(rows) > 18:
-            lines.append(f"… 외 {len(rows) - 18}개")
-        await interaction.response.send_message("\n".join(lines), ephemeral=True)
+            table_rows.append([
+                str(row.get("id", "?")),
+                f"{kind}/{state}",
+                created_compact(row),
+                str(row.get("content", "")),
+            ])
+        text = fit_table(
+            header,
+            ["ID", "종류/상태", "추가(UTC)", "내용"],
+            table_rows,
+            [26, 9, 12, 43],
+        )
+        await interaction.response.send_message(text, ephemeral=True)
 
     @app_commands.command(name="show", description="자동 반영된 knowledge 한 항목 자세히 보기")
     async def show(self, interaction: discord.Interaction, identifier: str):
@@ -140,6 +194,7 @@ class KnowledgeCommands(app_commands.Group):
         kind = "사실" if label == "fact" else "해석"
         text = (
             f"`{row['id']}` [{kind}/{state}]\n"
+            f"추가: {created_label(row)}\n"
             f"awareness: `{row['awareness']}`\n"
             f"timeline: {row['timeline']}\n"
             f"subjects: {', '.join(row['subjects'])}\n"
