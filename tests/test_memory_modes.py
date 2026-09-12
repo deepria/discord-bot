@@ -41,12 +41,21 @@ class ModeTests(unittest.TestCase):
 
 class ModeCommandTests(unittest.IsolatedAsyncioTestCase):
     async def test_access_control(self):
-        group = MemoryCommands(NS(emoji_admin_ids={100}))
+        group = MemoryCommands(NS(emoji_admin_ids={100, 101}))
         interaction = NS(user=NS(id=200), response=NS(send_message=AsyncMock()))
         self.assertFalse(await group.interaction_check(interaction))
-        interaction.user.id = 100
-        self.assertTrue(await group.interaction_check(interaction))
+        for admin_id in (100, 101):
+            interaction.user.id = admin_id
+            self.assertTrue(await group.interaction_check(interaction))
         self.assertEqual({c.name for c in group.commands}, {"mode", "status"})
+
+    def test_available_in_guilds_and_private_contexts(self):
+        group = MemoryCommands(NS(emoji_admin_ids={100}))
+        self.assertTrue(group.allowed_contexts.guild)
+        self.assertTrue(group.allowed_contexts.dm_channel)
+        self.assertTrue(group.allowed_contexts.private_channel)
+        self.assertTrue(group.allowed_installs.guild)
+        self.assertTrue(group.allowed_installs.user)
 
     async def test_switch_waits_for_inflight_turn_and_clears_only_this_channel(self):
         store, recent, lock = Store(":memory:"), RecentMessages(), asyncio.Lock()
