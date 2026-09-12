@@ -33,6 +33,8 @@ def mode_text(mode):
             "기존 장기 기억은 유지돼요. 캐릭터 프롬프트·이모지 설정은 계속 적용돼요.")
 
 
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+@app_commands.allowed_installs(guilds=True, users=True)
 class MemoryCommands(app_commands.Group):
     def __init__(self, client):
         super().__init__(name="memory", description="현재 채널의 기억 디버깅 모드 (봇 관리자 전용)")
@@ -44,7 +46,8 @@ class MemoryCommands(app_commands.Group):
 
     async def interaction_check(self, interaction):
         # Bot ownership/BOT_ADMIN_IDS is the authority here, not guild Administrator permission.
-        # This lets the bot owner manage the bot in servers where they are not a server admin.
+        # This lets designated bot admins manage the bot from any server or DM where the app
+        # command is available.
         if interaction.user.id not in self.client.emoji_admin_ids:
             await interaction.response.send_message("봇 소유자 또는 지정된 관리자만 사용할 수 있어요.",
                                                     ephemeral=True)
