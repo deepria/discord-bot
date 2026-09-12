@@ -10,12 +10,36 @@ KNOWLEDGE_LEVELS = {
     "audience_only", "unknown",
 }
 CONFIDENCE_LEVELS = {"verified", "official_secondary", "crosschecked", "candidate"}
+FACT_TYPES = {
+    "fact_direct", "fact_visual", "fact_reported", "inference", "unknown",
+    "adaptation", "fandom",
+}
+FACT_TYPE_TO_KIND = {
+    "fact_direct": "world_fact",
+    "fact_visual": "world_fact",
+    "fact_reported": "world_fact",
+    "inference": "interpretation",
+    "unknown": "interpretation",
+    "adaptation": "interpretation",
+    "fandom": "interpretation",
+}
+REFERENCE_ONLY_FACT_TYPES = {"adaptation", "fandom"}
 _TOKEN = re.compile(r"[0-9A-Za-z가-힣]{2,}")
 _STOPWORDS = {"히나", "히나야", "소라사키", "블루", "아카이브", "뭐야", "알려줘", "어떻게"}
 
 
 class LoreValidationError(ValueError):
     pass
+
+
+def fact_type(record: dict) -> str:
+    """Return the evidence class, preserving compatibility with old reviewed rows."""
+    value = record.get("fact_type")
+    if value is not None:
+        return value
+    if record.get("lane") == "community_meme":
+        return "fandom"
+    return "fact_direct"
 
 
 def validate_record(record: dict, *, accepted: bool = False) -> dict:
@@ -28,11 +52,13 @@ def validate_record(record: dict, *, accepted: bool = False) -> dict:
         raise LoreValidationError("id는 영문 소문자·숫자·._- 형식이어야 합니다.")
     if record["lane"] not in LANES:
         raise LoreValidationError(f"invalid lane: {record['lane']}")
+    if record.get("fact_type") is not None and record["fact_type"] not in FACT_TYPES:
+        raise LoreValidationError(f"invalid fact_type: {record['fact_type']}")
     if record["knowledge"] not in KNOWLEDGE_LEVELS:
         raise LoreValidationError(f"invalid knowledge: {record['knowledge']}")
     if record["confidence"] not in CONFIDENCE_LEVELS:
         raise LoreValidationError(f"invalid confidence: {record['confidence']}")
-    if record["status"] not in {"candidate", "accepted", "rejected"}:
+    if record["status"] not in {"candidate", "accepted", "rejected", "suppressed"}:
         raise LoreValidationError(f"invalid status: {record['status']}")
     if record["kr_release"] not in {"confirmed", "pending", "not_applicable"}:
         raise LoreValidationError(f"invalid kr_release: {record['kr_release']}")
@@ -42,6 +68,8 @@ def validate_record(record: dict, *, accepted: bool = False) -> dict:
         raise LoreValidationError(f"{record['id']}: meme release status must be not_applicable")
     if accepted and (record["status"] != "accepted" or record["confidence"] == "candidate"):
         raise LoreValidationError(f"{record['id']}: runtime records must be reviewed and accepted")
+    if accepted and fact_type(record) in REFERENCE_ONLY_FACT_TYPES:
+        raise LoreValidationError(f"{record['id']}: adaptation/fandom rows are reference-only")
     if not isinstance(record["summary"], str) or not 1 <= len(record["summary"].strip()) <= 600:
         raise LoreValidationError(f"{record['id']}: summary must be 1~600 chars")
     if not isinstance(record["timeline"], str) or not 1 <= len(record["timeline"].strip()) <= 120:
@@ -97,7 +125,7 @@ class LoreIndex:
         return {token.casefold() for token in _TOKEN.findall(text) if token.casefold() not in _STOPWORDS}
 
     def search(self, query: str, *, limit: int = 6, chars: int = 3200,
-               include_community: bool = True) -> list[dict]:
+               include_community: bool = True, include_reference_only: bool = False) -> list[dict]:
         if limit <= 0 or chars <= 0:
             return []
         folded = query.casefold()
@@ -105,6 +133,10 @@ class LoreIndex:
         ranked = []
         for order, record in enumerate(self.records):
             if record["lane"] == "community_meme" and not include_community:
+                continue
+            evidence_type = fact_type(record)
+            if record["lane"] == "canon" and evidence_type in REFERENCE_ONLY_FACT_TYPES \
+                    and not include_reference_only:
                 continue
             score = 0
             for value in record["subjects"]:
@@ -124,11 +156,18 @@ class LoreIndex:
                 # The model needs the reaction, not editorial provenance that it may say aloud.
                 item = {"kind": "optional_reaction", "content": record["reaction"]}
             else:
+                evidence_type = fact_type(record)
                 item = {
-                    "reference": record["id"], "kind": "world_fact",
+                    "reference": record["id"], "kind": FACT_TYPE_TO_KIND[evidence_type],
                     "content": record["summary"], "awareness": record["knowledge"],
                     "time": record["timeline"],
                 }
+                if evidence_type == "unknown":
+                    # Existing prompt policy already treats interpretations as non-facts; this flag makes
+                    # the negative/unknown claim explicit without inventing a new model-facing kind.
+                    item["guard"] = "do_not_assert_positive_fact"
+                elif evidence_type in REFERENCE_ONLY_FACT_TYPES:
+                    item["source_scope"] = evidence_type
             size = len(json.dumps(item, ensure_ascii=False))
             if used + size > chars:
                 continue
