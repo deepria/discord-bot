@@ -80,6 +80,17 @@ class LoreSearchTests(unittest.TestCase):
         self.assertEqual(len(self.index.search("마코토 아코", limit=1)), 1)
         self.assertEqual(self.index.search("마코토", chars=1), [])
 
+    def test_packaged_corpus_contains_reviewed_profile_batch(self):
+        packaged = LoreIndex.load()
+        self.assertEqual(len(packaged.records), 22)
+        self.assertEqual(
+            sum(row["lane"] == "canon" for row in packaged.records), 18)
+        self.assertEqual(
+            sum(row["lane"] == "community_meme" for row in packaged.records), 4)
+        result = packaged.search("세나는 응급의학부에서 무슨 일을 해?")
+        self.assertEqual(result[0]["id"], "profile.sena.role")
+        self.assertEqual(result[0]["knowledge"], "public_knowledge")
+
 
 class LorePipelineTests(unittest.TestCase):
     def test_extract_stays_candidate_and_canon_approval_needs_kr_confirmation(self):
