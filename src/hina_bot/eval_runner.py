@@ -67,6 +67,7 @@ def eval_settings(args) -> Settings:
         memory_model=args.model or os.getenv("MEMORY_MODEL", os.getenv("OPENAI_MODEL", "gpt-4.1-mini")),
         db_path=":memory:",
         prompt_path=os.getenv("CHARACTER_PROMPT_PATH", ""),
+        instruction_path=os.getenv("INSTRUCTION_PATH", "data/instructions.json"),
         output_tokens=int(os.getenv("MAX_OUTPUT_TOKENS", "1000")),
         history_turns=int(os.getenv("HISTORY_TURNS", "12")),
         history_max_chars=int(os.getenv("HISTORY_MAX_CHARS", "12000")),
