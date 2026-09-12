@@ -65,7 +65,7 @@ def eval_settings(args) -> Settings:
         discord_token="eval-only",
         model=args.model or os.getenv("OPENAI_MODEL", "gpt-4.1-mini"),
         memory_model=args.model or os.getenv("MEMORY_MODEL", os.getenv("OPENAI_MODEL", "gpt-4.1-mini")),
-        db_path=":memory:",
+        db_path=os.getenv("DATABASE_PATH", "data/hina.sqlite3"),
         prompt_path=os.getenv("CHARACTER_PROMPT_PATH", ""),
         instruction_path=os.getenv("INSTRUCTION_PATH", "data/instructions.json"),
         runtime_lore_path=os.getenv("RUNTIME_LORE_PATH", "data/runtime_lore.json"),
