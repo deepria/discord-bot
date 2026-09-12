@@ -15,7 +15,7 @@ class KnowledgeCommands(app_commands.Group):
     def __init__(self, client):
         super().__init__(
             name="knowledge",
-            description="조사 메모를 자동 분해해 설정 사실·해석으로 반영 (봇 관리자 전용)",
+            description="조사 메모를 자동 분해·조정해 설정 사실·해석으로 반영 (봇 관리자 전용)",
         )
         self.client = client
         self.fact_registry = RuntimeKnowledgeRegistry(
@@ -60,33 +60,42 @@ class KnowledgeCommands(app_commands.Group):
 
     @app_commands.command(
         name="ingest",
-        description="긴 조사 메모를 사실·해석으로 자동 분해하고 정상 항목을 즉시 반영",
+        description="긴 조사 메모를 기존 knowledge와 조정해 자동 반영",
     )
-    @app_commands.describe(text="정리할 조사 메모. 사실과 추측이 섞여 있어도 됩니다 (최대 6000자)")
+    @app_commands.describe(text="정리할 최신 조사 메모. 사실과 추측이 섞여 있어도 됩니다 (최대 6000자)")
     async def ingest(self, interaction: discord.Interaction, text: str):
         await interaction.response.defer(ephemeral=True, thinking=True)
         try:
             result = await self.ingestor.ingest(text)
-        except ValueError as exc:
+        except (TypeError, ValueError) as exc:
             await interaction.followup.send(str(exc), ephemeral=True)
             return
 
-        applied = result["applied"]
+        added = result["added"]
+        updated = result["updated"]
+        removed = result["removed"]
         held = result["held"]
         skipped = result["skipped"]
-        facts = sum(item["kind"] == "world_fact" for item in applied)
-        contexts = len(applied) - facts
         lines = [
-            f"자동 반영 완료: 사실 {facts}개, 해석 {contexts}개",
-            f"중복으로 건너뜀: {len(skipped)}개 / 애매해서 보류: {len(held)}개",
+            f"knowledge 반영 완료: 추가 {len(added)}개 / 갱신 {len(updated)}개 / "
+            f"대체 삭제 {len(removed)}개",
+            f"기존 내용 유지·중복: {len(skipped)}개 / 애매해서 보류: {len(held)}개",
         ]
-        if applied:
+        changed = added + updated
+        if changed:
             lines.append("\n반영된 항목:")
-            for item in applied[:12]:
+            for item in changed[:12]:
                 kind = "사실" if item["kind"] == "world_fact" else "해석"
-                lines.append(f"- `{item['id']}` [{kind}]")
-            if len(applied) > 12:
-                lines.append(f"- … 외 {len(applied) - 12}개")
+                verb = "갱신" if item in updated else "추가"
+                lines.append(f"- `{item['id']}` [{kind}/{verb}]")
+            if len(changed) > 12:
+                lines.append(f"- … 외 {len(changed) - 12}개")
+        if removed:
+            lines.append("\n중복·구버전으로 제거:")
+            for item in removed[:6]:
+                lines.append(f"- `{item['id']}` → `{item['superseded_by']}`")
+            if len(removed) > 6:
+                lines.append(f"- … 외 {len(removed) - 6}개")
         if held:
             lines.append("\n보류된 항목:")
             for item in held[:6]:
