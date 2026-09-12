@@ -115,30 +115,29 @@ class MemoryCommands(app_commands.Group):
         raise ValueError("알 수 없는 설정 범위예요.")
 
     @staticmethod
-    def _chain_lines(chain: dict, default: str) -> list[str]:
+    def _chain_lines(chain: dict, default: str, *, include_server: bool) -> list[str]:
         global_text = chain["global"] or f"{default} (기본값)"
         lines = [f"최종 적용: **{chain['effective']}** (출처: {_SOURCE_LABEL[chain['source']]})",
                  f"전역: `{global_text}`"]
         parent = chain["global"] or default
-        if chain["server"] is not None or "server" in chain:
+        if include_server:
             server = chain["server"]
-            if server is not None:
-                lines.append(f"서버: `{server}`")
-                parent = server
+            lines.append(f"서버: `{'상속 → ' + parent if server is None else server}`")
+            parent = server or parent
         channel = chain["channel"]
         lines.append(f"채널: `{'상속 → ' + parent if channel is None else channel}`")
         return lines
 
     def _status_text(self, scope: Scope) -> str:
         memory = self.client.store.memory_mode_chain(scope)
-        memory_lines = self._chain_lines(memory, "normal")
+        memory_lines = self._chain_lines(memory, "normal", include_server=scope.guild_id is not None)
         mode = MemoryMode(str(memory["effective"]))
         memory_lines.append(
             f"장기 기억 읽기: {'켜짐' if mode.reads else '꺼짐'} / "
             f"새 장기 기억 저장: {'켜짐' if mode.writes else '꺼짐'}")
 
         chat = self.client.store.chat_log_mode_chain(scope)
-        chat_lines = self._chain_lines(chat, "on")
+        chat_lines = self._chain_lines(chat, "on", include_server=scope.guild_id is not None)
         if scope.guild_id is None:
             chat_lines.append("DM에서는 최근 채널 로그 문맥을 사용하지 않아요.")
         else:
