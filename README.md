@@ -11,7 +11,8 @@ OpenAI Responses API, SQLite를 사용합니다. 프롬프트 교체와 소규�
 - 직접 호출한 발화의 장기 요약은 SQLite에 저장해요. 공개 호출은 같은 서버에서 공유해요.
 - 같은 사용자의 공개 서버 대화는 DM에서 참고하고, DM 기억은 서버로 전달하지 않아요.
 - 개인 메모, 관리자용 서버 공통 메모, 기억 확인·삭제 명령을 제공해요.
-- 봇 소유자용 `/memory`·`/instruction` 슬래시 명령과 런타임 동적 캐릭터 보조 지침을 제공해요.
+- 봇 소유자·`BOT_ADMIN_IDS`용 `/memory`·`/instruction`·`/knowledge` 슬래시 명령을 제공해요.
+- 동적 instruction과 runtime knowledge는 기억 데이터와 같은 `hina.sqlite3`에 저장해요.
 - API 시간 제한·재시도, 사용자별 쿨다운, 동시 요청 제한, 출력 분할, 자동 멘션 억제를 적용해요.
 - 승인된 공식 설정과 커뮤니티 밈 중 현재 질문에 관련된 항목만 로컬 검색해 전달해요.
 - Docker Compose 실행 설정과 GitHub Actions 테스트를 포함해요.
@@ -56,15 +57,37 @@ Intent**를 켜 주세요. `히나야`처럼 멘션 없는 호출을 읽으려�
 관리자 권한 전체를 줄 필요는 없어요. DM은 사용자의 서버 개인정보/DM 수신 설정에도 영향을 받아요.
 이 버전은 일반 봇 초대 방식이며 사용자 설치 앱은 사용하지 않아요. 이모지 관리는
 `히나야 /이모지` 메시지 명령이고, 기억 모드는 `/memory`, 동적 캐릭터 지침은
-`/instruction` 슬래시 명령으로 관리해요. 초대 시 `applications.commands` scope도 포함해 주세요.
+`/instruction`, 동적 설정 지식은 `/knowledge` 슬래시 명령으로 관리해요.
+초대 시 `applications.commands` scope도 포함해 주세요.
 
 ```bash
 docker compose up -d --build
 docker compose logs -f
 ```
 
-Compose는 named volume에 SQLite를 보존해요. `docker compose down -v`는 기억도 삭제해요.
-데이터베이스 파일을 공유하는 여러 봇 프로세스를 동시에 실행하지 마세요.
+Compose는 named volume에 SQLite를 보존해요. `docker compose down -v`는 기억과 동적
+instruction/knowledge도 함께 삭제해요. 데이터베이스 파일을 공유하는 여러 봇 프로세스를
+동시에 실행하지 마세요.
+
+### 기존 JSON 런타임 데이터 마이그레이션
+
+예전 버전의 `data/instructions.json`, `data/runtime_lore.json`, `data/contexts.json`을
+사용하던 설치는 한 번만 SQLite로 이전하면 돼요. 먼저 dry-run으로 검증한 뒤 실제 이전을
+실행하는 것을 권장해요.
+
+```bash
+uv run hina-migrate-runtime --dry-run
+uv run hina-migrate-runtime
+```
+
+기본 대상 DB는 `DATABASE_PATH`(기본 `data/hina.sqlite3`)예요. 기존 JSON 경로를 바꿔서
+운영했다면 `--instructions`, `--facts`, `--contexts`로 직접 지정할 수 있어요. 같은 ID가
+이미 DB에 있을 때 JSON 쪽으로 덮어써야 하는 경우에만 `--replace`를 사용하세요.
+
+마이그레이션은 기존 JSON 파일을 자동 삭제하지 않아요. 정상 반영을 확인한 뒤 백업하거나
+삭제하면 돼요. 기존 항목에 `created_at`이 없으면 임의의 날짜를 만들지 않고 SQLite에
+`NULL`로 저장하며 목록 UI에서는 `미기록`으로 표시해요. 새 항목은 현재 UTC 생성 시각을
+기록하고, 수정 시에는 `updated_at`을 갱신해요.
 
 ## 호출 규칙
 
@@ -159,36 +182,36 @@ API 키, 프롬프트, SDK 오류 본문을 남기지 않아요.
 
 ## 기억 디버깅
 
-봇 소유자 또는 `BOT_ADMIN_IDS`에 지정된 관리자가 실제 슬래시 명령으로 전환할 수 있어요.
-`/memory mode value:off`로 끄고, `/memory mode value:normal`로 복구해요.
-`/memory status`로 현재 상태를 확인해요. 명령 응답은 실행한 관리자에게만 보여요.
-이 권한은 Discord 서버의 `Administrator`/`Manage Server` 권한과 별개예요. 봇 소유자나
-`BOT_ADMIN_IDS` 사용자는 자신이 서버 관리자가 아닌 서버에서도 실행할 수 있고, 반대로
-서버 관리자라도 봇 관리자 목록에 없으면 실행할 수 없어요. Discord 클라이언트의 명령
-목록에는 다른 사용자에게도 보일 수 있지만 실행 단계에서 거부해요.
+봇 소유자 또는 `BOT_ADMIN_IDS`에 지정된 관리자가 실제 슬래시 명령으로 기억 사용 모드를
+관리할 수 있어요. 설정은 **전역 → 서버 → 채널** 순으로 상속되며 더 구체적인 설정이
+우선해요. 직접 설정이 없는 서버는 전역을, 직접 설정이 없는 채널은 서버 설정을 따릅니다.
+전역 기본값은 별도 설정이 없으면 `normal`이에요.
 
-| 모드 | 답변에 기존 기억 사용 | 새 기억 저장 |
+| 모드 | 답변에 기존 장기 기억 사용 | 새 장기 기억 저장 |
 | --- | --- | --- |
 | `normal` | 켜짐 | 켜짐 |
 | `read_only` | 켜짐 | 꺼짐 |
 | `write_only` | 꺼짐 | 켜짐 |
 | `off` | 꺼짐 | 꺼짐 |
 
-설정은 **현재 채널 전체**에 적용되어 같은 채널의 모든 사용자가 공유해요.
-DM에서는 해당 DM에만 적용되고, 재시작 후에도 유지돼요. 진행 중인 응답이 끝난 뒤
-전환을 완료하며, 전환할 때 현재 채널의 단기 문맥 버퍼를 초기화해요.
-기존 장기 기록은 삭제하지 않으므로 `normal`로 복구하면 다시 참고할 수 있어요.
+`/memory mode`의 `target`으로 전역·현재 서버·현재 채널을 선택할 수 있고, 서버와 채널은
+`inherit`을 지정해 직접 override를 지우고 상위 설정을 다시 따르게 할 수 있어요.
+`/memory status`는 현재 위치에서 전역/서버/채널의 직접 설정과 최종 적용값을 보여줘요.
+`/memory overview`는 봇이 알고 있는 서버·채널의 직접 설정과 최종 적용값을 표 형태로
+한눈에 보여주며, 항목이 많으면 여러 ephemeral 메시지로 나눠서 출력해요.
 
-기억 사용을 끄면 개인 대화 이력·요약·메모·서버 공통 메모·공개 서버 공유 기억·최근
-채널 문맥을 답변 입력에서 제외해요. 현재 메시지, 캐릭터 프롬프트, 화자 정보와 이모지
-설정은 유지해요. 저장을 끄면 일반 발언의 단기 버퍼, 대화 기록, 공유 발언 및 장기 요약을
-새로 쌓지 않으며 `/메모`, `/서버메모` 작성도 막아요. 기존 기억 확인·삭제는 계속 가능해요.
+예를 들어 전역이 `off`, 서버가 `read_only`, 특정 채널만 `normal`이면 그 채널은
+`normal`, 같은 서버의 나머지 채널은 `read_only`, 다른 서버는 `off`가 적용돼요.
 
-`write_only`는 답변 생성에 기억을 쓰지 않지만, 저장용 요약을 갱신할 때는 이전 요약을
-합치는 데 사용해요. 모드 전환·상태 확인은 OpenAI를 호출하지 않고, 저장을 끄면 요약용
-호출도 생략해요. 일반 답변 생성에는 계속 API를 사용해요.
-다른 채널의 설정과 이미 공유된 기억에는 영향을 주지 않아요. Discord에 보낸 메시지는
-남으며, 저장을 껐던 기간의 대화는 나중에 소급 수집하지 않아요.
+이 모드는 **장기 기억의 읽기/쓰기만 제어**해요. 같은 채널에서 방금 오간 최근 메시지
+문맥은 memory mode와 별개로 계속 수집·전달하므로 `off` 상태에서도 `이 사람`, `방금 저 말`
+같은 표현을 직전 채팅과 연결할 수 있어요. 모드를 바꿔도 최근 채널 문맥 버퍼를 지우지 않아요.
+명시적인 기억 삭제 명령은 기존 삭제 범위에 따라 장기 데이터와 필요한 단기 문맥을 정리해요.
+
+모드 설정은 SQLite에 저장되어 재시작 후에도 유지되고, 변경 자체는 OpenAI API를 호출하지
+않아요. 기존 장기 기록은 모드를 바꿔도 삭제되지 않으므로 다시 `normal` 또는 읽기 가능한
+모드로 복구하면 재사용할 수 있어요. `/메모`, `/서버메모`처럼 새 장기 데이터를 만드는
+명령은 최종 적용 모드에서 쓰기가 꺼져 있으면 거부돼요.
 
 ## 동적 instruction 관리
 
@@ -201,22 +224,58 @@ DM에서는 해당 DM에만 적용되고, 재시작 후에도 유지돼요. 진�
 | 명령 | 기능 |
 | --- | --- |
 | `/instruction add identifier:<id> text:<내용>` | 새 보조 지침을 추가하고 즉시 활성화 |
-| `/instruction list` | 저장된 지침과 ON/OFF 상태 확인 |
+| `/instruction list [search] [sort]` | 전체/검색 목록과 ON/OFF·추가 시각 확인 |
 | `/instruction edit identifier:<id> text:<내용>` | 기존 지침 본문 수정 |
 | `/instruction enable identifier:<id>` | 비활성 지침 활성화 |
 | `/instruction disable identifier:<id>` | 지침을 보존한 채 런타임 적용만 중지 |
 | `/instruction remove identifier:<id>` | 지침 영구 삭제 |
 
+`list`는 검색어를 생략하면 전체를 보여주고 Discord 길이 제한에 걸릴 때만 나머지 개수를
+표시하며 잘라요. 검색은 ID와 본문을 대상으로 하고 기본 정렬은 추가 시간순이에요.
+최신 추가순·ID순·상태순도 선택할 수 있으며, 고정폭 코드블록과 한글 표시 폭 계산으로
+열을 맞춰 보여줘요.
+
 추가·수정·활성화 결과는 **다음 모델 응답부터 즉시 적용**되어 봇 재시작이 필요하지 않아요.
 ID는 영문 소문자·숫자·점·밑줄·하이픈 2~64자이고, 지침 하나는 최대 1200자예요.
 최대 50개를 저장하며 동시에 활성화된 본문 합계는 6000자 이하로 제한해 프롬프트가
-무한히 커지지 않게 해요. 비활성 지침은 파일에 남지만 모델 입력에는 들어가지 않아요.
+무한히 커지지 않게 해요. 비활성 지침은 SQLite에 남지만 모델 입력에는 들어가지 않아요.
 
-기본 저장 위치는 `INSTRUCTION_PATH=data/instructions.json`이에요. `data/`는 Git에서
-제외되고 Docker Compose에서는 `/app/data` named volume에 들어가므로 컨테이너를 다시
-빌드해도 유지돼요. 활성 지침은 고정 `POLICY`, `hina.md`, 관계 지침 뒤에 신뢰 가능한
-관리자 보조 지침으로 붙지만, 보안·권한·몰입 같은 고정 경계를 덮어쓸 수는 없어요.
-충분히 검증된 규칙은 `hina.md`에 옮긴 뒤 동적 지침에서 삭제하는 식으로 사용할 수 있어요.
+동적 instruction은 `DATABASE_PATH`의 `instructions` 테이블에 저장해요. 기본 DB는
+`data/hina.sqlite3`이며 Docker Compose의 `/app/data` named volume에 보존돼요. 활성 지침은
+고정 `POLICY`, `hina.md`, 관계 지침 뒤에 신뢰 가능한 관리자 보조 지침으로 붙지만,
+보안·권한·몰입 같은 고정 경계를 덮어쓸 수는 없어요. 충분히 검증된 규칙은 `hina.md`에
+옮긴 뒤 동적 지침에서 삭제하는 식으로 사용할 수 있어요.
+
+## 동적 knowledge 관리
+
+`/knowledge`는 사람이 fact/context 태그를 직접 붙이는 대신, 관리자가 긴 조사 메모를
+통째로 넣으면 모델이 최소 단위 claim으로 분해하고 기존 동적 knowledge와 조정해 주는
+관리 명령이에요. 권한은 `/instruction`과 동일하게 봇 소유자 또는 `BOT_ADMIN_IDS`에만 있어요.
+
+| 명령 | 기능 |
+| --- | --- |
+| `/knowledge ingest text:<조사 메모>` | 사실/해석으로 자동 분해하고 기존 항목과 add/update/skip/hold 조정 |
+| `/knowledge list [search] [sort]` | 전체/검색 목록과 종류·ON/OFF·추가 시각 확인 |
+| `/knowledge show identifier:<id>` | 한 항목의 본문·키워드·대상·인지 범위·시점 확인 |
+| `/knowledge enable identifier:<id>` | 비활성 항목 활성화 |
+| `/knowledge disable identifier:<id>` | 항목을 보존한 채 런타임 검색에서 제외 |
+| `/knowledge remove identifier:<id>` | 동적 knowledge 영구 삭제 |
+
+`ingest`는 새 메모를 기존 동적 knowledge와 비교해 같은 주제의 정정·구체화라면 기존 ID를
+갱신하고, 완전히 중복된 항목은 건너뛰며, 여러 기존 항목을 하나로 통합할 때는 불필요한
+중복을 제거할 수 있어요. 정식 `lore.jsonl`은 읽기 전용 비교 대상으로만 사용하며 자동으로
+수정하지 않아요. 사실과 해석이 섞인 문장은 분리하고, 명확한 사실은 `world_fact`, 동기·의미·
+인지 범위 추론은 `interpretation`으로 내부 분류해요. 입력 내부 모순이나 정식 canon과의
+충돌 가능성이 있는 항목은 바로 저장하지 않고 보류해요.
+
+`list` 검색은 ID·본문·keywords·subjects·timeline·종류를 대상으로 해요. 기본은 추가
+시간순이며 최신 추가순·ID순·상태순·종류순 정렬을 지원하고, 검색하지 않으면 전체를
+보여주되 Discord 길이 제한을 넘을 때만 잘라요.
+
+동적 knowledge는 같은 `DATABASE_PATH`의 `runtime_knowledge` 테이블에 저장하고 `kind`로
+`world_fact`와 `interpretation`을 구분해요. 정적·검수 완료 lore는 계속
+`src/hina_bot/data/lore.jsonl`(또는 `LORE_PATH`)에 두어 Git에서 리뷰·버전 관리하고,
+Discord에서 운영 중 수정되는 knowledge만 SQLite에 보관해요.
 
 ## 기억 관리
 
@@ -303,8 +362,8 @@ Developer Portal에서 직접 삭제한 앱 이모지는 다음 조회까지 잠
 Docker에서는 해당 파일을 읽기 전용으로 마운트하거나 이미지를 다시 빌드해 주세요.
 
 빠른 튜닝에는 `/instruction`을 사용하고, 안정화된 규칙은 `hina.md`로 옮기는 방식을 권장해요.
-`hina-eval`도 `INSTRUCTION_PATH`의 활성 지침을 읽으므로 동적 조정 전후 회귀 테스트를
-같은 조건으로 비교할 수 있어요.
+`hina-eval`도 `DATABASE_PATH`의 활성 동적 instruction/knowledge를 실제 봇과 같은 방식으로
+읽으므로 조정 전후 회귀 테스트를 같은 조건으로 비교할 수 있어요.
 
 운영·권한 지침은 `llm.py`의 `POLICY`, 요약 지침은 `SUMMARY_POLICY`로 분리해 두었어요.
 메모나 사용자 표시 이름은 시스템 프롬프트가 아닌 사용자 역할 참고 데이터로 전달해요.
@@ -318,6 +377,10 @@ uv sync --extra dev
 uv run ruff check .
 uv run pytest
 
+# 기존 JSON 런타임 데이터를 SQLite로 옮기기 전 검증/실제 이전
+uv run hina-migrate-runtime --dry-run
+uv run hina-migrate-runtime
+
 # 실제 모델 캐릭터·설정 회귀 평가 (OPENAI_API_KEY 필요)
 uv run hina-eval --limit 5
 uv run hina-eval
@@ -330,8 +393,9 @@ uv run hina-eval --id weapon_model_ambiguous --id prompt_probe
 `data/evals/character-<UTC>.jsonl`과 같은 이름의 Markdown 리포트를 만들어요. 각 케이스는
 독립된 메모리 상태에서 시작하고 `turns` 배열을 사용한 다중 턴 사례도 지원해요.
 `--model`, `--output`, `--cases`, `--id`, `--limit`으로 실행 범위를 바꿀 수 있으며,
-`CHARACTER_PROMPT_PATH`, lore 설정과 활성 동적 instruction도 실제 봇과 같은 방식으로 읽어요.
-현재는 자동 PASS/FAIL 판정보다 Markdown 리포트를 사람이 검토하는 방식을 기본으로 해요.
+`CHARACTER_PROMPT_PATH`, lore 설정과 SQLite의 활성 동적 instruction/knowledge도 실제 봇과
+같은 방식으로 읽어요. 현재는 자동 PASS/FAIL 판정보다 Markdown 리포트를 사람이 검토하는
+방식을 기본으로 해요.
 
 기존 pip 방식을 사용할 경우 아래처럼 실행할 수도 있어요.
 
@@ -378,11 +442,9 @@ API 키가 없는 일반 CI에서는 `pytest`로 결정적 경계를 검사해�
 
 ## GitHub 저장소
 
-[sendoru/hina-discord-bot](https://github.com/sendoru/hina-discord-bot) 비공개 저장소에서 관리해요.
-권한이 있는 계정으로 인증한 뒤 복제해 주세요.
+[sendoru/hina-discord-bot](https://github.com/sendoru/hina-discord-bot) 저장소에서 관리해요.
 
 ```bash
-gh auth login
 gh repo clone sendoru/hina-discord-bot
 cd hina-discord-bot
 ```
@@ -438,18 +500,26 @@ DM 기억을 서버로 보내지 않는 기존 경계도 유지해요. 설정 �
 이 설정은 저장된 기록을 삭제하지 않아요. 문자 상한은 토큰 수의 정확한 상한이 아니에요.
 보안 POLICY와 관계 지침은 계속 매 요청에 적용하고 고정 지침을 동적 데이터 앞에 둬요.
 
-기본 로그는 `data/logs/usage.jsonl`이며 5MB마다 회전해 백업 3개를 유지해요.
+기본 API 호출별 로그는 `data/logs/usage.jsonl`이며 5MB마다 회전해 백업 3개를 유지해요.
 `USAGE_LOG_PATH=`로 끌 수 있어요. 단일 봇 프로세스에서 사용하는 파일이에요.
 각 줄은 답변(`answer`), 개인 기억 요약(`summarize`), 공개 기억 요약
-(`summarize_shared`) 요청의 UTC 시각, 모델, 상태, 처리 시간(ms), 입력·출력·합계 토큰,
-캐시 입력 토큰, 추론 출력 토큰을 담아요. 대화 원문·프롬프트·사용자 ID·키·오류 본문은
-기록하지 않아요. 추론 토큰은 출력 토큰의 일부이므로 다시 합산하지 않아요.
+(`summarize_shared`), knowledge 구조화(`knowledge_ingest`) 같은 OpenAI 요청의 UTC 시각,
+모델, 상태, 처리 시간(ms), 입력·출력·합계 토큰, 캐시 입력 토큰, 추론 출력 토큰을 담아요.
+대화 원문·프롬프트·사용자 ID·키·오류 본문은 기록하지 않아요. 추론 토큰은 출력 토큰의
+일부이므로 다시 합산하지 않아요.
+
+별도로 `data/logs/discord-usage.jsonl`에는 **Discord 사용자 호출 1회가 유발한 OpenAI
+호출 전체**를 한 줄로 집계해요. 평범한 턴이면 `answer` 하나이고, 같은 턴에 개인/공유
+요약이 실행되면 그 사용량도 `operations`에 포함돼요. 메시지 본문·사용자 ID·서버 ID는
+기록하지 않고 DM/서버 범위 정도만 남겨요. `usage.jsonl`과 `discord-usage.jsonl`은 같은
+사용량을 서로 다른 단위로 기록하므로 두 파일을 서로 더하면 이중 집계가 됩니다.
 
 사용량이 없는 응답은 `null`, 예외는 오류 유형만 기록해요. SDK 내부 재시도는 하나의
 논리 요청으로 기록되어 실패·재시도 비용을 모두 포착하지 못할 수 있어요.
 이 로그는 이 봇의 관측치이며 계정 전체 사용량이나 무료 잔여 할당량이 아니에요.
 캐시 토큰도 입력 합계에 포함하며 여기서 임의로 빼지 않아요.
 
-평균 토큰/답변을 구할 때는 같은 기간의 세 작업 합계 토큰을 모두 더하고 성공한
-`answer` 횟수로 나누세요. 회전된 백업도 포함하고 사용량 누락 요청은 별도로 확인하세요.
-실제 모델로 캐릭터 품질과 절감률을 비교하는 평가는 아직 실행하지 않았어요.
+평균 토큰/답변을 구할 때는 `discord-usage.jsonl`의 `total_tokens`를 호출 단위로 집계하거나,
+`usage.jsonl`에서 같은 기간의 모든 작업 토큰을 더한 뒤 성공한 `answer` 횟수로 나누세요.
+두 로그를 동시에 합산하지 마세요. 실제 모델로 캐릭터 품질과 절감률을 비교하는 평가는
+별도로 실행해야 해요.
