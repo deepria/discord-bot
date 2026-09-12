@@ -2,6 +2,10 @@ import json
 import re
 from pathlib import Path
 
+MAX_ITEMS = 50
+MAX_ITEM_CHARS = 1200
+MAX_ACTIVE_CHARS = 6000
+
 
 class InstructionRegistry:
     def __init__(self, path: str):
@@ -33,9 +37,18 @@ class InstructionRegistry:
     @staticmethod
     def _validate_text(text: str) -> str:
         text = text.strip()
-        if not 1 <= len(text) <= 1200:
-            raise ValueError("instruction 본문은 1~1200자로 입력해 주세요.")
+        if not 1 <= len(text) <= MAX_ITEM_CHARS:
+            raise ValueError(f"instruction 본문은 1~{MAX_ITEM_CHARS}자로 입력해 주세요.")
         return text
+
+    @staticmethod
+    def _validate_active_budget(rows: list[dict]) -> None:
+        total = sum(len(row.get("text", "")) for row in rows if row.get("enabled", True))
+        if total > MAX_ACTIVE_CHARS:
+            raise ValueError(
+                f"활성 instruction 본문 합계는 {MAX_ACTIVE_CHARS}자 이하여야 합니다. "
+                "기존 항목을 비활성화하거나 내용을 줄여 주세요."
+            )
 
     def list(self) -> list[dict]:
         return self._read()
@@ -61,9 +74,10 @@ class InstructionRegistry:
         rows = self._read()
         if any(row.get("id") == identifier for row in rows):
             raise ValueError("이미 존재하는 instruction ID입니다.")
-        if len(rows) >= 50:
-            raise ValueError("동적 instruction은 최대 50개까지 저장할 수 있습니다.")
+        if len(rows) >= MAX_ITEMS:
+            raise ValueError(f"동적 instruction은 최대 {MAX_ITEMS}개까지 저장할 수 있습니다.")
         rows.append({"id": identifier, "text": text, "enabled": True})
+        self._validate_active_budget(rows)
         self._write(rows)
 
     def set_enabled(self, identifier: str, enabled: bool) -> None:
@@ -72,6 +86,7 @@ class InstructionRegistry:
         for row in rows:
             if row.get("id") == identifier:
                 row["enabled"] = enabled
+                self._validate_active_budget(rows)
                 self._write(rows)
                 return
         raise ValueError("등록되지 않은 instruction ID입니다.")
@@ -83,6 +98,7 @@ class InstructionRegistry:
         for row in rows:
             if row.get("id") == identifier:
                 row["text"] = text
+                self._validate_active_budget(rows)
                 self._write(rows)
                 return
         raise ValueError("등록되지 않은 instruction ID입니다.")
