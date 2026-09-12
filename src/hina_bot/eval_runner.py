@@ -3,7 +3,7 @@ import asyncio
 import json
 import os
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -110,7 +110,7 @@ async def run_case(llm: LLM, case: dict) -> dict:
             )
             responses.append(reply)
             store.add(scope, index, turn, reply)
-    except Exception as exc:  # Keep the rest of the eval batch running.
+    except Exception as exc:  # noqa: BLE001 - keep the remaining eval batch running
         error = f"{type(exc).__name__}: {exc}"
     finally:
         store.close()
@@ -180,7 +180,7 @@ async def run(args) -> None:
     if args.output:
         output = Path(args.output)
     else:
-        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
         output = DEFAULT_RESULTS_DIR / f"character-{stamp}.jsonl"
     jsonl_path, report_path = write_results(results, output)
     print(f"results: {jsonl_path}")
