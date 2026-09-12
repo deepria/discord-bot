@@ -61,12 +61,22 @@ class InstructionRegistryTests(unittest.TestCase):
 
 class InstructionCommandTests(unittest.IsolatedAsyncioTestCase):
     async def test_access_control_uses_bot_admin_allowlist(self):
-        client = NS(settings=NS(instruction_path=""), emoji_admin_ids={100})
+        client = NS(settings=NS(instruction_path=""), emoji_admin_ids={100, 101})
         group = InstructionCommands(client)
         interaction = NS(user=NS(id=200), response=NS(send_message=AsyncMock()))
         self.assertFalse(await group.interaction_check(interaction))
-        interaction.user.id = 100
-        self.assertTrue(await group.interaction_check(interaction))
+        for admin_id in (100, 101):
+            interaction.user.id = admin_id
+            self.assertTrue(await group.interaction_check(interaction))
+
+    def test_available_in_guilds_and_private_contexts(self):
+        client = NS(settings=NS(instruction_path=""), emoji_admin_ids={100})
+        group = InstructionCommands(client)
+        self.assertTrue(group.allowed_contexts.guild)
+        self.assertTrue(group.allowed_contexts.dm_channel)
+        self.assertTrue(group.allowed_contexts.private_channel)
+        self.assertTrue(group.allowed_installs.guild)
+        self.assertTrue(group.allowed_installs.user)
 
 
 if __name__ == "__main__":
