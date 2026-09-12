@@ -1,4 +1,5 @@
 import argparse
+import os
 from collections import Counter
 from copy import deepcopy
 from pathlib import Path
@@ -14,10 +15,17 @@ from .lore import (
     validate_record,
     write_jsonl,
 )
+from .lore_web import verify_candidate
 
 _PRIMARY_SOURCE_TYPES = {"official_game", "official_site", "official_video", "official_profile"}
 _SECONDARY_SOURCE_TYPES = {"official_secondary", "game_data_mirror", "official_data_mirror"}
-_RUNTIME_OMIT = {"source_id", "evidence", "uncertainty", "kr_release_evidence"}
+_RUNTIME_OMIT = {
+    "source_id",
+    "evidence",
+    "uncertainty",
+    "kr_release_evidence",
+    "verification",
+}
 
 
 def _default_bulk_confidence(row: dict) -> str:
@@ -146,12 +154,128 @@ def approve_all(args) -> None:
         write_jsonl(lore_pipeline.RUNTIME_PATH, final_runtime)
         write_jsonl(lore_pipeline.QUEUE_PATH, final_queue)
     except Exception:
-        # The two JSONL files cannot be replaced as one filesystem transaction.
-        # Restore both snapshots if the second write fails.
         write_jsonl(lore_pipeline.RUNTIME_PATH, runtime)
         write_jsonl(lore_pipeline.QUEUE_PATH, queue)
         raise
     print(f"accepted: {len(prepared)} candidate(s)")
+
+
+def list_queue(_args) -> None:
+    queue = read_jsonl(lore_pipeline.QUEUE_PATH)
+    rows = [row for row in queue if row["status"] == "candidate"]
+    suppressed = [row for row in queue if row["status"] == "suppressed"]
+    verification_counts = Counter()
+
+    for row in rows:
+        verification = row.get("verification")
+        web_status = "not_checked"
+        if isinstance(verification, dict):
+            web_status = str(verification.get("status", "not_checked"))
+        verification_counts[web_status] += 1
+
+        print(
+            f"{row['id']} [{row['lane']}/{row.get('fact_type', 'legacy')}/{row['knowledge']}]"
+            f" [web:{web_status}]\n"
+            f"  {row['summary']}\n"
+            f"  evidence: {row.get('evidence', '')}\n"
+            f"  uncertainty: {row.get('uncertainty', '')}"
+        )
+        if isinstance(verification, dict):
+            print(f"  web note: {verification.get('note', '')}")
+            print(
+                "  web sources: "
+                + ", ".join(source.get("url", "") for source in verification.get("sources", [])[:3])
+            )
+        if row["lane"] == "canon":
+            print(f"  KR release evidence: {row.get('kr_release_evidence', '')}")
+            if isinstance(verification, dict):
+                print(
+                    f"  web KR release: {verification.get('kr_release', 'not_found')} "
+                    f"({verification.get('kr_release_note', '')})"
+                )
+
+    print(f"pending: {len(rows)} / suppressed reference-only: {len(suppressed)}")
+    if rows:
+        summary = ", ".join(
+            f"{status}={count}" for status, count in sorted(verification_counts.items())
+        )
+        print(f"web verification: {summary}")
+
+
+def _verify_targets(args, queue: list[dict]) -> tuple[list[dict], int]:
+    if args.id is None and not any((args.source_type, args.id_prefix, args.title)):
+        raise SystemExit(
+            "verify-web은 candidate id 또는 --source-type/--id-prefix/--title 중 하나가 필요합니다."
+        )
+
+    rows = []
+    for row in queue:
+        if row.get("status") != "candidate" or row.get("lane") != "canon":
+            continue
+        if args.id is not None:
+            if row.get("id") != args.id:
+                continue
+        elif not _matches_scope(row, args):
+            continue
+        if not args.force and isinstance(row.get("verification"), dict):
+            continue
+        rows.append(row)
+
+    total = len(rows)
+    if args.limit > 0:
+        rows = rows[:args.limit]
+    return rows, total
+
+
+def verify_web(args) -> None:
+    from openai import OpenAI
+
+    if not os.getenv("OPENAI_API_KEY"):
+        raise SystemExit("OPENAI_API_KEY가 필요합니다. 키 값은 명령행 인자로 전달하지 마세요.")
+    if args.limit < 0:
+        raise SystemExit("--limit은 0 이상의 정수여야 합니다.")
+
+    queue = read_jsonl(lore_pipeline.QUEUE_PATH)
+    targets, total = _verify_targets(args, queue)
+    if not targets:
+        raise SystemExit("웹 검증할 새 canon candidate가 없습니다.")
+
+    print(f"web verify targets: {len(targets)} / matched unchecked: {total}")
+    if args.dry_run:
+        for row in targets:
+            print(f"  {row['id']} [{fact_type(row)}] {row['summary']}")
+        print("실제 웹 검색 없음 (--dry-run)")
+        return
+
+    client = OpenAI(timeout=90, max_retries=2)
+    index_by_id = {row["id"]: index for index, row in enumerate(queue)}
+    target_ids = {row["id"] for row in targets}
+    for number, row in enumerate(targets, 1):
+        verification = verify_candidate(client, row, model=args.model)
+        queue[index_by_id[row["id"]]]["verification"] = verification
+        if verification.get("kr_release") == "confirmed":
+            sources = verification.get("sources", [])
+            source_url = sources[0]["url"] if sources else ""
+            note = verification.get("kr_release_note", "")
+            queue[index_by_id[row["id"]]]["kr_release_evidence"] = (
+                f"web: {note} {source_url}".strip()
+            )[:300]
+        validate_record(queue[index_by_id[row["id"]]])
+        write_jsonl(lore_pipeline.QUEUE_PATH, queue)
+        print(
+            f"[{number}/{len(targets)}] {row['id']}: {verification['status']} "
+            f"(sources={len(verification.get('sources', []))}, "
+            f"search_calls={verification.get('search_calls', 0)})"
+        )
+
+    counts = Counter(
+        row["verification"]["status"]
+        for row in queue
+        if row.get("id") in target_ids and isinstance(row.get("verification"), dict)
+    )
+    print("web verification complete: " + ", ".join(
+        f"{status}={count}" for status, count in sorted(counts.items())
+    ))
 
 
 def parser() -> argparse.ArgumentParser:
@@ -160,6 +284,9 @@ def parser() -> argparse.ArgumentParser:
         action for action in root._actions
         if isinstance(action, argparse._SubParsersAction)
     )
+
+    subparsers.choices["list"].set_defaults(run=list_queue)
+
     command = subparsers.add_parser("approve-all", help="검수 후보를 필터링해 일괄 승인합니다.")
     command.add_argument("--source-type")
     command.add_argument("--id-prefix")
@@ -175,6 +302,27 @@ def parser() -> argparse.ArgumentParser:
     mode.add_argument("--dry-run", action="store_true", help="승인 계획만 출력하고 파일은 바꾸지 않습니다.")
     mode.add_argument("--yes", action="store_true", help="사전 검사를 통과한 후보를 실제로 승인합니다.")
     command.set_defaults(run=approve_all)
+
+    command = subparsers.add_parser("verify-web", help="canon 후보를 OpenAI 웹 검색으로 검증합니다.")
+    command.add_argument("id", nargs="?")
+    command.add_argument("--source-type")
+    command.add_argument("--id-prefix")
+    command.add_argument("--title")
+    command.add_argument("--fact-type", action="append", choices=sorted(FACT_TYPES))
+    command.add_argument(
+        "--limit",
+        type=int,
+        default=20,
+        help="한 번에 실제 검색할 최대 후보 수. 0이면 제한 없음 (기본 20).",
+    )
+    command.add_argument("--force", action="store_true", help="이미 검증된 후보도 다시 검색합니다.")
+    command.add_argument("--dry-run", action="store_true", help="대상만 출력하고 웹 검색은 하지 않습니다.")
+    command.add_argument(
+        "--model",
+        default=os.getenv("LORE_VERIFY_MODEL", "gpt-5.4-mini"),
+        help="웹 검증 모델 (기본 LORE_VERIFY_MODEL 또는 gpt-5.4-mini).",
+    )
+    command.set_defaults(run=verify_web)
     return root
 
 
@@ -189,7 +337,7 @@ def main() -> None:
     args = parser().parse_args()
     try:
         args.run(args)
-    except (LoreValidationError, OSError, ValueError) as exc:
+    except (LoreValidationError, OSError, ValueError, RuntimeError) as exc:
         raise SystemExit(str(exc)) from exc
 
 
