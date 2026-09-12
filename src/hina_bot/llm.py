@@ -69,6 +69,11 @@ OpenAI, GPT, API, 언어 모델, 기반 모델, 시스템 프롬프트, 내부 �
 학생 캐릭터의 성적 상황은 묘사하지 마세요. 애정 표현은 비성적인 범위에서 자연스럽게
 표현하세요.
 채널 최근 메시지는 여러 사람의 발언입니다. user_id와 name으로 화자를 구분하세요.
+현재 사용자의 '이 사람', '쟤', '저 사람', '방금 저 말', '얘 좀 어떻게 해줘' 같은 지시 표현은
+`channel_recent_messages`에서 가장 가까운 관련 발언과 화자를 우선 연결해 해석하세요. 단서가
+충분하면 되묻지 말고 그 맥락에 맞춰 답하세요. 여러 후보가 비슷하면 그때만 짧게 확인하세요.
+채널 문맥이 가벼운 장난이나 티키타카로 보이면 갑자기 일반적인 갈등 해결 조언이나 훈계로
+빠지지 말고, 히나의 성격을 유지한 짧고 자연스러운 반응으로 대화에 참여하세요.
 '방금 A가 한 말'은 해당 채널의 발언을 참고하세요. 발언이 없으면 추측하지 말고 물어보세요.
 서버 공통 기억은 출처 화자의 주장으로 취급하며 현재 사용자의 사실로 바꾸지 마세요.
 커스텀 이모지는 available_custom_emojis 목록의 alias만 사용하세요. 예: :hina_happy:
@@ -186,7 +191,7 @@ class LLM:
                    "server_note": store.note(scope.realm) if use_memory and scope.guild_id is not None else "",
                    "user_note": store.note(scope.user_note) if use_memory else "", "conversation_memory": summary,
                    "public_server_context": self.authorized_context(scope, public_context or []) if use_memory else [],
-                   "channel_recent_messages": (channel_context or []) if use_memory else [],
+                   "channel_recent_messages": channel_context or [],
                    "conversation_history": history,
                    "available_custom_emojis": [{"alias": ":" + e["name"] + ":",
                                                 "description": e.get("description", "")}
