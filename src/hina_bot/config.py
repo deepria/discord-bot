@@ -25,6 +25,8 @@ class Settings:
     db_path: str = "data/hina.sqlite3"
     prompt_path: str = ""
     instruction_path: str = ""
+    runtime_lore_path: str = ""
+    context_path: str = ""
     call_prefixes: tuple[str, ...] = ("히나야",)
     dm_always_reply: bool = False
     public_memory_in_dm: bool = True
@@ -71,6 +73,8 @@ class Settings:
             db_path=os.getenv("DATABASE_PATH", "data/hina.sqlite3"),
             prompt_path=os.getenv("CHARACTER_PROMPT_PATH", ""),
             instruction_path=os.getenv("INSTRUCTION_PATH", "data/instructions.json"),
+            runtime_lore_path=os.getenv("RUNTIME_LORE_PATH", "data/runtime_lore.json"),
+            context_path=os.getenv("CONTEXT_PATH", "data/contexts.json"),
             call_prefixes=parse_call_prefixes(os.getenv("CALL_PREFIXES", "히나야")),
             dm_always_reply=dm == "true",
             public_memory_in_dm=public_memory == "true",
