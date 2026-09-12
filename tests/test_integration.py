@@ -46,6 +46,21 @@ class SDKTests(unittest.IsolatedAsyncioTestCase):
         await self.llm.close()
         self.store.close()
 
+    async def test_dm_history_budget_keeps_latest_complete_turn(self):
+        from dataclasses import replace
+        self.llm.settings = replace(self.llm.settings, history_max_chars=8)
+        scope = Scope(None, 20, 100)
+        self.store.add(scope, 1, "old-history", "old-reply")
+        self.store.add(scope, 2, "new", "reply")
+        await self.llm.answer(self.store, scope, "name", "current-question")
+        payload = self.calls[-1]["input"]
+        reference = json.loads(payload[0]["content"].split("\n", 1)[1])
+        self.assertEqual(reference["conversation_history"], [
+            {"role": "user", "content": "new"},
+            {"role": "assistant", "content": "reply"}])
+        self.assertEqual(payload[-1]["content"], "current-question")
+        self.assertEqual(len(self.store.history(scope)), 2)
+
     async def test_special_relationship_is_id_and_dm_scoped_even_without_memory(self):
         from dataclasses import replace
         self.llm.settings = replace(self.llm.settings, special_dm_user_id=100)
