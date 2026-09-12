@@ -2,13 +2,12 @@
 
 import json
 import logging
-from contextvars import ContextVar
 from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import UTC, datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from time import perf_counter
-
 
 _TOKEN_FIELDS = ("input_tokens", "output_tokens", "total_tokens", "cached_tokens", "reasoning_tokens")
 
