@@ -2,6 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace as NS
+from unittest.mock import AsyncMock
 
 from hina_bot.instruction_commands import InstructionCommands
 from hina_bot.instructions import InstructionRegistry
@@ -58,12 +59,14 @@ class InstructionRegistryTests(unittest.TestCase):
                 registry.remove("missing-id")
 
 
-class InstructionCommandTests(unittest.TestCase):
-    def test_admin_visibility_defaults(self):
+class InstructionCommandTests(unittest.IsolatedAsyncioTestCase):
+    async def test_access_control_uses_bot_admin_allowlist(self):
         client = NS(settings=NS(instruction_path=""), emoji_admin_ids={100})
         group = InstructionCommands(client)
-        self.assertTrue(group.guild_only)
-        self.assertTrue(group.default_permissions.administrator)
+        interaction = NS(user=NS(id=200), response=NS(send_message=AsyncMock()))
+        self.assertFalse(await group.interaction_check(interaction))
+        interaction.user.id = 100
+        self.assertTrue(await group.interaction_check(interaction))
 
 
 if __name__ == "__main__":
