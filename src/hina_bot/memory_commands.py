@@ -33,6 +33,8 @@ def mode_text(mode):
             "기존 장기 기억은 유지돼요. 캐릭터 프롬프트·이모지 설정은 계속 적용돼요.")
 
 
+@app_commands.guild_only()
+@app_commands.default_permissions(administrator=True)
 class MemoryCommands(app_commands.Group):
     def __init__(self, client):
         super().__init__(name="memory", description="현재 채널의 기억 디버깅 모드 (봇 관리자 전용)")
@@ -43,6 +45,8 @@ class MemoryCommands(app_commands.Group):
             client.tree.add_command(InstructionCommands(client))
 
     async def interaction_check(self, interaction):
+        # Keep an application-side owner/admin allowlist as defence in depth even though Discord
+        # hides the command from non-administrators by default.
         if interaction.user.id not in self.client.emoji_admin_ids:
             await interaction.response.send_message("봇 소유자 또는 지정된 관리자만 사용할 수 있어요.",
                                                     ephemeral=True)
