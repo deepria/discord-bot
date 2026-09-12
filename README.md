@@ -11,6 +11,7 @@ OpenAI Responses API, SQLite를 사용합니다. 프롬프트 교체와 소규�
 - 직접 호출한 발화의 장기 요약은 SQLite에 저장해요. 공개 호출은 같은 서버에서 공유해요.
 - 같은 사용자의 공개 서버 대화는 DM에서 참고하고, DM 기억은 서버로 전달하지 않아요.
 - 개인 메모, 관리자용 서버 공통 메모, 기억 확인·삭제 명령을 제공해요.
+- 봇 소유자용 `/memory`·`/instruction` 슬래시 명령과 런타임 동적 캐릭터 보조 지침을 제공해요.
 - API 시간 제한·재시도, 사용자별 쿨다운, 동시 요청 제한, 출력 분할, 자동 멘션 억제를 적용해요.
 - 승인된 공식 설정과 커뮤니티 밈 중 현재 질문에 관련된 항목만 로컬 검색해 전달해요.
 - Docker Compose 실행 설정과 GitHub Actions 테스트를 포함해요.
@@ -53,8 +54,9 @@ Intent**를 켜 주세요. `히나야`처럼 멘션 없는 호출을 읽으려�
 서버에 초대할 때 `bot` scope와 `View Channels`, `Send Messages`, `Read Message History`를
 허용해 주세요. 스레드에서도 사용하려면 `Send Messages in Threads`도 필요해요.
 관리자 권한 전체를 줄 필요는 없어요. DM은 사용자의 서버 개인정보/DM 수신 설정에도 영향을 받아요.
-이 버전은 일반 봇 초대 방식이며 사용자 설치 앱은 사용하지 않아요. 이모지 관리는 `히나야 /이모지` 메시지 명령이며,
-기억 모드 관리는 실제 `/memory` 슬래시 명령이에요. 초대 시 `applications.commands` scope도 포함해 주세요.
+이 버전은 일반 봇 초대 방식이며 사용자 설치 앱은 사용하지 않아요. 이모지 관리는
+`히나야 /이모지` 메시지 명령이고, 기억 모드는 `/memory`, 동적 캐릭터 지침은
+`/instruction` 슬래시 명령으로 관리해요. 초대 시 `applications.commands` scope도 포함해 주세요.
 
 ```bash
 docker compose up -d --build
@@ -160,6 +162,10 @@ API 키, 프롬프트, SDK 오류 본문을 남기지 않아요.
 봇 소유자 또는 `BOT_ADMIN_IDS`에 지정된 관리자가 실제 슬래시 명령으로 전환할 수 있어요.
 `/memory mode value:off`로 끄고, `/memory mode value:normal`로 복구해요.
 `/memory status`로 현재 상태를 확인해요. 명령 응답은 실행한 관리자에게만 보여요.
+이 권한은 Discord 서버의 `Administrator`/`Manage Server` 권한과 별개예요. 봇 소유자나
+`BOT_ADMIN_IDS` 사용자는 자신이 서버 관리자가 아닌 서버에서도 실행할 수 있고, 반대로
+서버 관리자라도 봇 관리자 목록에 없으면 실행할 수 없어요. Discord 클라이언트의 명령
+목록에는 다른 사용자에게도 보일 수 있지만 실행 단계에서 거부해요.
 
 | 모드 | 답변에 기존 기억 사용 | 새 기억 저장 |
 | --- | --- | --- |
@@ -183,6 +189,34 @@ DM에서는 해당 DM에만 적용되고, 재시작 후에도 유지돼요. 진�
 호출도 생략해요. 일반 답변 생성에는 계속 API를 사용해요.
 다른 채널의 설정과 이미 공유된 기억에는 영향을 주지 않아요. Discord에 보낸 메시지는
 남으며, 저장을 껐던 기간의 대화는 나중에 소급 수집하지 않아요.
+
+## 동적 instruction 관리
+
+캐릭터 프롬프트를 빠르게 조정할 때는 봇 소유자 또는 `BOT_ADMIN_IDS` 전용 실제 슬래시
+명령 `/instruction`을 사용할 수 있어요. 서버의 Discord 관리자 권한은 필요하지 않으며,
+봇 관리자 목록에 없는 사용자는 서버 관리자여도 실행할 수 없어요. 응답은 ephemeral로
+실행한 관리자에게만 보여요. 일반 사용자에게 명령 이름이 표시될 수는 있지만 실행 단계에서
+애플리케이션 권한 검사를 다시 해요.
+
+| 명령 | 기능 |
+| --- | --- |
+| `/instruction add identifier:<id> text:<내용>` | 새 보조 지침을 추가하고 즉시 활성화 |
+| `/instruction list` | 저장된 지침과 ON/OFF 상태 확인 |
+| `/instruction edit identifier:<id> text:<내용>` | 기존 지침 본문 수정 |
+| `/instruction enable identifier:<id>` | 비활성 지침 활성화 |
+| `/instruction disable identifier:<id>` | 지침을 보존한 채 런타임 적용만 중지 |
+| `/instruction remove identifier:<id>` | 지침 영구 삭제 |
+
+추가·수정·활성화 결과는 **다음 모델 응답부터 즉시 적용**되어 봇 재시작이 필요하지 않아요.
+ID는 영문 소문자·숫자·점·밑줄·하이픈 2~64자이고, 지침 하나는 최대 1200자예요.
+최대 50개를 저장하며 동시에 활성화된 본문 합계는 6000자 이하로 제한해 프롬프트가
+무한히 커지지 않게 해요. 비활성 지침은 파일에 남지만 모델 입력에는 들어가지 않아요.
+
+기본 저장 위치는 `INSTRUCTION_PATH=data/instructions.json`이에요. `data/`는 Git에서
+제외되고 Docker Compose에서는 `/app/data` named volume에 들어가므로 컨테이너를 다시
+빌드해도 유지돼요. 활성 지침은 고정 `POLICY`, `hina.md`, 관계 지침 뒤에 신뢰 가능한
+관리자 보조 지침으로 붙지만, 보안·권한·몰입 같은 고정 경계를 덮어쓸 수는 없어요.
+충분히 검증된 규칙은 `hina.md`에 옮긴 뒤 동적 지침에서 삭제하는 식으로 사용할 수 있어요.
 
 ## 기억 관리
 
@@ -268,12 +302,38 @@ Developer Portal에서 직접 삭제한 앱 이모지는 다음 조회까지 잠
 봇을 재시작하면 돼요. 파일 경로는 실행 디렉터리 기준이며 절대 경로도 가능해요.
 Docker에서는 해당 파일을 읽기 전용으로 마운트하거나 이미지를 다시 빌드해 주세요.
 
+빠른 튜닝에는 `/instruction`을 사용하고, 안정화된 규칙은 `hina.md`로 옮기는 방식을 권장해요.
+`hina-eval`도 `INSTRUCTION_PATH`의 활성 지침을 읽으므로 동적 조정 전후 회귀 테스트를
+같은 조건으로 비교할 수 있어요.
+
 운영·권한 지침은 `llm.py`의 `POLICY`, 요약 지침은 `SUMMARY_POLICY`로 분리해 두었어요.
 메모나 사용자 표시 이름은 시스템 프롬프트가 아닌 사용자 역할 참고 데이터로 전달해요.
 다만 프롬프트 인젝션을 문장만으로 완전히 막을 수는 없으므로, 모델에 타인 기억 조회나
 DB 수정 도구 자체를 제공하지 않아요. 접근 경계와 삭제 권한은 Python 코드에서 처리해요.
 
 ## 테스트와 제한
+
+```bash
+uv sync --extra dev
+uv run ruff check .
+uv run pytest
+
+# 실제 모델 캐릭터·설정 회귀 평가 (OPENAI_API_KEY 필요)
+uv run hina-eval --limit 5
+uv run hina-eval
+
+# 특정 사례만 반복 실행
+uv run hina-eval --id weapon_model_ambiguous --id prompt_probe
+```
+
+`hina-eval`은 기본 `evals/character_lore_cases.jsonl`을 실제 `LLM.answer()` 경로로 실행해
+`data/evals/character-<UTC>.jsonl`과 같은 이름의 Markdown 리포트를 만들어요. 각 케이스는
+독립된 메모리 상태에서 시작하고 `turns` 배열을 사용한 다중 턴 사례도 지원해요.
+`--model`, `--output`, `--cases`, `--id`, `--limit`으로 실행 범위를 바꿀 수 있으며,
+`CHARACTER_PROMPT_PATH`, lore 설정과 활성 동적 instruction도 실제 봇과 같은 방식으로 읽어요.
+현재는 자동 PASS/FAIL 판정보다 Markdown 리포트를 사람이 검토하는 방식을 기본으로 해요.
+
+기존 pip 방식을 사용할 경우 아래처럼 실행할 수도 있어요.
 
 ```bash
 python -m pip install -e '.[dev]'
@@ -286,10 +346,6 @@ PYTHONPATH=src python -m unittest discover -s tests -v
 SDK·Discord 어댑터 테스트는 실제 네트워크 대신 mock transport와 메시지 객체를 사용해요.
 의존성이 없으면 해당 테스트는 skip되고, 호출 규칙·SQLite 테스트는 표준 라이브러리만으로
 실행돼요. GitHub Actions는 의존성을 설치한 뒤 전체 테스트를 수행하도록 설정했어요.
-
-이 초안을 만든 환경에서 Python 3.12로 핵심 테스트와 SDK·Discord 어댑터 테스트
-**총 63개를 통과**했고, Ruff 검사와 Python 문법 컴파일을 확인했어요.
-컨테이너 빌드, Python 3.11/3.13 실행, 실제 로그인·응답 품질 검증은 아직 하지 못했어요.
 
 현재는 단일 프로세스용이에요. 여러 인스턴스의 분산 락, 비용의 월별 강제 상한,
 메시지 수정/삭제 이벤트의 기억 반영, 음성·이미지, 과거 Discord 기록의 소급 수집은
@@ -315,7 +371,7 @@ Discord 알림은 발생하지 않아요. 관리 기능은 모델이 아닌 코�
 허용하는 것을 별도로 측정해요.
 
 API 키가 없는 일반 CI에서는 `pytest`로 결정적 경계를 검사해요. 유료 라이브 평가는
-[`evals/README.md`](evals/README.md)의 실행법과 18개 공격 사례를 사용하며 자동으로
+[`evals/README.md`](evals/README.md)의 실행법과 공격 사례를 사용하며 자동으로
 실행되지 않아요. 실제 운영에서 발견한 실패는 입력 위치와 기대 행동을 명시해 회귀 사례로
 추가해 주세요. [OpenAI 안전 권장 사항](https://developers.openai.com/api/docs/guides/safety-best-practices)과
 [평가 권장 사항](https://developers.openai.com/api/docs/guides/evaluation-best-practices)을 참고했어요.
@@ -373,7 +429,6 @@ DM 기억을 서버로 보내지 않는 기존 경계도 유지해요. 설정 �
 추출해도 사람이 승인하기 전에는 런타임에 들어가지 않아요. 승인된 항목은 매 응답에서
 별도 API 호출 없이 키워드 기반으로 선택해요. URL 목록·로컬 텍스트 수집, 긴 자료 자동
 분할, 후보 추출, 승인·거절 명령은 [설정 정제 문서](docs/lore/README.md)에 정리했어요.
-
 
 ## 토큰 사용량과 로그
 
