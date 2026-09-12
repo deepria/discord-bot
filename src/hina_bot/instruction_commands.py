@@ -3,9 +3,18 @@ import logging
 import discord
 from discord import app_commands
 
+from .admin_list import created_label, fit_list, sort_rows
 from .instructions import InstructionRegistry
 
 log = logging.getLogger("hina")
+
+_SORT_CHOICES = [
+    app_commands.Choice(name="추가 시간순", value="time"),
+    app_commands.Choice(name="최신 추가순", value="recent"),
+    app_commands.Choice(name="ID순", value="id"),
+    app_commands.Choice(name="상태순 (ON 먼저)", value="state"),
+]
+_SORT_LABELS = {choice.value: choice.name for choice in _SORT_CHOICES}
 
 
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
@@ -45,20 +54,47 @@ class InstructionCommands(app_commands.Group):
         await interaction.response.send_message(
             f"instruction `{identifier}`를 추가하고 활성화했어요.", ephemeral=True)
 
-    @app_commands.command(name="list", description="저장된 동적 instruction 목록 확인")
-    async def list_items(self, interaction: discord.Interaction):
+    @app_commands.command(name="list", description="instruction 검색·정렬 및 전체 목록 확인")
+    @app_commands.describe(
+        search="ID나 본문에서 찾을 검색어. 비워 두면 전체 표시",
+        sort="목록 정렬 방식. 기본은 추가 시간순",
+    )
+    @app_commands.choices(sort=_SORT_CHOICES)
+    async def list_items(
+        self,
+        interaction: discord.Interaction,
+        search: str | None = None,
+        sort: str = "time",
+    ):
         rows = self.registry.list()
+        total = len(rows)
+        query = (search or "").strip().casefold()
+        if query:
+            rows = [row for row in rows if query in str(row.get("id", "")).casefold()
+                    or query in str(row.get("text", "")).casefold()]
         if not rows:
-            await interaction.response.send_message("등록된 동적 instruction이 없어요.", ephemeral=True)
+            text = (f"`{discord.utils.escape_markdown(search.strip())}` 검색 결과가 없어요."
+                    if search and search.strip() else "등록된 동적 instruction이 없어요.")
+            await interaction.response.send_message(text, ephemeral=True)
             return
-        lines = [f"동적 instruction {len(rows)}/50"]
+
+        rows = sort_rows(rows, sort, lambda row: row)
+        if query:
+            header = (f"동적 instruction 검색 결과 {len(rows)}/{total} · "
+                      f"{_SORT_LABELS.get(sort, '추가 시간순')}")
+        else:
+            header = f"동적 instruction {len(rows)}/50 · {_SORT_LABELS.get(sort, '추가 시간순')}"
+
+        entries = []
         for row in rows:
             state = "ON" if row.get("enabled", True) else "OFF"
-            text = discord.utils.escape_markdown(row.get("text", ""))
-            if len(text) > 180:
-                text = text[:177] + "..."
-            lines.append(f"`{row.get('id', '?')}` [{state}] — {text}")
-        await interaction.response.send_message("\n".join(lines), ephemeral=True)
+            text = discord.utils.escape_markdown(str(row.get("text", "")).replace("\n", " "))
+            if len(text) > 120:
+                text = text[:117] + "..."
+            entries.append(
+                f"`{row.get('id', '?')}` [{state}] · {created_label(row)} — {text}"
+            )
+        await interaction.response.send_message(fit_list(header, entries), ephemeral=True)
 
     @app_commands.command(name="edit", description="기존 instruction 본문 수정")
     @app_commands.describe(identifier="수정할 ID", text="새 보조 지침")
