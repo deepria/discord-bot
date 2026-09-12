@@ -52,3 +52,6 @@ class RecentMessages:
 
     def clear_channel(self, scope):
         self.buffers.pop((scope.realm, scope.channel_id), None)
+
+    def clear_all(self):
+        self.buffers.clear()
