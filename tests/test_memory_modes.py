@@ -57,7 +57,7 @@ class ModeCommandTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(group.allowed_installs.guild)
         self.assertTrue(group.allowed_installs.user)
 
-    async def test_switch_waits_for_inflight_turn_and_clears_only_this_channel(self):
+    async def test_switch_waits_for_inflight_turn_and_preserves_recent_context(self):
         store, recent, lock = Store(":memory:"), RecentMessages(), asyncio.Lock()
         scope, other = Scope(1, 10, 100), Scope(1, 20, 100)
         recent.add(scope, 1, "A", "current")
@@ -74,7 +74,7 @@ class ModeCommandTests(unittest.IsolatedAsyncioTestCase):
         lock.release()
         await task
         self.assertEqual(store.memory_mode(scope), "off")
-        self.assertEqual(recent.context(scope, 3), [])
+        self.assertEqual(len(recent.context(scope, 3)), 1)
         self.assertEqual(len(recent.context(other, 3)), 1)
         self.assertTrue(interaction.followup.send.call_args.kwargs["ephemeral"])
         store.close()
