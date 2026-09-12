@@ -68,7 +68,7 @@ def validate_record(record: dict, *, accepted: bool = False) -> dict:
         raise LoreValidationError(f"{record['id']}: meme release status must be not_applicable")
     if accepted and (record["status"] != "accepted" or record["confidence"] == "candidate"):
         raise LoreValidationError(f"{record['id']}: runtime records must be reviewed and accepted")
-    if accepted and fact_type(record) in REFERENCE_ONLY_FACT_TYPES:
+    if accepted and record["lane"] == "canon" and fact_type(record) in REFERENCE_ONLY_FACT_TYPES:
         raise LoreValidationError(f"{record['id']}: adaptation/fandom rows are reference-only")
     if not isinstance(record["summary"], str) or not 1 <= len(record["summary"].strip()) <= 600:
         raise LoreValidationError(f"{record['id']}: summary must be 1~600 chars")
