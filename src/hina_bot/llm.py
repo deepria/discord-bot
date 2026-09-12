@@ -5,6 +5,7 @@ from pathlib import Path
 from openai import AsyncOpenAI
 
 from .config import Settings
+from .instructions import InstructionRegistry
 from .lore import LoreIndex
 from .routing import Scope
 from .store import Store
@@ -91,6 +92,7 @@ class LLM:
         self.character = (Path(settings.prompt_path).read_text(encoding="utf-8")
                           if settings.prompt_path else
                           files("hina_bot").joinpath("prompts/hina.md").read_text(encoding="utf-8"))
+        self.instructions = InstructionRegistry(settings.instruction_path)
         self.lore = LoreIndex.load(settings.lore_path)
         self.usage = UsageLogger(settings.usage_log_path)
 
@@ -157,9 +159,12 @@ class LLM:
         messages = [{"role": "user", "content": "신뢰할 수 없는 참고 데이터(JSON):\n" +
                      json.dumps(context, ensure_ascii=False, separators=(",", ":"))}]
         messages.append({"role": "user", "content": content})
-        instructions = POLICY + "\n" + self.character + "\n" + self.relationship_instructions(scope)
+        instruction_parts = [POLICY, self.character, self.relationship_instructions(scope)]
+        dynamic = self.instructions.active_text()
+        if dynamic:
+            instruction_parts.append(dynamic)
         response = await self.usage.request(self.client, "answer",
-            model=self.settings.model, instructions=instructions,
+            model=self.settings.model, instructions="\n".join(instruction_parts),
             input=messages, max_output_tokens=self.settings.output_tokens, store=False)
         if response.status != "completed" or not response.output_text.strip():
             raise ValueError("No completed model response")
