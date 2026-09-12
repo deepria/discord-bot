@@ -56,6 +56,19 @@ class RuntimeKnowledgeRegistryTests(unittest.TestCase):
 
 
 class KnowledgeIngestorTests(unittest.IsolatedAsyncioTestCase):
+    @staticmethod
+    def fake_llm(facts, contexts, payload, records=None):
+        request = AsyncMock(return_value=NS(
+            status="completed", output_text=json.dumps(payload, ensure_ascii=False)))
+        return NS(
+            runtime_lore=facts,
+            story_context=contexts,
+            lore=NS(records=records or []),
+            usage=NS(request=request),
+            client=object(),
+            settings=NS(model="test-model"),
+        )
+
     async def test_ingest_splits_fact_interpretation_and_hold(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -71,7 +84,9 @@ class KnowledgeIngestorTests(unittest.IsolatedAsyncioTestCase):
                         "subjects": ["히나", "호시노"],
                         "awareness": "self",
                         "timeline": "에덴조약 사태 이후",
-                        "decision": "apply",
+                        "action": "add",
+                        "target_id": "",
+                        "supersedes": [],
                         "reason": "입력에 명시된 대사 사실",
                     },
                     {
@@ -82,7 +97,9 @@ class KnowledgeIngestorTests(unittest.IsolatedAsyncioTestCase):
                         "subjects": ["히나", "호시노", "유메"],
                         "awareness": "inference",
                         "timeline": "에덴조약 사태 이후",
-                        "decision": "apply",
+                        "action": "add",
+                        "target_id": "",
+                        "supersedes": [],
                         "reason": "입력 자체가 추측으로 제시한 동기 해석",
                     },
                     {
@@ -93,23 +110,19 @@ class KnowledgeIngestorTests(unittest.IsolatedAsyncioTestCase):
                         "subjects": ["히나"],
                         "awareness": "unknown",
                         "timeline": "시점 미지정",
-                        "decision": "hold",
+                        "action": "hold",
+                        "target_id": "",
+                        "supersedes": [],
                         "reason": "입력 내부에서 충돌함",
                     },
                 ]
             }
-            llm = NS(
-                runtime_lore=facts,
-                story_context=contexts,
-                lore=NS(records=[]),
-                usage=NS(request=AsyncMock(return_value=NS(
-                    status="completed", output_text=json.dumps(payload, ensure_ascii=False)))),
-                client=object(),
-                settings=NS(model="test-model"),
-            )
-            result = await KnowledgeIngestor(llm).ingest("에덴조약과 호시노에 대한 조사 메모")
+            result = await KnowledgeIngestor(
+                self.fake_llm(facts, contexts, payload)).ingest(
+                    "에덴조약과 호시노에 대한 조사 메모")
 
-            self.assertEqual(len(result["applied"]), 2)
+            self.assertEqual(len(result["added"]), 2)
+            self.assertEqual(len(result["updated"]), 0)
             self.assertEqual(len(result["held"]), 1)
             self.assertEqual(len(facts.list()), 1)
             self.assertEqual(len(contexts.list()), 1)
@@ -119,6 +132,7 @@ class KnowledgeIngestorTests(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             facts = RuntimeKnowledgeRegistry(str(root / "facts.json"), kind="world_fact")
+            contexts = RuntimeKnowledgeRegistry(str(root / "contexts.json"), kind="interpretation")
             facts.add(
                 "existing.quote", "히나는 에덴조약 이후 선생과 대화하며 호시노처럼 될 수 없다고 말했다.",
                 "호시노처럼,에덴조약", "히나,호시노,선생", "self", "에덴조약 이후")
@@ -130,23 +144,95 @@ class KnowledgeIngestorTests(unittest.IsolatedAsyncioTestCase):
                 "subjects": ["히나", "호시노", "선생"],
                 "awareness": "self",
                 "timeline": "에덴조약 이후",
-                "decision": "apply",
+                "action": "add",
+                "target_id": "",
+                "supersedes": [],
                 "reason": "명시된 대사",
             }]}
-            llm = NS(
-                runtime_lore=facts,
-                story_context=RuntimeKnowledgeRegistry(
-                    str(root / "contexts.json"), kind="interpretation"),
-                lore=NS(records=[]),
-                usage=NS(request=AsyncMock(return_value=NS(
-                    status="completed", output_text=json.dumps(payload, ensure_ascii=False)))),
-                client=object(),
-                settings=NS(model="test-model"),
-            )
-            result = await KnowledgeIngestor(llm).ingest("중복 조사 메모")
-            self.assertEqual(result["applied"], [])
-            self.assertEqual(result["skipped"][0]["duplicate_of"], "existing.quote")
+            result = await KnowledgeIngestor(
+                self.fake_llm(facts, contexts, payload)).ingest("에덴조약 호시노처럼 대사 정리")
+            self.assertEqual(result["added"], [])
+            self.assertEqual(result["skipped"][0]["existing_id"], "existing.quote")
             self.assertEqual(len(facts.list()), 1)
+
+    async def test_ingest_reconciles_correction_and_supersedes_old_entries(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            facts = RuntimeKnowledgeRegistry(str(root / "facts.json"), kind="world_fact")
+            contexts = RuntimeKnowledgeRegistry(str(root / "contexts.json"), kind="interpretation")
+            facts.add(
+                "ingame_no_exact_model_name",
+                "히나가 쓰는 총의 정확한 총기 모델명은 인게임에서 나온 적이 없다.",
+                "총기 모델명,MG42,인게임", "히나,기관총", "public_knowledge", "상시")
+            contexts.add(
+                "hina_mg42_guess",
+                "히나가 사용하는 총은 MG42로 추측된다.",
+                "MG42,기관총,총", "히나,기관총", "inference", "상시")
+            contexts.add(
+                "appearance_and_usage_basis",
+                "외형과 사용법을 보면 MG42로 추측할 수 있다.",
+                "외형,사용법,MG42", "히나,기관총", "inference", "상시")
+
+            payload = {"items": [
+                {
+                    "id": "hina.weapon-name",
+                    "kind": "world_fact",
+                    "content": "히나가 사용하는 기관총의 게임 내 이름은 '종막의 디스트로이어'다.",
+                    "keywords": ["종막의 디스트로이어", "기관총", "무기 이름"],
+                    "subjects": ["히나", "기관총"],
+                    "awareness": "self",
+                    "timeline": "상시",
+                    "action": "add",
+                    "target_id": "",
+                    "supersedes": [],
+                    "reason": "기존 항목에 없던 게임 내 무기명 사실",
+                },
+                {
+                    "id": "real-gun-model-not-explicit",
+                    "kind": "world_fact",
+                    "content": "히나의 기관총이 현실의 어떤 총기 모델에 대응되는지는 게임에서 명시되지 않았다.",
+                    "keywords": ["현실 총기", "MG42", "모델", "명시"],
+                    "subjects": ["히나", "기관총"],
+                    "awareness": "public_knowledge",
+                    "timeline": "상시",
+                    "action": "update",
+                    "target_id": "ingame_no_exact_model_name",
+                    "supersedes": [],
+                    "reason": "기존 문구의 '총기 모델명'을 현실 대응 모델 미명시로 정확히 정정",
+                },
+                {
+                    "id": "hina_mg42_guess",
+                    "kind": "interpretation",
+                    "content": "히나의 기관총은 외형과 운용 방식 때문에 현실의 MG42를 모티브로 한 것으로 추측된다.",
+                    "keywords": ["MG42", "모티브", "외형", "운용 방식"],
+                    "subjects": ["히나", "기관총", "MG42"],
+                    "awareness": "inference",
+                    "timeline": "상시",
+                    "action": "update",
+                    "target_id": "hina_mg42_guess",
+                    "supersedes": ["appearance_and_usage_basis"],
+                    "reason": "기존 두 해석을 하나의 더 정확한 해석으로 통합",
+                },
+            ]}
+            llm = self.fake_llm(facts, contexts, payload)
+            result = await KnowledgeIngestor(llm).ingest(
+                "히나가 사용하는 기관총의 이름은 게임 기준으로 종막의 디스트로이어이며, "
+                "현실의 MG42가 모티브로 추측된다. 현실 대응 총기 모델은 명시되지 않았다.")
+
+            self.assertEqual(len(result["added"]), 1)
+            self.assertEqual(len(result["updated"]), 2)
+            self.assertEqual(result["removed"], [{
+                "id": "appearance_and_usage_basis", "superseded_by": "hina_mg42_guess"}])
+            self.assertIn("현실의 어떤 총기", facts.get("ingame_no_exact_model_name")["content"])
+            self.assertIn("종막의 디스트로이어", facts.get("hina.weapon-name")["content"])
+            self.assertIn("외형과 운용 방식", contexts.get("hina_mg42_guess")["content"])
+            with self.assertRaises(ValueError):
+                contexts.get("appearance_and_usage_basis")
+
+            request_input = json.loads(llm.usage.request.await_args.kwargs["input"])
+            candidate_ids = {row["id"] for row in request_input["existing_dynamic"]}
+            self.assertEqual(candidate_ids, {
+                "ingame_no_exact_model_name", "hina_mg42_guess", "appearance_and_usage_basis"})
 
 
 class KnowledgeCommandTests(unittest.IsolatedAsyncioTestCase):
