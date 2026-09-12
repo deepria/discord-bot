@@ -79,7 +79,7 @@ class RuntimeKnowledgeRegistry:
                            or len(value) > MAX_VALUE_CHARS for value in values)):
                 raise ValueError(f"runtime knowledge의 {key} 형식이 잘못되었습니다.")
         if not isinstance(row["enabled"], bool):
-            raise ValueError("runtime knowledge의 enabled 값이 잘못되었습니다.")
+            raise TypeError("runtime knowledge의 enabled 값이 잘못되었습니다.")
         return row
 
     def _read(self) -> list[dict]:
@@ -90,7 +90,7 @@ class RuntimeKnowledgeRegistry:
         except json.JSONDecodeError as exc:
             raise ValueError(f"runtime knowledge JSON을 읽을 수 없습니다: {exc}") from exc
         if not isinstance(data, list):
-            raise ValueError("runtime knowledge 파일은 JSON 배열이어야 합니다.")
+            raise TypeError("runtime knowledge 파일은 JSON 배열이어야 합니다.")
         rows = [self._validate_row(row) for row in data]
         ids = [row["id"] for row in rows]
         if len(ids) != len(set(ids)):
