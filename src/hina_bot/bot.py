@@ -3,6 +3,7 @@ import logging
 import time
 import weakref
 from contextlib import nullcontext
+from datetime import timedelta
 
 import discord
 
@@ -28,6 +29,7 @@ HELP = """호출: @봇 멘션, 핑을 켠 답장, 또는 메시지 맨 앞의 `�
 공개 서버에서 같은 사용자가 나눈 대화는 DM에서 참고할 수 있어요. DM 기억은 서버로 넘어가지 않아요.
 같은 채널의 일반 대화는 최근 문맥으로 잠시 보관할 수 있고, 호출 시 OpenAI에 함께 보내요.
 장기 기억과 최근 채널 로그 읽기는 서로 독립적으로 켜고 끌 수 있어요.
+최근 로그 읽기를 다시 켠 뒤 첫 호출에서는 현재 TTL 안의 Discord 최근 기록만 다시 채워요.
 공개 채널에서 직접 호출한 발화만 같은 서버의 다른 사용자·채널에서 장기 기억으로 참고해요.
 `/이모지 등록·목록·수정·삭제` — 봇 관리자 전용 (이미지 등록은 파일 첨부 가능)
 일반 대화에서는 첨부파일·이미지·답장 원문을 읽지 못해요.
@@ -96,6 +98,55 @@ class HinaClient(discord.Client):
     async def send_text(self, channel, text):
         for part in chunks(neutralize_mentions(text)):
             await channel.send(part, allowed_mentions=discord.AllowedMentions.none())
+
+    @staticmethod
+    def _management_text(text):
+        return text is not None and text.startswith((
+            "/이모지", "/도움말", "/기억", "/메모", "/서버기억", "/서버메모"))
+
+    async def hydrate_recent_history(self, message, scope):
+        """Backfill only the bounded recent window after restart or chat-log re-enable."""
+        if scope.guild_id is None or not self.recent.needs_hydration(scope):
+            return
+        created_at = getattr(message, "created_at", None)
+        history = getattr(message.channel, "history", None)
+        if created_at is None or history is None:
+            # Unit-test/minimal adapters may not expose Discord history. Avoid retry loops there.
+            self.recent.mark_hydrated(scope)
+            return
+
+        after = created_at - timedelta(seconds=self.recent.ttl)
+        try:
+            async for old in history(
+                limit=self.recent.limit,
+                before=message,
+                after=after,
+                oldest_first=False,
+            ):
+                if old.webhook_id is not None:
+                    continue
+                own_bot = self.user is not None and old.author.id == self.user.id
+                if old.author.bot and not own_bot:
+                    continue
+                historical_text = trigger_text(
+                    old, self.user.id, self.settings.dm_always_reply, self.settings.call_prefixes)
+                if self._management_text(historical_text) or not old.content:
+                    continue
+                historical_scope = Scope(
+                    scope.guild_id, scope.channel_id, old.author.id, scope.public_at_capture)
+                self.recent.add(
+                    historical_scope,
+                    old.id,
+                    old.author.display_name,
+                    old.content,
+                    role="assistant" if own_bot else "user",
+                    unix_time=old.created_at.timestamp(),
+                )
+        except discord.HTTPException as exc:
+            # Do not log message contents or channel data. Retry naturally on a later call.
+            log.warning("Recent channel history backfill failed (%s)", type(exc).__name__)
+            return
+        self.recent.mark_hydrated(scope)
 
     async def command(self, message, scope, text):
         cmd, _, arg = text.partition(" ")
@@ -200,9 +251,7 @@ class HinaClient(discord.Client):
             return
         received_mode = MemoryMode(self.store.memory_mode(scope))
         received_chat_log = self.store.chat_log_enabled(scope)
-        # Management commands must not enter the shared channel buffer.
-        management = text is not None and text.startswith((
-            "/이모지", "/도움말", "/기억", "/메모", "/서버기억", "/서버메모"))
+        management = self._management_text(text)
         # Recent chat context is independent from persistent memory and has its own switch.
         if guild_id is not None and received_chat_log and not management:
             self.recent.add(scope, message.id, message.author.display_name, message.content)
@@ -242,6 +291,8 @@ class HinaClient(discord.Client):
                 if not text:
                     await self.send_text(message.channel, "응, 선생님. 무슨 일이야?")
                     return
+                if guild_id is not None and use_chat_log:
+                    await self.hydrate_recent_history(message, scope)
                 usage = getattr(self.llm, "usage", None)
                 exchange = (usage.exchange("guild" if guild_id is not None else "dm")
                             if usage is not None and hasattr(usage, "exchange") else nullcontext())
