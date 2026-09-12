@@ -129,6 +129,74 @@ class LorePipelineTests(unittest.TestCase):
                 self.assertEqual(accepted["kr_release"], "confirmed")
                 validate_record(accepted, accepted=True)
 
+    def test_edit_candidate_updates_review_fields_before_approval(self):
+        candidate = record(
+            "canon.hina.test-edit",
+            summary="수정 전 요약",
+            keywords=["수정 전"],
+            subjects=["히나"],
+            knowledge="public_knowledge",
+            confidence="candidate",
+            status="candidate",
+            kr_release="pending",
+            timeline="수정 전 시점",
+            source_id="source-001",
+            evidence="근거",
+            uncertainty="",
+            kr_release_evidence="한국 서버 확인 필요",
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            queue_path, runtime_path = base / "queue.jsonl", base / "runtime.jsonl"
+            lore_pipeline.write_jsonl(queue_path, [candidate])
+            with (patch.object(lore_pipeline, "QUEUE_PATH", queue_path),
+                  patch.object(lore_pipeline, "RUNTIME_PATH", runtime_path)):
+                lore_pipeline.edit_candidate(NS(
+                    id=candidate["id"],
+                    summary="히나는 자신의 수영 실력을 알고 있다.",
+                    knowledge="self",
+                    timeline="수영복 이벤트 이전부터의 자기 정보",
+                    keyword=["수영", "수영 실력"],
+                    subject=["히나"],
+                ))
+                edited = lore_pipeline.read_jsonl(queue_path)[0]
+                self.assertEqual(edited["summary"], "히나는 자신의 수영 실력을 알고 있다.")
+                self.assertEqual(edited["knowledge"], "self")
+                self.assertEqual(edited["keywords"], ["수영", "수영 실력"])
+                self.assertEqual(edited["subjects"], ["히나"])
+                lore_pipeline.decide(NS(id=candidate["id"], confidence="crosschecked",
+                                        confirm_kr_release=True), "accepted")
+                accepted = lore_pipeline.read_jsonl(runtime_path)[0]
+                self.assertEqual(accepted["summary"], edited["summary"])
+                self.assertEqual(accepted["knowledge"], "self")
+
+    def test_edit_rejects_non_candidate_and_empty_changes(self):
+        accepted = record("canon.accepted")
+        candidate = record(
+            "canon.candidate",
+            confidence="candidate",
+            status="candidate",
+            kr_release="pending",
+            source_id="source-002",
+            evidence="근거",
+            uncertainty="",
+            kr_release_evidence="",
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            queue_path = Path(directory) / "queue.jsonl"
+            lore_pipeline.write_jsonl(queue_path, [accepted, candidate])
+            with patch.object(lore_pipeline, "QUEUE_PATH", queue_path):
+                with self.assertRaises(SystemExit):
+                    lore_pipeline.edit_candidate(NS(
+                        id=accepted["id"], summary="변경", knowledge=None,
+                        timeline=None, keyword=None, subject=None,
+                    ))
+                with self.assertRaises(SystemExit):
+                    lore_pipeline.edit_candidate(NS(
+                        id=candidate["id"], summary=None, knowledge=None,
+                        timeline=None, keyword=None, subject=None,
+                    ))
+
 
 if __name__ == "__main__":
     unittest.main()
