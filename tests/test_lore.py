@@ -59,7 +59,7 @@ class LoreValidationTests(unittest.TestCase):
         self.assertTrue(all(len(row["text"]) <= 24_000 for row in rows))
 
     def test_curated_fact_labels_are_split_before_extraction(self):
-        text = """# header\n\n[FACT_DIRECT]\nid: hina.fact\nstatement: 직접 사실\n\n"
+        text = "# header\n\n[FACT_DIRECT]\nid: hina.fact\nstatement: 직접 사실\n\n"
         text += "[INFERENCE]\nid: hina.guess\nstatement: 해석\n\n"
         text += "[UNKNOWN]\nid: hina.unknown\nstatement: 미확인\n"
         rows = _typed_source_rows(
