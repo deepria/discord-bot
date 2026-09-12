@@ -93,9 +93,8 @@ async def test_discord_exchange_records_failed_api_call_without_content(tmp_path
     logger = UsageLogger(str(path))
     client = NS(responses=NS(create=AsyncMock(side_effect=RuntimeError('secret failure'))))
 
-    with pytest.raises(RuntimeError):
-        with logger.exchange('dm'):
-            await logger.request(client, 'answer', model='test', input='secret')
+    with pytest.raises(RuntimeError), logger.exchange('dm'):
+        await logger.request(client, 'answer', model='test', input='secret')
     logger.close()
 
     row = json.loads((tmp_path / 'discord-usage.jsonl').read_text())
