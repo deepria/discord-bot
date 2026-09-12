@@ -16,7 +16,7 @@ class InstructionRegistry:
             return []
         data = json.loads(self.path.read_text(encoding="utf-8"))
         if not isinstance(data, list):
-            raise ValueError("instruction 파일 형식이 잘못되었습니다.")
+            raise TypeError("instruction 파일 형식이 잘못되었습니다.")
         return data
 
     def _write(self, rows: list[dict]) -> None:
