@@ -127,8 +127,8 @@ class MemoryCommands(app_commands.Group):
         lines.append(f"채널: `{'상속 → ' + parent if channel is None else channel}`")
         mode = MemoryMode(str(chain["effective"]))
         lines.extend([
-            f"장기 기억 읽기: {'켜짐' if mode.reads else '꺼짐'} / "
-            f"새 장기 기억 저장: {'켜짐' if mode.writes else '꺼짐'}",
+            (f"장기 기억 읽기: {'켜짐' if mode.reads else '꺼짐'} / "
+             f"새 장기 기억 저장: {'켜짐' if mode.writes else '꺼짐'}"),
             "최근 채널 대화 문맥은 이 계층 설정과 별개로 계속 사용해요.",
         ])
         return "\n".join(lines)
