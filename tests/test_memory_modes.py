@@ -42,6 +42,8 @@ class ModeTests(unittest.TestCase):
 class ModeCommandTests(unittest.IsolatedAsyncioTestCase):
     async def test_access_control(self):
         group = MemoryCommands(NS(emoji_admin_ids={100}))
+        self.assertTrue(group.guild_only)
+        self.assertTrue(group.default_permissions.administrator)
         interaction = NS(user=NS(id=200), response=NS(send_message=AsyncMock()))
         self.assertFalse(await group.interaction_check(interaction))
         interaction.user.id = 100
