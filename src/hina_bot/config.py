@@ -24,7 +24,7 @@ class Settings:
     memory_model: str = "gpt-4.1-mini"
     db_path: str = "data/hina.sqlite3"
     prompt_path: str = ""
-    instruction_path: str = "data/instructions.json"
+    instruction_path: str = ""
     call_prefixes: tuple[str, ...] = ("히나야",)
     dm_always_reply: bool = False
     public_memory_in_dm: bool = True
