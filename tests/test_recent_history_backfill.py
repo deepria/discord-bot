@@ -1,14 +1,11 @@
 import time
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
+from importlib.util import find_spec
 from types import SimpleNamespace as NS
 from unittest.mock import AsyncMock
 
-try:
-    import discord
-    AVAILABLE = True
-except ModuleNotFoundError:
-    AVAILABLE = False
+AVAILABLE = find_spec("discord") is not None
 
 from hina_bot.recent import RecentMessages
 from hina_bot.routing import Scope
@@ -80,7 +77,7 @@ class HistoryBackfillTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_backfill_recovers_recent_off_period_without_old_or_management_messages(self):
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         messages = [
             self.old_message(1, "너무 오래된 대화", now - timedelta(minutes=20)),
             self.old_message(2, "최근 일반 대화", now - timedelta(minutes=5)),
