@@ -114,7 +114,7 @@ class SDKTests(unittest.IsolatedAsyncioTestCase):
         await self.llm.summarize(self.store, source)
         self.assertNotIn("passive", self.calls[-1]["input"])
 
-    async def test_disabled_reads_remove_every_memory_source_from_payload(self):
+    async def test_disabled_long_term_reads_keep_explicit_recent_context(self):
         scope = Scope(None, 20, 100)
         self.store.add(scope, 1, "secret-history", "secret-reply")
         self.store.save_summary(scope, "secret-summary", 1)
@@ -122,9 +122,10 @@ class SDKTests(unittest.IsolatedAsyncioTestCase):
         await self.llm.answer(self.store, scope, "A", "current-only", use_memory=False,
                               public_context=[{"source": "guild:1:channel:10:user:100",
                                                "summary": "secret-public"}],
-                              channel_context=[{"content": "secret-channel"}])
+                              channel_context=[{"content": "recent-channel"}])
         payload = str(self.calls[-1]["input"])
         self.assertNotIn("secret", payload)
+        self.assertIn("recent-channel", payload)
         self.assertIn("current-only", payload)
 
     async def test_untrusted_history_never_becomes_assistant_role_or_instructions(self):
@@ -305,7 +306,7 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([s.user_id for s in await self.bot.public_sources(100, 1)], [200])
         self.assertEqual(await self.bot.public_sources(100), [])
 
-    async def test_memory_off_skips_reads_writes_and_summaries(self):
+    async def test_memory_off_skips_persistent_memory_but_keeps_recent_context(self):
         scope = Scope(1, 10, 100)
         self.store.set_memory_mode(scope, "off")
         self.bot.public_sources = AsyncMock()
@@ -313,10 +314,12 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
         await self.bot.on_message(self.message("히나야 current", id=2))
         self.bot.public_sources.assert_not_awaited()
         self.assertFalse(self.llm.answer.call_args.kwargs["use_memory"])
-        self.assertEqual(self.llm.answer.call_args.kwargs["channel_context"], [])
+        context = self.llm.answer.call_args.kwargs["channel_context"]
+        self.assertEqual([row["content"] for row in context], ["ordinary"])
         self.assertEqual(self.store.history(scope), [])
         self.assertEqual(self.store.pending_shared(scope), [])
-        self.assertEqual(self.bot.recent.context(scope, 9999), [])
+        recent = self.bot.recent.context(scope, 9999)
+        self.assertTrue(any(row["content"] == "ordinary" for row in recent))
         self.llm.summarize.assert_not_awaited()
         self.llm.summarize_shared.assert_not_awaited()
 
