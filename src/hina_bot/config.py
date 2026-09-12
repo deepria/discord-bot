@@ -24,6 +24,7 @@ class Settings:
     memory_model: str = "gpt-4.1-mini"
     db_path: str = "data/hina.sqlite3"
     prompt_path: str = ""
+    instruction_path: str = "data/instructions.json"
     call_prefixes: tuple[str, ...] = ("히나야",)
     dm_always_reply: bool = False
     public_memory_in_dm: bool = True
@@ -69,6 +70,7 @@ class Settings:
             memory_model=os.getenv("MEMORY_MODEL", os.getenv("OPENAI_MODEL", "gpt-4.1-mini")),
             db_path=os.getenv("DATABASE_PATH", "data/hina.sqlite3"),
             prompt_path=os.getenv("CHARACTER_PROMPT_PATH", ""),
+            instruction_path=os.getenv("INSTRUCTION_PATH", "data/instructions.json"),
             call_prefixes=parse_call_prefixes(os.getenv("CALL_PREFIXES", "히나야")),
             dm_always_reply=dm == "true",
             public_memory_in_dm=public_memory == "true",
