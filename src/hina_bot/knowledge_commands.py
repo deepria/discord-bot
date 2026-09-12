@@ -77,8 +77,10 @@ class KnowledgeCommands(app_commands.Group):
         held = result["held"]
         skipped = result["skipped"]
         lines = [
-            f"knowledge 반영 완료: 추가 {len(added)}개 / 갱신 {len(updated)}개 / "
-            f"대체 삭제 {len(removed)}개",
+            (
+                f"knowledge 반영 완료: 추가 {len(added)}개 / 갱신 {len(updated)}개 / "
+                f"대체 삭제 {len(removed)}개"
+            ),
             f"기존 내용 유지·중복: {len(skipped)}개 / 애매해서 보류: {len(held)}개",
         ]
         changed = added + updated
