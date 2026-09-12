@@ -3,7 +3,7 @@ import logging
 import discord
 from discord import app_commands
 
-from .admin_list import created_label, fit_list, sort_rows
+from .admin_list import created_compact, fit_table, sort_rows
 from .instructions import InstructionRegistry
 
 log = logging.getLogger("hina")
@@ -85,16 +85,22 @@ class InstructionCommands(app_commands.Group):
         else:
             header = f"동적 instruction {len(rows)}/50 · {_SORT_LABELS.get(sort, '추가 시간순')}"
 
-        entries = []
+        table_rows = []
         for row in rows:
             state = "ON" if row.get("enabled", True) else "OFF"
-            text = discord.utils.escape_markdown(str(row.get("text", "")).replace("\n", " "))
-            if len(text) > 120:
-                text = text[:117] + "..."
-            entries.append(
-                f"`{row.get('id', '?')}` [{state}] · {created_label(row)} — {text}"
-            )
-        await interaction.response.send_message(fit_list(header, entries), ephemeral=True)
+            table_rows.append([
+                str(row.get("id", "?")),
+                state,
+                created_compact(row),
+                str(row.get("text", "")),
+            ])
+        text = fit_table(
+            header,
+            ["ID", "상태", "추가(UTC)", "내용"],
+            table_rows,
+            [26, 4, 12, 46],
+        )
+        await interaction.response.send_message(text, ephemeral=True)
 
     @app_commands.command(name="edit", description="기존 instruction 본문 수정")
     @app_commands.describe(identifier="수정할 ID", text="새 보조 지침")
