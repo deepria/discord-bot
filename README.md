@@ -21,17 +21,29 @@ GitHub 저장소: https://github.com/sendoru/hina-discord-bot
 
 ## 빠른 실행
 
+[`uv`](https://docs.astral.sh/uv/getting-started/installation/)를 설치한 뒤 프로젝트 루트에서
+개발 의존성을 포함한 가상 환경을 만들고 실행해 주세요.
+
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -e '.[dev]'
+uv sync --extra dev
 cp .env.example .env.local
 # 로컬 편집기에서 .env.local의 OPENAI_API_KEY와 DISCORD_TOKEN을 입력하세요.
 chmod 600 .env.local
-hina-bot
+uv run hina-bot
 ```
 
-프로젝트 루트에서 실행해 주세요. 운영체제 환경 변수가 `.env.local`, `.env`보다 우선해요.
+테스트와 린트도 같은 환경에서 실행할 수 있어요.
+
+```bash
+uv run pytest
+uv run ruff check .
+```
+
+`uv sync`가 생성하는 `.venv`는 별도로 활성화하지 않아도 `uv run`이 사용해요. 기존 pip
+방식을 사용하려면 `python3 -m venv .venv`, `source .venv/bin/activate`,
+`python -m pip install -e '.[dev]'` 순서로 설치한 뒤 `hina-bot`을 실행하면 돼요.
+
+운영체제 환경 변수가 `.env.local`, `.env`보다 우선해요.
 키는 소스에 넣지 않으며 `.env.local`, 데이터베이스, 대화 내용은 Git에서 제외해요.
 `.env.local`을 Docker 이미지에도 포함하지 않아요.
 
