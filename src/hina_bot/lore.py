@@ -120,15 +120,15 @@ class LoreIndex:
                 ranked.append((score, -order, record))
         result, used = [], 0
         for _, _, record in sorted(ranked, reverse=True):
-            item = {
-                "id": record["id"], "lane": record["lane"], "summary": record["summary"],
-                "knowledge": record["knowledge"], "confidence": record["confidence"],
-                "timeline": record["timeline"],
-                "canon_note": ("공식 설정 후보가 아니라 커뮤니티 밈 기반의 선택적 연출"
-                               if record["lane"] == "community_meme" else "한국 서버 채택 설정"),
-            }
             if record["lane"] == "community_meme":
-                item["reaction"] = record["reaction"]
+                # The model needs the reaction, not editorial provenance that it may say aloud.
+                item = {"kind": "optional_reaction", "content": record["reaction"]}
+            else:
+                item = {
+                    "reference": record["id"], "kind": "world_fact",
+                    "content": record["summary"], "awareness": record["knowledge"],
+                    "time": record["timeline"],
+                }
             size = len(json.dumps(item, ensure_ascii=False))
             if used + size > chars:
                 continue

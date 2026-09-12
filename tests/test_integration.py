@@ -155,9 +155,17 @@ class SDKTests(unittest.IsolatedAsyncioTestCase):
         payload = self.calls[-1]
         reference = json.loads(payload["input"][0]["content"].split("\n", 1)[1])
         lore = reference["lore_reference"]
-        self.assertEqual(lore[0]["id"], "organization.pandemonium.roles")
-        self.assertEqual(lore[0]["canon_note"], "한국 서버 채택 설정")
+        self.assertEqual(lore[0]["reference"], "organization.pandemonium.roles")
+        self.assertEqual(lore[0]["kind"], "world_fact")
         self.assertNotIn("organization.pandemonium.roles", payload["instructions"])
+
+    async def test_meme_reference_does_not_expose_editorial_labels(self):
+        await self.llm.answer(self.store, Scope(None, 20, 100), "사용자",
+                              "히나야 머리가 왜 이렇게 크니")
+        reference = json.loads(self.calls[-1]["input"][0]["content"].split("\n", 1)[1])
+        lore = json.dumps(reference["lore_reference"], ensure_ascii=False)
+        self.assertIn("optional_reaction", lore)
+        self.assertNotRegex(lore, "공식|커뮤니티|밈|meme")
 
 
 @unittest.skipUnless(AVAILABLE, "Install project dev dependencies to test SDK/Discord adapters")

@@ -63,14 +63,14 @@ class LoreSearchTests(unittest.TestCase):
 
     def test_selects_relevant_canon(self):
         result = self.index.search("마코토는 만마전에서 무슨 일을 해?")
-        self.assertEqual(result[0]["id"], "canon.test")
-        self.assertEqual(result[0]["canon_note"], "한국 서버 채택 설정")
+        self.assertEqual(result[0]["reference"], "canon.test")
+        self.assertEqual(result[0]["kind"], "world_fact")
 
     def test_community_lane_is_labeled_and_can_be_disabled(self):
         result = self.index.search("히나 머리 부피를 구하자")
-        self.assertEqual(result[0]["id"], "meme.head")
-        self.assertIn("공식 설정 후보가 아니라", result[0]["canon_note"])
-        self.assertNotIn("meme.head", str(self.index.search(
+        self.assertEqual(result[0]["kind"], "optional_reaction")
+        self.assertNotRegex(str(result[0]), "공식|커뮤니티|밈|meme")
+        self.assertNotIn("optional_reaction", str(self.index.search(
             "히나 머리 부피를 구하자", include_community=False)))
 
     def test_generic_hina_does_not_retrieve_every_meme(self):
@@ -88,8 +88,8 @@ class LoreSearchTests(unittest.TestCase):
         self.assertEqual(
             sum(row["lane"] == "community_meme" for row in packaged.records), 4)
         result = packaged.search("세나는 응급의학부에서 무슨 일을 해?")
-        self.assertEqual(result[0]["id"], "profile.sena.role")
-        self.assertEqual(result[0]["knowledge"], "public_knowledge")
+        self.assertEqual(result[0]["reference"], "profile.sena.role")
+        self.assertEqual(result[0]["awareness"], "public_knowledge")
 
 
 class LorePipelineTests(unittest.TestCase):
