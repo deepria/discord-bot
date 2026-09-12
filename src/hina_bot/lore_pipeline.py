@@ -10,7 +10,14 @@ import urllib.robotparser
 from html.parser import HTMLParser
 from pathlib import Path
 
-from .lore import CONFIDENCE_LEVELS, LoreValidationError, read_jsonl, validate_record, write_jsonl
+from .lore import (
+    CONFIDENCE_LEVELS,
+    KNOWLEDGE_LEVELS,
+    LoreValidationError,
+    read_jsonl,
+    validate_record,
+    write_jsonl,
+)
 
 WORK_DIR = Path("data/lore")
 RAW_PATH = WORK_DIR / "raw.jsonl"
@@ -296,6 +303,37 @@ def list_queue(args) -> None:
     print(f"pending: {len(rows)}")
 
 
+def edit_candidate(args) -> None:
+    queue = read_jsonl(QUEUE_PATH)
+    found = False
+    changed = False
+    for row in queue:
+        if row["id"] != args.id:
+            continue
+        found = True
+        if row["status"] != "candidate":
+            raise SystemExit("candidate 상태의 항목만 수정할 수 있습니다.")
+        for field in ("summary", "knowledge", "timeline"):
+            value = getattr(args, field)
+            if value is not None:
+                row[field] = value
+                changed = True
+        if args.keyword is not None:
+            row["keywords"] = args.keyword
+            changed = True
+        if args.subject is not None:
+            row["subjects"] = args.subject
+            changed = True
+        if not changed:
+            raise SystemExit("수정할 필드를 하나 이상 지정하세요.")
+        validate_record(row)
+        print(f"edited: {row['id']} [{row['knowledge']}]\n  {row['summary']}")
+        break
+    if not found:
+        raise SystemExit(f"candidate not found: {args.id}")
+    write_jsonl(QUEUE_PATH, queue)
+
+
 def decide(args, status: str) -> None:
     queue = read_jsonl(QUEUE_PATH)
     found = False
@@ -354,6 +392,13 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--model", default=os.getenv("LORE_MODEL", "gpt-4.1-mini"))
     p.set_defaults(run=extract)
     p = commands.add_parser("list"); p.set_defaults(run=list_queue)
+    p = commands.add_parser("edit"); p.add_argument("id")
+    p.add_argument("--summary")
+    p.add_argument("--knowledge", choices=sorted(KNOWLEDGE_LEVELS))
+    p.add_argument("--timeline")
+    p.add_argument("--keyword", action="append", help="반복 지정하면 기존 keywords를 교체합니다.")
+    p.add_argument("--subject", action="append", help="반복 지정하면 기존 subjects를 교체합니다.")
+    p.set_defaults(run=edit_candidate)
     p = commands.add_parser("approve"); p.add_argument("id")
     p.add_argument("--confirm-kr-release", action="store_true")
     p.add_argument("--confidence", choices=sorted(CONFIDENCE_LEVELS - {"candidate"}), required=True)
