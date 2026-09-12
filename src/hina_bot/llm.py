@@ -5,6 +5,7 @@ from pathlib import Path
 
 from openai import AsyncOpenAI
 
+from .admin_db import AdminDatabase
 from .config import Settings
 from .instructions import InstructionRegistry
 from .lore import LoreIndex
@@ -108,9 +109,10 @@ class LLM:
         self.character = (Path(settings.prompt_path).read_text(encoding="utf-8")
                           if settings.prompt_path else
                           files("hina_bot").joinpath("prompts/hina.md").read_text(encoding="utf-8"))
-        self.instructions = InstructionRegistry(settings.instruction_path)
-        self.runtime_lore = RuntimeKnowledgeRegistry(settings.runtime_lore_path, kind="world_fact")
-        self.story_context = RuntimeKnowledgeRegistry(settings.context_path, kind="interpretation")
+        self.admin_db = AdminDatabase(settings.db_path)
+        self.instructions = InstructionRegistry(self.admin_db)
+        self.runtime_lore = RuntimeKnowledgeRegistry(self.admin_db, kind="world_fact")
+        self.story_context = RuntimeKnowledgeRegistry(self.admin_db, kind="interpretation")
         self.lore = LoreIndex.load(settings.lore_path)
         self.usage = UsageLogger(settings.usage_log_path)
 
@@ -119,6 +121,7 @@ class LLM:
             await self.client.close()
         finally:
             self.usage.close()
+            self.admin_db.close()
 
     @staticmethod
     def authorized_context(scope, context):
