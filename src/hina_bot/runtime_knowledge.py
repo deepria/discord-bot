@@ -202,14 +202,17 @@ class RuntimeKnowledgeRegistry:
                 ranked.append((score, -order, row))
 
         result, used = [], 0
+        prefix = "runtime_context" if self.kind == "interpretation" else "runtime_lore"
         for _, _, row in sorted(ranked, reverse=True):
             item = {
-                "reference": f"runtime.{row['id']}",
+                "reference": f"{prefix}.{row['id']}",
                 "kind": self.kind,
                 "content": row["content"],
                 "awareness": row["awareness"],
                 "time": row["timeline"],
             }
+            if self.kind == "interpretation":
+                item["certainty"] = "plausible_interpretation_not_established_fact"
             size = len(json.dumps(item, ensure_ascii=False))
             if used + size > chars:
                 continue
