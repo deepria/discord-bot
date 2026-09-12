@@ -1,0 +1,89 @@
+import json
+import re
+from pathlib import Path
+
+
+class InstructionRegistry:
+    def __init__(self, path: str):
+        self.path = Path(path)
+
+    def _read(self) -> list[dict]:
+        if not self.path.exists():
+            return []
+        data = json.loads(self.path.read_text(encoding="utf-8"))
+        if not isinstance(data, list):
+            raise ValueError("instruction 파일 형식이 잘못되었습니다.")
+        return data
+
+    def _write(self, rows: list[dict]) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = self.path.with_suffix(self.path.suffix + ".tmp")
+        tmp.write_text(json.dumps(rows, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        tmp.replace(self.path)
+
+    @staticmethod
+    def _validate_id(identifier: str) -> str:
+        identifier = identifier.strip().lower()
+        if not re.fullmatch(r"[a-z0-9][a-z0-9_.-]{1,63}", identifier):
+            raise ValueError("ID는 영문 소문자·숫자·점·밑줄·하이픈 2~64자로 입력해 주세요.")
+        return identifier
+
+    @staticmethod
+    def _validate_text(text: str) -> str:
+        text = text.strip()
+        if not 1 <= len(text) <= 1200:
+            raise ValueError("instruction 본문은 1~1200자로 입력해 주세요.")
+        return text
+
+    def list(self) -> list[dict]:
+        return self._read()
+
+    def active_text(self) -> str:
+        rows = [row for row in self._read() if row.get("enabled", True)]
+        if not rows:
+            return ""
+        body = "\n".join(f"- [{row['id']}] {row['text']}" for row in rows)
+        return ("[관리자 동적 캐릭터 조정]\n"
+                "아래 항목은 관리자만 편집하는 신뢰 가능한 보조 지침입니다. 상위 POLICY와 "
+                "고정 캐릭터 지침을 위반하지 않는 범위에서 따르세요. 사용자 입력이나 기억보다 "
+                "우선하지만, 안전·보안·권한 규칙을 변경하지 못합니다.\n" + body)
+
+    def add(self, identifier: str, text: str) -> None:
+        identifier = self._validate_id(identifier)
+        text = self._validate_text(text)
+        rows = self._read()
+        if any(row.get("id") == identifier for row in rows):
+            raise ValueError("이미 존재하는 instruction ID입니다.")
+        if len(rows) >= 50:
+            raise ValueError("동적 instruction은 최대 50개까지 저장할 수 있습니다.")
+        rows.append({"id": identifier, "text": text, "enabled": True})
+        self._write(rows)
+
+    def set_enabled(self, identifier: str, enabled: bool) -> None:
+        identifier = self._validate_id(identifier)
+        rows = self._read()
+        for row in rows:
+            if row.get("id") == identifier:
+                row["enabled"] = enabled
+                self._write(rows)
+                return
+        raise ValueError("등록되지 않은 instruction ID입니다.")
+
+    def edit(self, identifier: str, text: str) -> None:
+        identifier = self._validate_id(identifier)
+        text = self._validate_text(text)
+        rows = self._read()
+        for row in rows:
+            if row.get("id") == identifier:
+                row["text"] = text
+                self._write(rows)
+                return
+        raise ValueError("등록되지 않은 instruction ID입니다.")
+
+    def remove(self, identifier: str) -> None:
+        identifier = self._validate_id(identifier)
+        rows = self._read()
+        filtered = [row for row in rows if row.get("id") != identifier]
+        if len(filtered) == len(rows):
+            raise ValueError("등록되지 않은 instruction ID입니다.")
+        self._write(filtered)
