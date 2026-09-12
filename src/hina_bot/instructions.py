@@ -5,10 +5,10 @@ from pathlib import Path
 
 class InstructionRegistry:
     def __init__(self, path: str):
-        self.path = Path(path)
+        self.path = Path(path) if path else None
 
     def _read(self) -> list[dict]:
-        if not self.path.exists():
+        if self.path is None or not self.path.exists():
             return []
         data = json.loads(self.path.read_text(encoding="utf-8"))
         if not isinstance(data, list):
@@ -16,6 +16,8 @@ class InstructionRegistry:
         return data
 
     def _write(self, rows: list[dict]) -> None:
+        if self.path is None:
+            raise ValueError("동적 instruction 저장 경로가 설정되지 않았습니다.")
         self.path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.path.with_suffix(self.path.suffix + ".tmp")
         tmp.write_text(json.dumps(rows, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
