@@ -1,4 +1,5 @@
 """Content-free JSONL telemetry for logical Responses API calls and Discord turns."""
+
 import json
 import logging
 from contextlib import contextmanager
