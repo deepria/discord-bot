@@ -1,54 +1,95 @@
+import logging
+
 import discord
+from discord import app_commands
+
+from .instructions import InstructionRegistry
+
+log = logging.getLogger("hina")
 
 
-class InstructionCommands:
-    HELP = (
-        "히나야 /instruction add <id> <내용>\n"
-        "히나야 /instruction list\n"
-        "히나야 /instruction edit <id> <내용>\n"
-        "히나야 /instruction enable <id>\n"
-        "히나야 /instruction disable <id>\n"
-        "히나야 /instruction remove <id>"
-    )
-
+class InstructionCommands(app_commands.Group):
     def __init__(self, client):
+        super().__init__(name="instruction", description="동적 캐릭터 instruction 관리 (봇 관리자 전용)")
         self.client = client
+        self.registry = InstructionRegistry(client.settings.instruction_path)
 
-    async def handle(self, message, text: str):
-        if message.author.id not in self.client.emoji_admin_ids:
-            return "봇 소유자 또는 지정된 관리자만 사용할 수 있어요."
-        parts = text.split(maxsplit=1)
-        action, rest = (parts[0], parts[1] if len(parts) > 1 else "") if parts else ("", "")
-        registry = self.client.instruction_registry
+    async def interaction_check(self, interaction):
+        if interaction.user.id not in self.client.emoji_admin_ids:
+            await interaction.response.send_message(
+                "봇 소유자 또는 지정된 관리자만 사용할 수 있어요.", ephemeral=True)
+            return False
+        return True
+
+    async def on_error(self, interaction, error):
+        log.warning("Instruction command failed (%s)", type(error).__name__)
+        text = "instruction을 처리하지 못했어요. /instruction list로 현재 상태를 확인해 주세요."
+        if interaction.response.is_done():
+            await interaction.followup.send(text, ephemeral=True)
+        else:
+            await interaction.response.send_message(text, ephemeral=True)
+
+    @app_commands.command(name="add", description="새 동적 instruction 추가 및 즉시 활성화")
+    @app_commands.describe(identifier="영문 ID", text="히나에게 추가할 보조 지침")
+    async def add(self, interaction: discord.Interaction, identifier: str, text: str):
         try:
-            if action == "list" and not rest:
-                rows = registry.list()
-                if not rows:
-                    return "등록된 동적 instruction이 없어요.\n" + self.HELP
-                lines = [f"동적 instruction {len(rows)}/50"]
-                for row in rows:
-                    state = "ON" if row.get("enabled", True) else "OFF"
-                    text = discord.utils.escape_markdown(row.get("text", ""))
-                    if len(text) > 180:
-                        text = text[:177] + "..."
-                    lines.append(f"`{row.get('id', '?')}` [{state}] — {text}")
-                return "\n".join(lines)
-            if action in {"add", "edit"}:
-                args = rest.split(maxsplit=1)
-                if len(args) != 2:
-                    return self.HELP
-                identifier, body = args
-                if action == "add":
-                    registry.add(identifier, body)
-                    return f"instruction `{identifier}`를 추가하고 활성화했어요."
-                registry.edit(identifier, body)
-                return f"instruction `{identifier}` 내용을 수정했어요."
-            if action in {"enable", "disable", "remove"} and rest and len(rest.split()) == 1:
-                if action == "remove":
-                    registry.remove(rest)
-                    return f"instruction `{rest}`를 삭제했어요."
-                registry.set_enabled(rest, action == "enable")
-                return f"instruction `{rest}`를 {'활성화' if action == 'enable' else '비활성화'}했어요."
-            return self.HELP
+            self.registry.add(identifier, text)
         except ValueError as exc:
-            return str(exc)
+            await interaction.response.send_message(str(exc), ephemeral=True)
+            return
+        await interaction.response.send_message(
+            f"instruction `{identifier}`를 추가하고 활성화했어요.", ephemeral=True)
+
+    @app_commands.command(name="list", description="저장된 동적 instruction 목록 확인")
+    async def list_items(self, interaction: discord.Interaction):
+        rows = self.registry.list()
+        if not rows:
+            await interaction.response.send_message("등록된 동적 instruction이 없어요.", ephemeral=True)
+            return
+        lines = [f"동적 instruction {len(rows)}/50"]
+        for row in rows:
+            state = "ON" if row.get("enabled", True) else "OFF"
+            text = discord.utils.escape_markdown(row.get("text", ""))
+            if len(text) > 180:
+                text = text[:177] + "..."
+            lines.append(f"`{row.get('id', '?')}` [{state}] — {text}")
+        await interaction.response.send_message("\n".join(lines), ephemeral=True)
+
+    @app_commands.command(name="edit", description="기존 instruction 본문 수정")
+    @app_commands.describe(identifier="수정할 ID", text="새 보조 지침")
+    async def edit(self, interaction: discord.Interaction, identifier: str, text: str):
+        try:
+            self.registry.edit(identifier, text)
+        except ValueError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+            return
+        await interaction.response.send_message(
+            f"instruction `{identifier}` 내용을 수정했어요.", ephemeral=True)
+
+    @app_commands.command(name="enable", description="instruction 활성화")
+    async def enable(self, interaction: discord.Interaction, identifier: str):
+        await self._set_enabled(interaction, identifier, True)
+
+    @app_commands.command(name="disable", description="instruction 비활성화")
+    async def disable(self, interaction: discord.Interaction, identifier: str):
+        await self._set_enabled(interaction, identifier, False)
+
+    async def _set_enabled(self, interaction, identifier: str, enabled: bool):
+        try:
+            self.registry.set_enabled(identifier, enabled)
+        except ValueError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+            return
+        state = "활성화" if enabled else "비활성화"
+        await interaction.response.send_message(
+            f"instruction `{identifier}`를 {state}했어요.", ephemeral=True)
+
+    @app_commands.command(name="remove", description="instruction 영구 삭제")
+    async def remove(self, interaction: discord.Interaction, identifier: str):
+        try:
+            self.registry.remove(identifier)
+        except ValueError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+            return
+        await interaction.response.send_message(
+            f"instruction `{identifier}`를 삭제했어요.", ephemeral=True)
