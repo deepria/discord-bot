@@ -107,7 +107,7 @@ def _validate_item(item: dict) -> dict:
                        for value in values)):
             raise ValueError(f"knowledge {key} 형식이 잘못되었습니다.")
     if not isinstance(item.get("reason"), str):
-        raise ValueError("knowledge reason 형식이 잘못되었습니다.")
+        raise TypeError("knowledge reason 형식이 잘못되었습니다.")
     return item
 
 
