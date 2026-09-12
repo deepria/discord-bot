@@ -54,6 +54,50 @@
 출시 순서와 세계 안의 사건 순서도 구별해요. 원작 사건을 Discord 사용자와의
 공동 추억으로 옮기거나 공개 설정을 근거로 DM 정보를 서버에 노출하지 않아요.
 
+## 원자료 출처와 사용 범위
+
+`source_type`과 `lane`은 서로 다른 의미예요. `source_type`은 자료가 어디에서 왔는지,
+`lane`은 그 자료에서 어떤 종류의 후보를 추출하려는지를 기록해요. 따라서
+`community_wiki` 출처라고 해서 항상 `community_meme`인 것은 아니고, 반대로
+`canon` lane으로 수집했다고 해서 그 출처 자체가 공식 자료가 되거나 내용이 자동으로
+검증되는 것도 아니에요.
+
+공식 게임 본문·공식 사이트·공식 영상처럼 직접 확인 가능한 자료는 canon의 우선 근거로
+사용해요. 나무위키 같은 커뮤니티 위키와 비공식 미러는 공식 스토리의 위치를 찾거나,
+여러 장면에 흩어진 설정을 조사하고 후보를 만드는 2차 자료로 사용할 수 있어요.
+한국 서버에 이미 공개된 공식 내용을 정리한 커뮤니티 자료라면
+`--source-type community_wiki --lane canon`으로 수집할 수 있어요. 이 경우 `canon`은
+"공식 설정 후보를 추출한다"는 뜻일 뿐, 해당 서술을 공식 사실로 확정한다는 뜻이 아니에요.
+
+현재 `data/namuwiki/`에 두는 조사용 텍스트는 나무위키 문서 원본에서 한국 서버에 아직
+공개되지 않은 내용을 운영자가 먼저 제거한 작업용 자료예요. 이 사전 필터링은 일본 서버
+선행 스포일러가 후보에 섞이는 위험을 줄이기 위한 것이며, 남은 문장의 정확성·해석·인지
+범위까지 검증했다는 뜻은 아니에요. 문서에는 편집자의 해석, 요약 과정의 오류, 팬덤 용어,
+과장이나 누락이 있을 수 있으므로 추출 결과를 그대로 승인하지 않아요.
+
+canon 후보를 승인할 때는 다음 기준을 적용해요.
+
+- 한국 서버에 실제 공개된 내용인지 별도로 확인하고 `--confirm-kr-release`를 지정해요.
+- 가능하면 공식 한국어 게임 본문, 공식 사이트·영상·공지 등 1차 자료와 대조해요.
+- 1차 자료를 직접 확보하지 못했다면 독립적인 자료를 교차 확인하고, 근거 수준에 맞는
+  `confidence`를 사용해요. 커뮤니티 위키 한 곳의 서술만으로 `verified`를 부여하지 않아요.
+- 사건에서 실제로 확인되는 행동·대사·관계와 편집자의 성격 해석을 구분해요. 히나의
+  내면, 타인의 속마음, 인지 여부, 인과관계는 근거가 없으면 사실로 승격하지 않아요.
+- 팬덤 별명, 밈, 외형 품평, 과장된 캐릭터 해석처럼 공식 사실이 아닌 내용은 canon에서
+  제외해요. 캐릭터를 해치지 않는 선택적 반응으로 쓸 가치가 있을 때만 별도로
+  `community_meme` lane에서 검토해요.
+
+원자료와 검수 중간 산출물은 런타임 데이터가 아니에요. `data/`는 Git에서 제외하며,
+`data/namuwiki/`의 원문 복사본과 `data/lore/raw.jsonl`, `data/lore/review.jsonl`은
+로컬 조사·검수용으로만 사용해요. 저장소와 패키지에는 사람이 승인해 짧게 재서술한
+`src/hina_bot/data/lore.jsonl`만 포함해요. 원자료의 URL·제목·문단 위치는 출처 추적을
+위해 메타데이터로 남기되, 원문 전체를 런타임에 복제하거나 배포하지 않아요.
+
+자료를 직접 가져올 때는 사이트의 이용약관·라이선스와 `robots.txt`를 별도로 확인해요.
+`robots.txt`의 허용은 재배포 허락을 의미하지 않아요. 사람이 저장한 텍스트를
+`ingest-file`로 넣는 경우에도 해당 자료가 OpenAI API의 추출 요청으로 전송된다는 점을
+고려해요.
+
 ## 응답 평가
 
 `evals/character_lore_cases.jsonl`에 수동·실모델 평가용 입력과 합격 기준을 기록했어요.
@@ -62,8 +106,8 @@
 
 ## 자동 정제 파이프라인
 
-`hina-lore` CLI는 공식 설정과 커뮤니티 밈을 같은 작업 흐름으로 처리하되 서로 다른
-lane으로 보관해요. 승인 전 원문과 검수 대기열은 `data/lore/`에만 저장되어 Git에서
+`hina-lore` CLI는 공식 설정과 커뮤니티 밈을 같은 작업 흐름으로 처리하되 lane으로
+용도를 구분해요. 승인 전 원문과 검수 대기열은 `data/` 아래에만 저장되어 Git에서
 제외되고, 사람이 승인한 짧은 항목만 `src/hina_bot/data/lore.jsonl`에 들어가요.
 원문 전체나 나무위키 복사본을 저장소에 배포하지 않아요.
 
@@ -73,7 +117,7 @@ lane으로 보관해요. 승인 전 원문과 검수 대기열은 `data/lore/`�
 2. 긴 자료는 24,000자 이하 단위로 자동 분할해요.
 3. `extract`가 OpenAI Structured Outputs로 원자적 후보·검색어·인지 범위·불확실성을 추출해요.
 4. `list`로 근거와 불확실성을 사람이 읽어요.
-5. canon은 한국 서버 출시 근거를 확인하고 `approve --confirm-kr-release`하거나,
+5. canon은 한국 서버 출시 근거와 사실성을 확인하고 `approve --confirm-kr-release`하거나,
    근거가 부족하면 `reject`해요. 승인한 항목만 봇이 검색할 수 있어요.
 
 ```bash
@@ -85,8 +129,13 @@ hina-lore ingest-file --file data/source.txt --title "에피소드 이름" \
   --url "원문 URL" --source-type official_game --lane canon \
   --locator "스토리 1장 2화"
 
-# 파일로 저장한 커뮤니티 정리·밈 자료
-hina-lore ingest-file --file data/community.txt --title "히나 커뮤니티 정리" \
+# 커뮤니티 위키를 공식 설정 후보의 조사 자료로 사용하는 경우
+hina-lore ingest-file --file data/namuwiki/hina-story.txt --title "히나 작중 행적 조사 자료" \
+  --url "원문 URL" --source-type community_wiki --lane canon \
+  --locator "모든 문단"
+
+# 공식 설정이 아닌 커뮤니티 밈을 별도 반응 후보로 수집하는 경우
+hina-lore ingest-file --file data/community.txt --title "히나 커뮤니티 밈 조사" \
   --url "원문 URL" --source-type community_wiki --lane community_meme \
   --locator "밈 문단"
 
@@ -118,8 +167,9 @@ hina-lore fetch-manifest data/lore/sources.jsonl --confirm-site-terms
 추출할 때 원문은 명령이 아닌 신뢰할 수 없는 조사 데이터로 전달하고 `store=False`를
 사용해요. 그래도 원문이 OpenAI API로 전송된다는 점은 자료 선택 시 고려해야 해요.
 API 추출 결과는 자동 승인하지 않아요. 공식 자료라도 등장인물의 내면, 사건 시점,
-히나가 알 수 있는 근거를 사람이 확인해야 해요. 커뮤니티 자료는 항상
-`community_meme` lane으로 넣고 공식 사실로 승격하지 않아요.
+히나가 알 수 있는 근거를 사람이 확인해야 해요. 커뮤니티 자료도 출처 성격과 무관하게
+canon 후보라면 같은 검증 절차를 거치고, 공식 설정이 아닌 밈은 `community_meme`으로
+분리해요.
 
 ## 런타임 검색
 
