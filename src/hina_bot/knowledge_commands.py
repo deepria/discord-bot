@@ -5,6 +5,7 @@ from discord import app_commands
 
 from .admin_list import created_compact, created_label, fit_table, sort_rows
 from .knowledge_ingest import KnowledgeIngestor
+from .runtime_knowledge import RuntimeKnowledgeRegistry
 
 log = logging.getLogger("hina")
 
@@ -27,8 +28,10 @@ class KnowledgeCommands(app_commands.Group):
             description="조사 메모를 자동 분해·조정해 설정 사실·해석으로 반영 (봇 관리자 전용)",
         )
         self.client = client
-        self.fact_registry = client.llm.runtime_lore
-        self.context_registry = client.llm.story_context
+        self.fact_registry = getattr(
+            client.llm, "runtime_lore", RuntimeKnowledgeRegistry(None, kind="world_fact"))
+        self.context_registry = getattr(
+            client.llm, "story_context", RuntimeKnowledgeRegistry(None, kind="interpretation"))
         self.ingestor = KnowledgeIngestor(client.llm)
 
     async def interaction_check(self, interaction):
