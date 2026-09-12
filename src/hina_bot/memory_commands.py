@@ -38,8 +38,9 @@ class MemoryCommands(app_commands.Group):
         super().__init__(name="memory", description="현재 채널의 기억 디버깅 모드 (봇 관리자 전용)")
         self.client = client
         # HinaClient already has its CommandTree before this group is constructed.
-        # Register instruction management beside /memory without touching the chat command path.
-        client.tree.add_command(InstructionCommands(client))
+        # Tests sometimes construct this group with a minimal mock client that has no tree/settings.
+        if hasattr(client, "tree") and hasattr(client, "settings"):
+            client.tree.add_command(InstructionCommands(client))
 
     async def interaction_check(self, interaction):
         if interaction.user.id not in self.client.emoji_admin_ids:
