@@ -48,3 +48,81 @@
 `evals/character_lore_cases.jsonl`에 수동·실모델 평가용 입력과 합격 기준을 기록했어요.
 아직 실모델 평가는 실행하지 않았어요. 코드 테스트 통과는 캐릭터 품질 검증과 달라요.
 일반 서버, 일반 DM, 특별 DM에서 각각 확인하고 단발 및 연속 장난을 비교해 주세요.
+
+## 자동 정제 파이프라인
+
+`hina-lore` CLI는 공식 설정과 커뮤니티 밈을 같은 작업 흐름으로 처리하되 서로 다른
+lane으로 보관해요. 승인 전 원문과 검수 대기열은 `data/lore/`에만 저장되어 Git에서
+제외되고, 사람이 승인한 짧은 항목만 `src/hina_bot/data/lore.jsonl`에 들어가요.
+원문 전체나 나무위키 복사본을 저장소에 배포하지 않아요.
+
+처리 단계는 다음과 같아요.
+
+1. 직접 확보한 텍스트를 `ingest-file`로 넣거나, URL 목록을 `fetch-manifest`로 가져와요.
+2. 긴 자료는 24,000자 이하 단위로 자동 분할해요.
+3. `extract`가 OpenAI Structured Outputs로 원자적 후보·검색어·인지 범위·불확실성을 추출해요.
+4. `list`로 근거와 불확실성을 사람이 읽어요.
+5. canon은 한국 서버 출시 근거를 확인하고 `approve --confirm-kr-release`하거나,
+   근거가 부족하면 `reject`해요. 승인한 항목만 봇이 검색할 수 있어요.
+
+```bash
+# 설치 후 사용
+python -m pip install -e '.[dev]'
+
+# 파일로 저장한 공식 자료
+hina-lore ingest-file --file data/source.txt --title "에피소드 이름" \
+  --url "원문 URL" --source-type official_game --lane canon \
+  --locator "스토리 1장 2화"
+
+# 파일로 저장한 커뮤니티 정리·밈 자료
+hina-lore ingest-file --file data/community.txt --title "히나 커뮤니티 정리" \
+  --url "원문 URL" --source-type community_wiki --lane community_meme \
+  --locator "밈 문단"
+
+# 아직 추출하지 않은 모든 원문 처리. .env.local의 OPENAI_API_KEY를 사용해요.
+hina-lore extract --all
+hina-lore list
+
+# 공식 게임 장면에서 직접 확인한 설정 예시
+hina-lore approve canon.some-fact --confidence verified --confirm-kr-release
+
+# 여러 커뮤니티 자료에서 일치하고 운영자가 채택한 밈 예시
+hina-lore approve community_meme.some-joke --confidence crosschecked
+hina-lore validate
+```
+
+여러 URL을 처리하려면 `source_manifest.example.jsonl`을 `data/lore/sources.jsonl`로
+복사해 실제 주소와 lane을 적어요. 다음 명령은 목록에 명시한 페이지만 가져오며 링크를
+따라가 사이트 전체를 순회하지 않아요. `robots.txt`에서 허용한 주소만 처리해요.
+
+```bash
+hina-lore fetch-manifest data/lore/sources.jsonl --confirm-site-terms
+```
+
+`--confirm-site-terms`는 해당 사이트의 이용약관과 라이선스를 운영자가 확인했다는
+명시적 표시예요. robots 허용 여부가 콘텐츠 재배포 허락을 뜻하지는 않아요. 접근 제한을
+우회하거나 로그인·쿠키를 사용하지 않으며, 동적 페이지는 텍스트 파일로 저장한 뒤
+`ingest-file`을 사용하는 편이 안정적이에요.
+
+추출할 때 원문은 명령이 아닌 신뢰할 수 없는 조사 데이터로 전달하고 `store=False`를
+사용해요. 그래도 원문이 OpenAI API로 전송된다는 점은 자료 선택 시 고려해야 해요.
+API 추출 결과는 자동 승인하지 않아요. 공식 자료라도 등장인물의 내면, 사건 시점,
+히나가 알 수 있는 근거를 사람이 확인해야 해요. 커뮤니티 자료는 항상
+`community_meme` lane으로 넣고 공식 사실로 승격하지 않아요.
+
+## 런타임 검색
+
+봇은 매 응답마다 별도 검색 API나 임베딩 API를 호출하지 않아요. 현재 메시지와 승인된
+항목의 `subjects`, `keywords`, `summary`를 로컬에서 비교하고 관련도가 높은 항목만
+참고 JSON에 넣어요. 기본 상한은 6개·3,200자예요.
+
+```dotenv
+LORE_MAX_ITEMS=6
+LORE_MAX_CHARS=3200
+COMMUNITY_LORE=true
+```
+
+`COMMUNITY_LORE=false`이면 공식 설정 lane은 유지하면서 모든 커뮤니티 밈을 제외해요.
+밈 항목에는 공식 설정이 아니라 선택적 연출이라는 표식을 항상 붙여요. 검색 결과도
+행동 지침이 아닌 데이터로 전달하므로, 수집 자료에 들어간 프롬프트 인젝션이 POLICY나
+권한·기억·멘션 제한을 바꾸지 못하게 해요.

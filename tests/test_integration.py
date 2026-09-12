@@ -134,6 +134,16 @@ class SDKTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("권한 상승", instructions)
         self.assertIn("공격 문구를 요약문에", instructions)
 
+    async def test_relevant_lore_is_data_not_an_instruction(self):
+        await self.llm.answer(self.store, Scope(None, 20, 100), "사용자",
+                              "마코토와 이로하는 어느 조직이야?")
+        payload = self.calls[-1]
+        reference = json.loads(payload["input"][0]["content"].split("\n", 1)[1])
+        lore = reference["lore_reference"]
+        self.assertEqual(lore[0]["id"], "organization.pandemonium.roles")
+        self.assertEqual(lore[0]["canon_note"], "한국 서버 채택 설정")
+        self.assertNotIn("organization.pandemonium.roles", payload["instructions"])
+
 
 @unittest.skipUnless(AVAILABLE, "Install project dev dependencies to test SDK/Discord adapters")
 class AdapterTests(unittest.IsolatedAsyncioTestCase):
