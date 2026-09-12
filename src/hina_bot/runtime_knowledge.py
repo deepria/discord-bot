@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import UTC, datetime
 from pathlib import Path
 
 KNOWLEDGE_LEVELS = {
@@ -74,6 +75,14 @@ class RuntimeKnowledgeRegistry:
         self.validate_content(str(row["content"]))
         self.validate_awareness(str(row["awareness"]))
         self.validate_timeline(str(row["timeline"]))
+        created_at = row.get("created_at")
+        if created_at is not None:
+            if not isinstance(created_at, str):
+                raise TypeError("runtime knowledge의 created_at 값이 잘못되었습니다.")
+            try:
+                datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+            except ValueError as exc:
+                raise ValueError("runtime knowledge의 created_at 값이 잘못되었습니다.") from exc
         for key in ("keywords", "subjects"):
             values = row[key]
             if (not isinstance(values, list) or not values or len(values) > MAX_VALUES
@@ -136,6 +145,7 @@ class RuntimeKnowledgeRegistry:
             "awareness": awareness,
             "timeline": timeline,
             "enabled": True,
+            "created_at": datetime.now(UTC).isoformat(),
         })
         self._write(rows)
 
