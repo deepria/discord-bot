@@ -3,7 +3,8 @@ from __future__ import annotations
 import json
 import re
 from datetime import UTC, datetime
-from pathlib import Path
+
+from .admin_db import AdminDatabase
 
 KNOWLEDGE_LEVELS = {
     "self", "direct_experience", "reported", "public_knowledge", "inference",
@@ -32,12 +33,12 @@ def _terms(text: str) -> set[str]:
 
 
 class RuntimeKnowledgeRegistry:
-    """Admin-managed facts or interpretations, loaded on every search for live tuning."""
+    """Admin-managed facts or interpretations stored in SQLite."""
 
-    def __init__(self, path: str, *, kind: str):
+    def __init__(self, database: AdminDatabase | None, *, kind: str):
         if kind not in {"world_fact", "interpretation"}:
             raise ValueError("runtime knowledge kind must be world_fact or interpretation")
-        self.path = Path(path) if path else None
+        self.database = database
         self.kind = kind
 
     @staticmethod
@@ -67,64 +68,80 @@ class RuntimeKnowledgeRegistry:
             raise ValueError("지원하지 않는 awareness 값입니다.")
         return awareness
 
-    def _validate_row(self, row: dict) -> dict:
-        required = {"id", "content", "keywords", "subjects", "awareness", "timeline", "enabled"}
-        if not isinstance(row, dict) or not required <= row.keys():
-            raise ValueError("runtime knowledge 파일 형식이 잘못되었습니다.")
-        self.validate_id(str(row["id"]))
-        self.validate_content(str(row["content"]))
-        self.validate_awareness(str(row["awareness"]))
-        self.validate_timeline(str(row["timeline"]))
-        created_at = row.get("created_at")
-        if created_at is not None:
-            if not isinstance(created_at, str):
-                raise TypeError("runtime knowledge의 created_at 값이 잘못되었습니다.")
-            try:
-                datetime.fromisoformat(created_at)
-            except ValueError as exc:
-                raise ValueError("runtime knowledge의 created_at 값이 잘못되었습니다.") from exc
-        for key in ("keywords", "subjects"):
-            values = row[key]
-            if (not isinstance(values, list) or not values or len(values) > MAX_VALUES
-                    or any(not isinstance(value, str) or not value.strip()
-                           or len(value) > MAX_VALUE_CHARS for value in values)):
-                raise ValueError(f"runtime knowledge의 {key} 형식이 잘못되었습니다.")
-        if not isinstance(row["enabled"], bool):
-            raise TypeError("runtime knowledge의 enabled 값이 잘못되었습니다.")
-        return row
-
-    def _read(self) -> list[dict]:
-        if self.path is None or not self.path.exists():
-            return []
+    @staticmethod
+    def _validate_timestamp(value: str | None) -> str | None:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise TypeError("runtime knowledge 시간 값이 잘못되었습니다.")
         try:
-            data = json.loads(self.path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as exc:
-            raise ValueError(f"runtime knowledge JSON을 읽을 수 없습니다: {exc}") from exc
-        if not isinstance(data, list):
-            raise TypeError("runtime knowledge 파일은 JSON 배열이어야 합니다.")
-        rows = [self._validate_row(row) for row in data]
-        ids = [row["id"] for row in rows]
-        if len(ids) != len(set(ids)):
-            raise ValueError("runtime knowledge ID가 중복되어 있습니다.")
-        return rows
+            datetime.fromisoformat(value)
+        except ValueError as exc:
+            raise ValueError("runtime knowledge 시간 값이 잘못되었습니다.") from exc
+        return value
 
-    def _write(self, rows: list[dict]) -> None:
-        if self.path is None:
-            raise ValueError("runtime knowledge 저장 경로가 설정되지 않았습니다.")
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.path.with_suffix(self.path.suffix + ".tmp")
-        tmp.write_text(json.dumps(rows, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        tmp.replace(self.path)
+    def _require_database(self) -> AdminDatabase:
+        if self.database is None:
+            raise ValueError("runtime knowledge 저장 DB가 설정되지 않았습니다.")
+        return self.database
+
+    @staticmethod
+    def _validate_values(values, key: str) -> list[str]:
+        if (not isinstance(values, list) or not values or len(values) > MAX_VALUES
+                or any(not isinstance(value, str) or not value.strip()
+                       or len(value) > MAX_VALUE_CHARS for value in values)):
+            raise ValueError(f"runtime knowledge의 {key} 형식이 잘못되었습니다.")
+        return list(dict.fromkeys(value.strip() for value in values))
+
+    @staticmethod
+    def _row(row) -> dict:
+        return {
+            "id": row["id"],
+            "content": row["content"],
+            "keywords": json.loads(row["keywords"]),
+            "subjects": json.loads(row["subjects"]),
+            "awareness": row["awareness"],
+            "timeline": row["timeline"],
+            "enabled": bool(row["enabled"]),
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+        }
 
     def list(self) -> list[dict]:
-        return self._read()
+        if self.database is None:
+            return []
+        rows = self.database.db.execute(
+            "SELECT id,content,keywords,subjects,awareness,timeline,enabled,created_at,updated_at "
+            "FROM runtime_knowledge WHERE kind=? ORDER BY rowid",
+            (self.kind,),
+        ).fetchall()
+        result = []
+        for row in rows:
+            try:
+                item = self._row(row)
+            except (TypeError, json.JSONDecodeError) as exc:
+                raise ValueError("runtime knowledge DB의 JSON 값이 잘못되었습니다.") from exc
+            self._validate_values(item["keywords"], "keywords")
+            self._validate_values(item["subjects"], "subjects")
+            self.validate_awareness(item["awareness"])
+            self.validate_timeline(item["timeline"])
+            result.append(item)
+        return result
 
     def get(self, identifier: str) -> dict:
         identifier = self.validate_id(identifier)
-        for row in self._read():
-            if row["id"] == identifier:
-                return row
-        raise ValueError("등록되지 않은 ID입니다.")
+        database = self._require_database()
+        row = database.db.execute(
+            "SELECT id,content,keywords,subjects,awareness,timeline,enabled,created_at,updated_at "
+            "FROM runtime_knowledge WHERE kind=? AND id=?",
+            (self.kind, identifier),
+        ).fetchone()
+        if row is None:
+            raise ValueError("등록되지 않은 ID입니다.")
+        try:
+            return self._row(row)
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise ValueError("runtime knowledge DB의 JSON 값이 잘못되었습니다.") from exc
 
     def add(self, identifier: str, content: str, keywords: str, subjects: str,
             awareness: str, timeline: str = "") -> None:
@@ -132,22 +149,31 @@ class RuntimeKnowledgeRegistry:
         content = self.validate_content(content)
         awareness = self.validate_awareness(awareness)
         timeline = self.validate_timeline(timeline)
-        rows = self._read()
-        if any(row["id"] == identifier for row in rows):
-            raise ValueError("이미 존재하는 ID입니다.")
-        if len(rows) >= MAX_ITEMS:
-            raise ValueError(f"항목은 최대 {MAX_ITEMS}개까지 저장할 수 있습니다.")
-        rows.append({
-            "id": identifier,
-            "content": content,
-            "keywords": _split_values(keywords),
-            "subjects": _split_values(subjects),
-            "awareness": awareness,
-            "timeline": timeline,
-            "enabled": True,
-            "created_at": datetime.now(UTC).isoformat(),
-        })
-        self._write(rows)
+        keyword_values, subject_values = _split_values(keywords), _split_values(subjects)
+        database = self._require_database()
+        now = datetime.now(UTC).isoformat()
+        with database.transaction():
+            if database.db.execute(
+                "SELECT 1 FROM runtime_knowledge WHERE kind=? AND id=?",
+                (self.kind, identifier),
+            ).fetchone():
+                raise ValueError("이미 존재하는 ID입니다.")
+            count = database.db.execute(
+                "SELECT COUNT(*) FROM runtime_knowledge WHERE kind=?", (self.kind,)
+            ).fetchone()[0]
+            if count >= MAX_ITEMS:
+                raise ValueError(f"항목은 최대 {MAX_ITEMS}개까지 저장할 수 있습니다.")
+            database.db.execute(
+                "INSERT INTO runtime_knowledge(" 
+                "id,kind,content,keywords,subjects,awareness,timeline,enabled,created_at,updated_at" 
+                ") VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (
+                    identifier, self.kind, content,
+                    json.dumps(keyword_values, ensure_ascii=False),
+                    json.dumps(subject_values, ensure_ascii=False),
+                    awareness, timeline, 1, now, now,
+                ),
+            )
 
     def edit(self, identifier: str, *, content: str | None = None,
              keywords: str | None = None, subjects: str | None = None,
@@ -155,41 +181,105 @@ class RuntimeKnowledgeRegistry:
         identifier = self.validate_id(identifier)
         if all(value is None for value in (content, keywords, subjects, awareness, timeline)):
             raise ValueError("수정할 값을 하나 이상 입력해 주세요.")
-        rows = self._read()
-        for row in rows:
-            if row["id"] != identifier:
-                continue
-            if content is not None:
-                row["content"] = self.validate_content(content)
-            if keywords is not None:
-                row["keywords"] = _split_values(keywords)
-            if subjects is not None:
-                row["subjects"] = _split_values(subjects)
-            if awareness is not None:
-                row["awareness"] = self.validate_awareness(awareness)
-            if timeline is not None:
-                row["timeline"] = self.validate_timeline(timeline)
-            self._write(rows)
-            return
-        raise ValueError("등록되지 않은 ID입니다.")
+        database = self._require_database()
+        existing = self.get(identifier)
+        new_content = self.validate_content(content) if content is not None else existing["content"]
+        new_keywords = _split_values(keywords) if keywords is not None else existing["keywords"]
+        new_subjects = _split_values(subjects) if subjects is not None else existing["subjects"]
+        new_awareness = (self.validate_awareness(awareness)
+                         if awareness is not None else existing["awareness"])
+        new_timeline = (self.validate_timeline(timeline)
+                        if timeline is not None else existing["timeline"])
+        with database.transaction():
+            changed = database.db.execute(
+                "UPDATE runtime_knowledge SET content=?,keywords=?,subjects=?,awareness=?,timeline=?,"
+                "updated_at=? WHERE kind=? AND id=?",
+                (
+                    new_content,
+                    json.dumps(new_keywords, ensure_ascii=False),
+                    json.dumps(new_subjects, ensure_ascii=False),
+                    new_awareness, new_timeline, datetime.now(UTC).isoformat(),
+                    self.kind, identifier,
+                ),
+            ).rowcount
+            if not changed:
+                raise ValueError("등록되지 않은 ID입니다.")
 
     def set_enabled(self, identifier: str, enabled: bool) -> None:
         identifier = self.validate_id(identifier)
-        rows = self._read()
-        for row in rows:
-            if row["id"] == identifier:
-                row["enabled"] = enabled
-                self._write(rows)
-                return
-        raise ValueError("등록되지 않은 ID입니다.")
+        database = self._require_database()
+        with database.transaction():
+            changed = database.db.execute(
+                "UPDATE runtime_knowledge SET enabled=?,updated_at=? WHERE kind=? AND id=?",
+                (int(enabled), datetime.now(UTC).isoformat(), self.kind, identifier),
+            ).rowcount
+            if not changed:
+                raise ValueError("등록되지 않은 ID입니다.")
 
     def remove(self, identifier: str) -> None:
         identifier = self.validate_id(identifier)
-        rows = self._read()
-        filtered = [row for row in rows if row["id"] != identifier]
-        if len(filtered) == len(rows):
-            raise ValueError("등록되지 않은 ID입니다.")
-        self._write(filtered)
+        database = self._require_database()
+        with database.transaction():
+            changed = database.db.execute(
+                "DELETE FROM runtime_knowledge WHERE kind=? AND id=?",
+                (self.kind, identifier),
+            ).rowcount
+            if not changed:
+                raise ValueError("등록되지 않은 ID입니다.")
+
+    def import_row(self, row: dict, *, replace: bool = False) -> str:
+        """Import one legacy JSON row. Missing created_at stays NULL."""
+        identifier = self.validate_id(str(row.get("id", "")))
+        content = self.validate_content(str(row.get("content", "")))
+        keywords = self._validate_values(row.get("keywords"), "keywords")
+        subjects = self._validate_values(row.get("subjects"), "subjects")
+        awareness = self.validate_awareness(str(row.get("awareness", "")))
+        timeline = self.validate_timeline(str(row.get("timeline", "")))
+        enabled = row.get("enabled", True)
+        if not isinstance(enabled, bool):
+            raise TypeError("runtime knowledge enabled 값이 잘못되었습니다.")
+        created_at = self._validate_timestamp(row.get("created_at"))
+        updated_at = self._validate_timestamp(row.get("updated_at"))
+        database = self._require_database()
+        with database.transaction():
+            existing = database.db.execute(
+                "SELECT id,content,keywords,subjects,awareness,timeline,enabled,created_at,updated_at "
+                "FROM runtime_knowledge WHERE kind=? AND id=?",
+                (self.kind, identifier),
+            ).fetchone()
+            incoming = {
+                "id": identifier,
+                "content": content,
+                "keywords": keywords,
+                "subjects": subjects,
+                "awareness": awareness,
+                "timeline": timeline,
+                "enabled": enabled,
+                "created_at": created_at,
+                "updated_at": updated_at,
+            }
+            if existing is not None and not replace:
+                if self._row(existing) == incoming:
+                    return "skipped"
+                raise ValueError(f"DB에 다른 내용의 knowledge `{identifier}` ({self.kind})가 이미 있습니다.")
+            if existing is None:
+                count = database.db.execute(
+                    "SELECT COUNT(*) FROM runtime_knowledge WHERE kind=?", (self.kind,)
+                ).fetchone()[0]
+                if count >= MAX_ITEMS:
+                    raise ValueError(f"항목은 최대 {MAX_ITEMS}개까지 저장할 수 있습니다.")
+            database.db.execute(
+                "INSERT OR REPLACE INTO runtime_knowledge(" 
+                "id,kind,content,keywords,subjects,awareness,timeline,enabled,created_at,updated_at" 
+                ") VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (
+                    identifier, self.kind, content,
+                    json.dumps(keywords, ensure_ascii=False),
+                    json.dumps(subjects, ensure_ascii=False), awareness, timeline,
+                    int(enabled), created_at, updated_at,
+                ),
+            )
+        return "replaced" if existing is not None else "added"
 
     def search(self, query: str, *, limit: int = 2, chars: int = 1800) -> list[dict]:
         if limit <= 0 or chars <= 0:
@@ -197,7 +287,7 @@ class RuntimeKnowledgeRegistry:
         folded = query.casefold()
         terms = _terms(query)
         ranked = []
-        for order, row in enumerate(self._read()):
+        for order, row in enumerate(self.list()):
             if not row["enabled"]:
                 continue
             score = 0
