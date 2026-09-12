@@ -7,13 +7,13 @@ import pytest
 from hina_bot.usage import UsageLogger
 
 
-def response(input_tokens, output_tokens, *, cached=0, reasoning=0):
+def response(input_tokens, output_tokens, *, cached=0, reasoning=0, output=None):
     return NS(status='completed', usage=NS(
         input_tokens=input_tokens,
         output_tokens=output_tokens,
         total_tokens=input_tokens + output_tokens,
         input_tokens_details=NS(cached_tokens=cached),
-        output_tokens_details=NS(reasoning_tokens=reasoning)))
+        output_tokens_details=NS(reasoning_tokens=reasoning)), output=output or [])
 
 
 @pytest.mark.asyncio
@@ -32,6 +32,8 @@ async def test_usage_success_and_error_do_not_log_content(tmp_path):
     first, second = map(json.loads, text.splitlines())
     assert first['total_tokens'] == 120
     assert first['cached_tokens'] == 50
+    assert first['web_search_calls'] == 0
+    assert first['web_search_used'] is False
     assert second['error_type'] == 'ValueError'
     assert 'total_tokens' not in second
 
@@ -40,7 +42,7 @@ async def test_usage_success_and_error_do_not_log_content(tmp_path):
 async def test_missing_usage_is_unknown(tmp_path):
     path = tmp_path / 'usage.jsonl'
     logger = UsageLogger(str(path))
-    client = NS(responses=NS(create=AsyncMock(return_value=NS(status='incomplete'))))
+    client = NS(responses=NS(create=AsyncMock(return_value=NS(status='incomplete', output=[]))))
     await logger.request(client, 'answer', model='test')
     logger.close()
     row = json.loads(path.read_text())
@@ -49,11 +51,60 @@ async def test_missing_usage_is_unknown(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_answer_enables_auto_web_search_and_logs_usage(tmp_path, monkeypatch):
+    monkeypatch.setenv('CHAT_WEB_SEARCH', 'true')
+    path = tmp_path / 'usage.jsonl'
+    logger = UsageLogger(str(path))
+    web_response = response(
+        100, 20,
+        output=[NS(type='web_search_call'), NS(type='message')],
+    )
+    client = NS(responses=NS(create=AsyncMock(return_value=web_response)))
+
+    await logger.request(
+        client,
+        'answer',
+        model='test',
+        instructions='base policy',
+        input='secret user message',
+    )
+    logger.close()
+
+    kwargs = client.responses.create.await_args.kwargs
+    assert kwargs['tools'] == [{'type': 'web_search'}]
+    assert kwargs['tool_choice'] == 'auto'
+    assert '웹 검색은 fallback' in kwargs['instructions']
+    assert 'base policy' in kwargs['instructions']
+
+    row = json.loads(path.read_text())
+    assert row['web_search_calls'] == 1
+    assert row['web_search_used'] is True
+    assert 'secret user message' not in path.read_text()
+
+
+@pytest.mark.asyncio
+async def test_answer_can_disable_web_search(tmp_path, monkeypatch):
+    monkeypatch.setenv('CHAT_WEB_SEARCH', 'false')
+    path = tmp_path / 'usage.jsonl'
+    logger = UsageLogger(str(path))
+    client = NS(responses=NS(create=AsyncMock(return_value=response(10, 5))))
+
+    await logger.request(client, 'answer', model='test', instructions='base', input='secret')
+    logger.close()
+
+    kwargs = client.responses.create.await_args.kwargs
+    assert 'tools' not in kwargs
+    assert 'tool_choice' not in kwargs
+    assert kwargs['instructions'] == 'base'
+
+
+@pytest.mark.asyncio
 async def test_discord_exchange_aggregates_answer_and_summary_calls(tmp_path):
     path = tmp_path / 'usage.jsonl'
     logger = UsageLogger(str(path))
     client = NS(responses=NS(create=AsyncMock(side_effect=[
-        response(1000, 100, cached=400, reasoning=20),
+        response(1000, 100, cached=400, reasoning=20,
+                 output=[NS(type='web_search_call'), NS(type='message')]),
         response(300, 50, cached=100),
         response(200, 40),
     ])))
@@ -80,9 +131,11 @@ async def test_discord_exchange_aggregates_answer_and_summary_calls(tmp_path):
     assert row['total_tokens'] == 1690
     assert row['cached_tokens'] == 500
     assert row['reasoning_tokens'] == 20
+    assert row['web_search_calls'] == 1
     assert row['usage_complete'] is True
     assert row['models'] == ['chat-model', 'memory-model']
     assert row['operations']['answer']['total_tokens'] == 1100
+    assert row['operations']['answer']['web_search_calls'] == 1
     assert row['operations']['summarize']['total_tokens'] == 350
     assert row['operations']['summarize_shared']['total_tokens'] == 240
 
