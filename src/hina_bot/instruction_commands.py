@@ -4,7 +4,6 @@ import discord
 from discord import app_commands
 
 from .admin_list import created_compact, fit_table, sort_rows
-from .instructions import InstructionRegistry
 
 log = logging.getLogger("hina")
 
@@ -23,7 +22,7 @@ class InstructionCommands(app_commands.Group):
     def __init__(self, client):
         super().__init__(name="instruction", description="동적 캐릭터 instruction 관리 (봇 관리자 전용)")
         self.client = client
-        self.registry = InstructionRegistry(client.settings.instruction_path)
+        self.registry = client.llm.instructions
 
     async def interaction_check(self, interaction):
         # Bot ownership/BOT_ADMIN_IDS is the authority here, not guild Administrator permission.
