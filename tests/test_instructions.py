@@ -1,7 +1,9 @@
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace as NS
 
+from hina_bot.instruction_commands import InstructionCommands
 from hina_bot.instructions import InstructionRegistry
 
 
@@ -54,6 +56,14 @@ class InstructionRegistryTests(unittest.TestCase):
                 registry.add("valid-id", "중복")
             with self.assertRaises(ValueError):
                 registry.remove("missing-id")
+
+
+class InstructionCommandTests(unittest.TestCase):
+    def test_admin_visibility_defaults(self):
+        client = NS(settings=NS(instruction_path=""), emoji_admin_ids={100})
+        group = InstructionCommands(client)
+        self.assertTrue(group.guild_only)
+        self.assertTrue(group.default_permissions.administrator)
 
 
 if __name__ == "__main__":
