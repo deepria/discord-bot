@@ -49,6 +49,10 @@ class Store:
                 scope TEXT PRIMARY KEY,
                 mode TEXT NOT NULL CHECK(mode IN ('normal','read_only','write_only','off'))
             );
+            CREATE TABLE IF NOT EXISTS chat_log_modes (
+                scope TEXT PRIMARY KEY,
+                mode TEXT NOT NULL CHECK(mode IN ('on','off'))
+            );
             CREATE TABLE IF NOT EXISTS notes (scope TEXT PRIMARY KEY, text TEXT NOT NULL);
         """)
 
@@ -225,4 +229,44 @@ class Store:
 
     def memory_mode_overrides(self) -> dict[str, str]:
         rows = self.db.execute("SELECT scope,mode FROM memory_modes ORDER BY scope").fetchall()
+        return {row["scope"]: row["mode"] for row in rows}
+
+    def chat_log_mode_override(self, key: str) -> str | None:
+        row = self.db.execute("SELECT mode FROM chat_log_modes WHERE scope=?", (key,)).fetchone()
+        return row[0] if row else None
+
+    def chat_log_mode_chain(self, scope: Scope) -> dict[str, str | None]:
+        global_mode = self.chat_log_mode_override("global")
+        server_mode = self.chat_log_mode_override(scope.realm) if scope.guild_id is not None else None
+        channel_mode = self.chat_log_mode_override(scope.channel)
+        if channel_mode is not None:
+            effective, source = channel_mode, "channel"
+        elif server_mode is not None:
+            effective, source = server_mode, "server"
+        elif global_mode is not None:
+            effective, source = global_mode, "global"
+        else:
+            effective, source = "on", "default"
+        return {
+            "global": global_mode,
+            "server": server_mode,
+            "channel": channel_mode,
+            "effective": effective,
+            "source": source,
+        }
+
+    def chat_log_enabled(self, scope: Scope) -> bool:
+        return self.chat_log_mode_chain(scope)["effective"] == "on"
+
+    def set_chat_log_mode_override(self, key: str, mode: str | None):
+        if mode is not None and mode not in {"on", "off"}:
+            raise ValueError("Invalid chat log mode")
+        with self.db:
+            if mode is None:
+                self.db.execute("DELETE FROM chat_log_modes WHERE scope=?", (key,))
+            else:
+                self.db.execute("INSERT OR REPLACE INTO chat_log_modes VALUES (?,?)", (key, mode))
+
+    def chat_log_mode_overrides(self) -> dict[str, str]:
+        rows = self.db.execute("SELECT scope,mode FROM chat_log_modes ORDER BY scope").fetchall()
         return {row["scope"]: row["mode"] for row in rows}
