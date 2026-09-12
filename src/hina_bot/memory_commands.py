@@ -6,6 +6,7 @@ import discord
 from discord import app_commands
 
 from .instruction_commands import InstructionCommands
+from .knowledge_commands import ContextCommands, LoreCommands
 from .routing import Scope
 
 log = logging.getLogger("hina")
@@ -43,6 +44,8 @@ class MemoryCommands(app_commands.Group):
         # Tests sometimes construct this group with a minimal mock client that has no tree/settings.
         if hasattr(client, "tree") and hasattr(client, "settings"):
             client.tree.add_command(InstructionCommands(client))
+            client.tree.add_command(LoreCommands(client))
+            client.tree.add_command(ContextCommands(client))
 
     async def interaction_check(self, interaction):
         # Bot ownership/BOT_ADMIN_IDS is the authority here, not guild Administrator permission.
