@@ -22,6 +22,7 @@ class InstructionRegistryTests(unittest.TestCase):
             rows = registry.list()
             self.assertEqual([row["id"] for row in rows], ["meta_guard", "restraint"])
             self.assertTrue(all(row["enabled"] for row in rows))
+            self.assertTrue(all(row.get("created_at") for row in rows))
             self.assertIn("meta_guard", registry.active_text())
             self.assertIn("restraint", registry.active_text())
 
