@@ -2,8 +2,8 @@
 
 import json
 import logging
-from contextlib import contextmanager
 from contextvars import ContextVar
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
