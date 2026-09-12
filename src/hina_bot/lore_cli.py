@@ -164,6 +164,10 @@ def list_queue(_args) -> None:
     queue = read_jsonl(lore_pipeline.QUEUE_PATH)
     rows = [row for row in queue if row["status"] == "candidate"]
     suppressed = [row for row in queue if row["status"] == "suppressed"]
+    accepted_conflicts = [
+        row for row in queue
+        if row.get("status") == "accepted" and _has_web_conflict(row)
+    ]
     verification_counts = Counter()
 
     for row in rows:
@@ -200,17 +204,22 @@ def list_queue(_args) -> None:
             f"{status}={count}" for status, count in sorted(verification_counts.items())
         )
         print(f"web verification: {summary}")
+    if accepted_conflicts:
+        print(f"WARNING: accepted runtime web conflicts: {len(accepted_conflicts)}")
+        for row in accepted_conflicts[:20]:
+            print(f"  {row['id']}: {row['verification'].get('note', '')}")
 
 
 def _verify_targets(args, queue: list[dict]) -> tuple[list[dict], int]:
     if args.id is None and not any((args.source_type, args.id_prefix, args.title)):
         raise SystemExit(
-            "verify-web은 candidate id 또는 --source-type/--id-prefix/--title 중 하나가 필요합니다."
+            "verify-web은 id 또는 --source-type/--id-prefix/--title 중 하나가 필요합니다."
         )
 
+    statuses = set(getattr(args, "status", None) or ["candidate"])
     rows = []
     for row in queue:
-        if row.get("status") != "candidate" or row.get("lane") != "canon":
+        if row.get("status") not in statuses or row.get("lane") != "canon":
             continue
         if args.id is not None:
             if row.get("id") != args.id:
@@ -238,12 +247,14 @@ def verify_web(args) -> None:
     queue = read_jsonl(lore_pipeline.QUEUE_PATH)
     targets, total = _verify_targets(args, queue)
     if not targets:
-        raise SystemExit("웹 검증할 새 canon candidate가 없습니다.")
+        raise SystemExit("웹 검증할 새 canon 항목이 없습니다.")
 
     print(f"web verify targets: {len(targets)} / matched unchecked: {total}")
     if args.dry_run:
         for row in targets:
-            print(f"  {row['id']} [{fact_type(row)}] {row['summary']}")
+            print(
+                f"  {row['id']} [{row['status']}/{fact_type(row)}] {row['summary']}"
+            )
         print("실제 웹 검색 없음 (--dry-run)")
         return
 
@@ -267,6 +278,11 @@ def verify_web(args) -> None:
             f"(sources={len(verification.get('sources', []))}, "
             f"search_calls={verification.get('search_calls', 0)})"
         )
+        if row.get("status") == "accepted" and verification["status"] == "conflict":
+            print(
+                "  WARNING: 이미 runtime에 승인된 항목과 웹 검증 결과가 충돌합니다. "
+                "자동으로 runtime을 수정하지 않습니다."
+            )
 
     counts = Counter(
         row["verification"]["status"]
@@ -303,19 +319,25 @@ def parser() -> argparse.ArgumentParser:
     mode.add_argument("--yes", action="store_true", help="사전 검사를 통과한 후보를 실제로 승인합니다.")
     command.set_defaults(run=approve_all)
 
-    command = subparsers.add_parser("verify-web", help="canon 후보를 OpenAI 웹 검색으로 검증합니다.")
+    command = subparsers.add_parser("verify-web", help="canon 항목을 OpenAI 웹 검색으로 검증합니다.")
     command.add_argument("id", nargs="?")
     command.add_argument("--source-type")
     command.add_argument("--id-prefix")
     command.add_argument("--title")
     command.add_argument("--fact-type", action="append", choices=sorted(FACT_TYPES))
     command.add_argument(
+        "--status",
+        action="append",
+        choices=["candidate", "accepted"],
+        help="검증할 review 상태. 반복 지정 가능하며 기본은 candidate입니다.",
+    )
+    command.add_argument(
         "--limit",
         type=int,
         default=20,
-        help="한 번에 실제 검색할 최대 후보 수. 0이면 제한 없음 (기본 20).",
+        help="한 번에 실제 검색할 최대 항목 수. 0이면 제한 없음 (기본 20).",
     )
-    command.add_argument("--force", action="store_true", help="이미 검증된 후보도 다시 검색합니다.")
+    command.add_argument("--force", action="store_true", help="이미 검증된 항목도 다시 검색합니다.")
     command.add_argument("--dry-run", action="store_true", help="대상만 출력하고 웹 검색은 하지 않습니다.")
     command.add_argument(
         "--model",
