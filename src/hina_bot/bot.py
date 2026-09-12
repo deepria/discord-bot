@@ -2,6 +2,7 @@ import asyncio
 import logging
 import time
 import weakref
+from contextlib import nullcontext
 
 import discord
 
@@ -237,37 +238,41 @@ class HinaClient(discord.Client):
                 if not text:
                     await self.send_text(message.channel, "응, 선생님. 무슨 일이야?")
                     return
-                async with self.slots:
-                    async with message.channel.typing():
-                        sources = await self.public_sources(scope.user_id, guild_id) if use_memory else []
-                        context = self.store.public_context(sources) if use_memory else []
-                        emoji_catalog = await self.emoji_registry.catalog(message.channel)
-                        answer = await self.llm.answer(
-                            self.store, scope, message.author.display_name, text,
-                            public_context=context,
-                            channel_context=self.recent.context(scope, message.id) if use_memory else [],
-                            use_memory=use_memory,
-                            emoji_catalog=emoji_catalog)
-                        current = {e["id"] for e in await self.emoji_registry.catalog(message.channel)}
-                        answer = render_emojis(answer, [e for e in emoji_catalog if e["id"] in current])
-                        answer = neutralize_mentions(answer)
-                        if not answer:
-                            answer = "응, 선생님."
-                        sent = await message.channel.send(
-                            next(chunks(answer)), allowed_mentions=discord.AllowedMentions.none())
-                        for part in list(chunks(answer))[1:]:
-                            await message.channel.send(part, allowed_mentions=discord.AllowedMentions.none())
-                        if guild_id is not None and save_memory:
-                            self.recent.add(scope, sent.id, "히나", answer, role="assistant")
-                    # Commit only after Discord delivery. Never memorize a failed model request.
-                    if save_memory:
-                        self.store.add(scope, message.id, text, answer)
-                        self.store.add_shared_call(scope, message.id, message.author.display_name, text)
-                        for summarize in (self.llm.summarize, self.llm.summarize_shared):
-                            try:
-                                await summarize(self.store, scope)
-                            except Exception as exc:  # noqa: BLE001 - isolate summary failures; redact logs
-                                log.warning("Memory summary deferred (%s)", type(exc).__name__)
+                usage = getattr(self.llm, "usage", None)
+                exchange = (usage.exchange("guild" if guild_id is not None else "dm")
+                            if usage is not None and hasattr(usage, "exchange") else nullcontext())
+                with exchange:
+                    async with self.slots:
+                        async with message.channel.typing():
+                            sources = await self.public_sources(scope.user_id, guild_id) if use_memory else []
+                            context = self.store.public_context(sources) if use_memory else []
+                            emoji_catalog = await self.emoji_registry.catalog(message.channel)
+                            answer = await self.llm.answer(
+                                self.store, scope, message.author.display_name, text,
+                                public_context=context,
+                                channel_context=self.recent.context(scope, message.id) if use_memory else [],
+                                use_memory=use_memory,
+                                emoji_catalog=emoji_catalog)
+                            current = {e["id"] for e in await self.emoji_registry.catalog(message.channel)}
+                            answer = render_emojis(answer, [e for e in emoji_catalog if e["id"] in current])
+                            answer = neutralize_mentions(answer)
+                            if not answer:
+                                answer = "응, 선생님."
+                            sent = await message.channel.send(
+                                next(chunks(answer)), allowed_mentions=discord.AllowedMentions.none())
+                            for part in list(chunks(answer))[1:]:
+                                await message.channel.send(part, allowed_mentions=discord.AllowedMentions.none())
+                            if guild_id is not None and save_memory:
+                                self.recent.add(scope, sent.id, "히나", answer, role="assistant")
+                        # Commit only after Discord delivery. Never memorize a failed model request.
+                        if save_memory:
+                            self.store.add(scope, message.id, text, answer)
+                            self.store.add_shared_call(scope, message.id, message.author.display_name, text)
+                            for summarize in (self.llm.summarize, self.llm.summarize_shared):
+                                try:
+                                    await summarize(self.store, scope)
+                                except Exception as exc:  # noqa: BLE001 - isolate summary failures; redact logs
+                                    log.warning("Memory summary deferred (%s)", type(exc).__name__)
         except discord.HTTPException as exc:
             log.warning("Discord delivery failed (%s)", type(exc).__name__)
         except Exception as exc:  # noqa: BLE001 - isolate event/summary failures; redact logs
