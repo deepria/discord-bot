@@ -1,5 +1,6 @@
 import json
 import re
+from datetime import UTC, datetime
 from pathlib import Path
 
 MAX_ITEMS = 50
@@ -76,7 +77,12 @@ class InstructionRegistry:
             raise ValueError("이미 존재하는 instruction ID입니다.")
         if len(rows) >= MAX_ITEMS:
             raise ValueError(f"동적 instruction은 최대 {MAX_ITEMS}개까지 저장할 수 있습니다.")
-        rows.append({"id": identifier, "text": text, "enabled": True})
+        rows.append({
+            "id": identifier,
+            "text": text,
+            "enabled": True,
+            "created_at": datetime.now(UTC).isoformat(),
+        })
         self._validate_active_budget(rows)
         self._write(rows)
 
