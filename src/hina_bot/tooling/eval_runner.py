@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 
 from hina_bot.ai.runtime_llm import LLM
 
-from .config import Settings, SUPPORTED_MODEL_PROVIDERS
+from .config import SUPPORTED_MODEL_PROVIDERS, Settings
 from .routing import Scope
 from .store import Store
 
