@@ -1,7 +1,7 @@
 """Offline lore/evaluation command-line tooling."""
 
-from importlib import import_module
 import sys
+from importlib import import_module
 
 for _name in ("config", "lore", "routing", "store"):
     _module = import_module(f"hina_bot.core.{_name}")
