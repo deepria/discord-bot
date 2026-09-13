@@ -42,12 +42,15 @@ async def test_usage_success_and_error_do_not_log_content(tmp_path):
 async def test_missing_usage_is_unknown(tmp_path):
     path = tmp_path / 'usage.jsonl'
     logger = UsageLogger(str(path))
-    client = NS(responses=NS(create=AsyncMock(return_value=NS(status='incomplete', output=[]))))
+    incomplete = NS(
+        status='incomplete', output=[], _hina_error_codes=['budget_exceeded'], usage=None)
+    client = NS(responses=NS(create=AsyncMock(return_value=incomplete)))
     await logger.request(client, 'answer', model='test')
     logger.close()
     row = json.loads(path.read_text())
     assert row['input_tokens'] is None
     assert row['status'] == 'incomplete'
+    assert row['response_error_codes'] == ['budget_exceeded']
 
 
 @pytest.mark.asyncio
