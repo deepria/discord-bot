@@ -5,11 +5,11 @@ import httpx
 import pytest
 
 from hina_bot.ai.providers import (
+    ProviderAPIError,
     _gemini_input,
     _GeminiResponses,
     _OpenRouterResponses,
     normalize_provider,
-    ProviderAPIError,
 )
 
 
