@@ -98,7 +98,7 @@ class Settings:
 
         provider = _provider(os.getenv("LLM_PROVIDER", "openai"), "LLM_PROVIDER")
         memory_provider = _provider(
-            os.getenv("MEMORY_PROVIDER", provider), "MEMORY_PROVIDER")
+            os.getenv("MEMORY_PROVIDER", "").strip() or provider, "MEMORY_PROVIDER")
 
         # OPENAI_MODEL remains a backwards-compatible alias for existing deployments.
         model = (os.getenv("LLM_MODEL", "").strip()
