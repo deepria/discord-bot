@@ -5,6 +5,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 SUPPORTED_MODEL_PROVIDERS = frozenset({"openai", "gemini", "openrouter"})
+GEMINI_THINKING_LEVELS = frozenset({"minimal", "low", "medium", "high"})
 
 
 def parse_call_prefixes(value: str) -> tuple[str, ...]:
@@ -47,6 +48,8 @@ class Settings:
     openai_api_key: str = ""
     gemini_api_key: str = ""
     openrouter_api_key: str = ""
+    gemini_thinking_level: str = "low"
+    gemini_total_output_tokens: int = 4096
     db_path: str = "data/hina.sqlite3"
     prompt_path: str = ""
     instruction_path: str = ""
@@ -121,6 +124,14 @@ class Settings:
             if not keys[selected]:
                 raise ValueError(f"{_env_key(selected)}를 설정해 주세요.")
 
+        output_tokens = int(os.getenv("MAX_OUTPUT_TOKENS", "1000"))
+        gemini_thinking_level = os.getenv("GEMINI_THINKING_LEVEL", "low").strip().lower()
+        if gemini_thinking_level not in GEMINI_THINKING_LEVELS:
+            allowed = ", ".join(sorted(GEMINI_THINKING_LEVELS))
+            raise ValueError(f"GEMINI_THINKING_LEVEL은 {allowed} 중 하나여야 합니다.")
+        gemini_total_output_tokens = int(os.getenv(
+            "GEMINI_TOTAL_OUTPUT_TOKENS", str(max(4096, output_tokens))))
+
         dm = os.getenv("DM_ALWAYS_REPLY", "false").lower()
         if dm not in {"true", "false"}:
             raise ValueError("DM_ALWAYS_REPLY는 true 또는 false여야 합니다.")
@@ -139,6 +150,8 @@ class Settings:
             provider=provider, memory_provider=memory_provider,
             openai_api_key=keys["openai"], gemini_api_key=keys["gemini"],
             openrouter_api_key=keys["openrouter"],
+            gemini_thinking_level=gemini_thinking_level,
+            gemini_total_output_tokens=gemini_total_output_tokens,
             special_dm_user_id=int(os.environ["SPECIAL_DM_USER_ID"])
             if os.getenv("SPECIAL_DM_USER_ID", "").strip() else None,
             bot_admin_ids=frozenset(int(x.strip()) for x in
@@ -157,7 +170,7 @@ class Settings:
                                        os.getenv("ALLOWED_GUILD_IDS", "").split(",") if x.strip()),
             cooldown=float(os.getenv("COOLDOWN_SECONDS", "5")),
             concurrency=int(os.getenv("MAX_CONCURRENT_REQUESTS", "3")),
-            output_tokens=int(os.getenv("MAX_OUTPUT_TOKENS", "1000")),
+            output_tokens=output_tokens,
             summary_every=int(os.getenv("SUMMARY_EVERY", "8")),
             channel_context_chars=int(os.getenv("CHANNEL_CONTEXT_CHARS", "6000")),
             history_turns=int(os.getenv("HISTORY_TURNS", "12")),
@@ -173,11 +186,13 @@ class Settings:
             raise ValueError("SPECIAL_DM_USER_ID는 양의 Discord 사용자 ID여야 합니다.")
         if not (0 <= s.cooldown <= 3600 and 1 <= s.concurrency <= 20
                 and 128 <= s.output_tokens <= 4096
+                and s.output_tokens <= s.gemini_total_output_tokens <= 65536
                 and 0 <= s.history_max_chars <= 120000
                 and 0 <= s.channel_context_chars <= 12000
                 and 2 <= s.summary_every <= s.history_turns <= 30
                 and 0 <= s.lore_max_items <= 20 and 0 <= s.lore_max_chars <= 12000):
             raise ValueError("설정 범위 오류: cooldown 0~3600, concurrency 1~20, "
-                             "output_tokens 128~4096, 2 <= summary_every <= history_turns <= 30, "
+                             "output_tokens 128~4096, Gemini total output은 output_tokens~65536, "
+                             "2 <= summary_every <= history_turns <= 30, "
                              "lore_max_items 0~20, lore_max_chars 0~12000")
         return s
