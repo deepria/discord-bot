@@ -45,6 +45,7 @@ class Settings:
     lore_max_items: int = 6
     lore_max_chars: int = 3200
     community_lore: bool = True
+    chat_web_search: bool = True
 
     @classmethod
     def load(cls):
@@ -62,6 +63,9 @@ class Settings:
         community_lore = os.getenv("COMMUNITY_LORE", "true").lower()
         if community_lore not in {"true", "false"}:
             raise ValueError("COMMUNITY_LORE는 true 또는 false여야 합니다.")
+        chat_web_search = os.getenv("CHAT_WEB_SEARCH", "true").lower()
+        if chat_web_search not in {"true", "false"}:
+            raise ValueError("CHAT_WEB_SEARCH는 true 또는 false여야 합니다.")
         s = cls(
             api_key=api_key, discord_token=token,
             special_dm_user_id=int(os.environ["SPECIAL_DM_USER_ID"])
@@ -92,6 +96,7 @@ class Settings:
             lore_max_items=int(os.getenv("LORE_MAX_ITEMS", "6")),
             lore_max_chars=int(os.getenv("LORE_MAX_CHARS", "3200")),
             community_lore=community_lore == "true",
+            chat_web_search=chat_web_search == "true",
         )
         if s.special_dm_user_id is not None and s.special_dm_user_id <= 0:
             raise ValueError("SPECIAL_DM_USER_ID는 양의 Discord 사용자 ID여야 합니다.")
