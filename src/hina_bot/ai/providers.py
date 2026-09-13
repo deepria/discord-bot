@@ -1,6 +1,7 @@
 """Model-provider adapters for the bot runtime."""
 
 import json
+import logging
 from types import SimpleNamespace as NS
 from urllib.parse import urlsplit
 
@@ -10,6 +11,7 @@ from openai import AsyncOpenAI
 GEMINI_INTERACTIONS_URL = "https://generativelanguage.googleapis.com/v1beta/interactions"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 SUPPORTED_PROVIDERS = frozenset({"openai", "gemini", "openrouter"})
+log = logging.getLogger("hina")
 
 
 def normalize_provider(value: str) -> str:
@@ -207,7 +209,9 @@ class _GeminiResponses:
         try:
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
-            raise _gemini_http_error(response) from exc
+            error = _gemini_http_error(response)
+            log.warning("Provider request failed (%s)", error.safe_diagnostic)
+            raise error from exc
         return _gemini_output(response.json())
 
 
