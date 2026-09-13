@@ -120,12 +120,19 @@ def _gemini_output(data: dict):
         usage=usage,
     )
     response._hina_web_search_calls = web_search_calls
+    response._hina_error_codes = [
+        error.get("code") for error in data.get("errors") or []
+        if isinstance(error, dict) and isinstance(error.get("code"), str)
+    ]
     return response
 
 
 class _GeminiResponses:
-    def __init__(self, http: httpx.AsyncClient):
+    def __init__(self, http: httpx.AsyncClient, *, thinking_level: str = "low",
+                 total_output_tokens: int = 4096):
         self.http = http
+        self.thinking_level = thinking_level
+        self.total_output_tokens = total_output_tokens
 
     async def create(self, **kwargs):
         payload = {
@@ -137,10 +144,13 @@ class _GeminiResponses:
         if instructions:
             payload["system_instruction"] = instructions
 
-        generation_config = {}
+        generation_config = {"thinking_level": self.thinking_level}
         max_output_tokens = kwargs.get("max_output_tokens")
         if isinstance(max_output_tokens, int):
-            generation_config["max_output_tokens"] = max_output_tokens
+            # Gemini counts hidden thought tokens against max_output_tokens. Keep a separate
+            # provider budget so a short visible-answer limit does not cut reasoning off first.
+            generation_config["max_output_tokens"] = max(
+                max_output_tokens, self.total_output_tokens)
 
         tools = kwargs.get("tools") or []
         unknown_tools = [tool for tool in tools if tool.get("type") != "web_search"]
@@ -151,8 +161,7 @@ class _GeminiResponses:
             if kwargs.get("tool_choice") == "required":
                 generation_config["tool_choice"] = "any"
 
-        if generation_config:
-            payload["generation_config"] = generation_config
+        payload["generation_config"] = generation_config
 
         response = await self.http.post(GEMINI_INTERACTIONS_URL, json=payload)
         try:
@@ -166,12 +175,17 @@ class _GeminiResponses:
 class GeminiClient:
     provider_name = "gemini"
 
-    def __init__(self, credential: str, *, timeout: float = 45):
+    def __init__(self, credential: str, *, timeout: float = 45,
+                 thinking_level: str = "low", total_output_tokens: int = 4096):
         self._http = httpx.AsyncClient(
             timeout=timeout,
             headers={"x-goog-api-key": credential, "Content-Type": "application/json"},
         )
-        self.responses = _GeminiResponses(self._http)
+        self.responses = _GeminiResponses(
+            self._http,
+            thinking_level=thinking_level,
+            total_output_tokens=total_output_tokens,
+        )
 
     async def close(self):
         await self._http.aclose()
@@ -219,7 +233,11 @@ def create_provider_client(settings, provider: str):
     if not credential:
         raise ValueError(f"{provider} provider API key가 설정되지 않았습니다.")
     if provider == "gemini":
-        return GeminiClient(credential)
+        return GeminiClient(
+            credential,
+            thinking_level=settings.gemini_thinking_level,
+            total_output_tokens=settings.gemini_total_output_tokens,
+        )
     if provider == "openrouter":
         return OpenRouterClient(credential)
     return AsyncOpenAI(api_key=credential, timeout=45, max_retries=2)
