@@ -1,9 +1,9 @@
 """LLM orchestration, RP output policy, web search, and usage telemetry."""
 
-from importlib import import_module
 import sys
+from importlib import import_module
 
-# Existing modules use local relative imports.  Keep those imports readable while
+# Existing modules use local relative imports. Keep those imports readable while
 # the shared primitives live in hina_bot.core.
 for _name in (
     "admin_db",
