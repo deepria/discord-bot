@@ -51,8 +51,7 @@ async def test_missing_usage_is_unknown(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_answer_enables_auto_web_search_and_logs_usage(tmp_path, monkeypatch):
-    monkeypatch.setenv('CHAT_WEB_SEARCH', 'true')
+async def test_usage_preserves_caller_web_search_configuration_and_logs_it(tmp_path):
     path = tmp_path / 'usage.jsonl'
     logger = UsageLogger(str(path))
     web_response = response(
@@ -65,16 +64,17 @@ async def test_answer_enables_auto_web_search_and_logs_usage(tmp_path, monkeypat
         client,
         'answer',
         model='test',
-        instructions='base policy',
+        instructions='caller policy',
         input='secret user message',
+        tools=[{'type': 'web_search'}],
+        tool_choice='required',
     )
     logger.close()
 
     kwargs = client.responses.create.await_args.kwargs
     assert kwargs['tools'] == [{'type': 'web_search'}]
-    assert kwargs['tool_choice'] == 'auto'
-    assert '웹 검색은 fallback' in kwargs['instructions']
-    assert 'base policy' in kwargs['instructions']
+    assert kwargs['tool_choice'] == 'required'
+    assert kwargs['instructions'] == 'caller policy'
 
     row = json.loads(path.read_text())
     assert row['web_search_calls'] == 1
@@ -83,8 +83,7 @@ async def test_answer_enables_auto_web_search_and_logs_usage(tmp_path, monkeypat
 
 
 @pytest.mark.asyncio
-async def test_answer_can_disable_web_search(tmp_path, monkeypatch):
-    monkeypatch.setenv('CHAT_WEB_SEARCH', 'false')
+async def test_usage_logger_does_not_add_web_search_by_itself(tmp_path):
     path = tmp_path / 'usage.jsonl'
     logger = UsageLogger(str(path))
     client = NS(responses=NS(create=AsyncMock(return_value=response(10, 5))))
