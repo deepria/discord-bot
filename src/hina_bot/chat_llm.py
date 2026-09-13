@@ -1,7 +1,8 @@
 import json
 import re
 
-from .llm import LLM as BaseLLM, POLICY
+from .llm import LLM as BaseLLM
+from .llm import POLICY
 
 WEB_SEARCH_POLICY = """[현재 응답의 웹 검색]
 이 응답에서는 필요할 때 웹 검색 도구를 사용할 수 있습니다. 앞선 기본 정책에 웹 검색 능력이
