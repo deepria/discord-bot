@@ -20,6 +20,46 @@ def normalize_provider(value: str) -> str:
     return provider
 
 
+def _safe_error_text(value, limit: int = 300) -> str:
+    if not isinstance(value, str):
+        return ""
+    return " ".join(value.split())[:limit]
+
+
+class ProviderAPIError(RuntimeError):
+    """Provider error with diagnostics that are safe to write to content-free logs."""
+
+    def __init__(self, provider: str, status_code: int, *, code: str = "", message: str = ""):
+        self.provider = provider
+        self.status_code = status_code
+        self.error_code = _safe_error_text(code, 100)
+        self.error_message = _safe_error_text(message)
+        diagnostic = f"{provider} HTTP {status_code}"
+        if self.error_code:
+            diagnostic += f" {self.error_code}"
+        if self.error_message:
+            diagnostic += f": {self.error_message}"
+        self.safe_diagnostic = diagnostic
+        super().__init__(diagnostic)
+
+
+def _gemini_http_error(response: httpx.Response) -> ProviderAPIError:
+    code = ""
+    message = ""
+    try:
+        data = response.json()
+    except ValueError:
+        data = None
+    if isinstance(data, dict):
+        error = data.get("error")
+        if isinstance(error, dict):
+            raw_code = error.get("status") or error.get("code")
+            if raw_code is not None:
+                code = str(raw_code)
+            message = error.get("message") if isinstance(error.get("message"), str) else ""
+    return ProviderAPIError("gemini", response.status_code, code=code, message=message)
+
+
 def _text_content(value) -> str:
     if isinstance(value, str):
         return value
@@ -167,8 +207,7 @@ class _GeminiResponses:
         try:
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
-            body = response.text[:600].replace("\n", " ")
-            raise RuntimeError(f"Gemini API {response.status_code}: {body}") from exc
+            raise _gemini_http_error(response) from exc
         return _gemini_output(response.json())
 
 
