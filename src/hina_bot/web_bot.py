@@ -3,17 +3,28 @@ import logging
 from .bot import HinaClient as BaseHinaClient
 from .chat_llm import LLM
 from .config import Settings
+from .slash_commands import install_slash_commands
 
 log = logging.getLogger("hina")
 
 
 class HinaClient(BaseHinaClient):
-    """Discord client wired to the chat-time lore/web-search LLM."""
+    """Production Discord client wired to chat web search and slash-only controls."""
 
     def __init__(self, settings: Settings, *, store=None, llm=None):
         if llm is None:
             llm = LLM(settings)
         super().__init__(settings, store=store, llm=llm)
+        install_slash_commands(self)
+
+    @staticmethod
+    def _management_text(text):
+        # Runtime management no longer uses `히나야 /...` message commands.
+        return False
+
+    async def command(self, message, scope, text):
+        # All management/configuration commands are native Discord slash commands.
+        return None
 
 
 def main():
