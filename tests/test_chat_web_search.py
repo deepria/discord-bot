@@ -5,12 +5,12 @@ import httpx
 import pytest
 from openai import AsyncOpenAI
 
-from hina_bot.bot import LLM as DiscordLLM
 from hina_bot.chat_llm import LLM
 from hina_bot.config import Settings
 from hina_bot.lore import LoreIndex
 from hina_bot.routing import Scope
 from hina_bot.store import Store
+from hina_bot.web_bot import LLM as DiscordLLM
 
 
 @pytest.fixture
