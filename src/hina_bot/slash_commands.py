@@ -89,7 +89,7 @@ def upgrade_memory_group(client):
     """Turn the existing /memory admin group into the complete slash-only memory surface."""
     group = client.tree.get_command("memory")
     if not isinstance(group, app_commands.Group):
-        raise RuntimeError("/memory group is not registered")
+        raise TypeError("/memory group is not registered")
 
     async def selective_check(interaction: discord.Interaction) -> bool:
         command = getattr(interaction, "command", None)
