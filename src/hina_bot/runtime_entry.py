@@ -1,5 +1,5 @@
 from . import web_bot
-from .chat_llm_v2 import LLM
+from .runtime_llm import LLM
 
 
 def main():
