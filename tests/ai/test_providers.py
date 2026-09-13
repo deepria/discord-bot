@@ -75,10 +75,42 @@ async def test_gemini_translates_search_and_normalizes_response():
     assert payload["system_instruction"] == "system"
     assert payload["tools"] == [{"type": "google_search", "search_types": ["web_search"]}]
     assert payload["generation_config"]["tool_choice"] == "any"
+    assert payload["generation_config"]["thinking_level"] == "low"
+    assert payload["generation_config"]["max_output_tokens"] == 4096
     assert response.status == "completed"
     assert "example.com/source" in response.output_text
     assert response.usage.total_tokens == 17
     assert [item.type for item in response.output].count("web_search_call") == 1
+
+
+@pytest.mark.asyncio
+async def test_gemini_custom_reasoning_budget_is_forwarded():
+    seen = {}
+
+    async def handler(request: httpx.Request):
+        seen["json"] = __import__("json").loads(request.content)
+        return httpx.Response(200, json={
+            "status": "incomplete",
+            "steps": [],
+            "errors": [{"code": "budget_exceeded", "message": "limit"}],
+            "usage": {"total_thought_tokens": 2048, "total_tokens": 2048},
+        })
+
+    http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    try:
+        response = await _GeminiResponses(
+            http, thinking_level="minimal", total_output_tokens=2048,
+        ).create(model="gemini-test", input="hello", max_output_tokens=200, store=False)
+    finally:
+        await http.aclose()
+
+    config = seen["json"]["generation_config"]
+    assert config["thinking_level"] == "minimal"
+    assert config["max_output_tokens"] == 2048
+    assert response.status == "incomplete"
+    assert response.usage.output_tokens is None
+    assert response.usage.output_tokens_details.reasoning_tokens == 2048
+    assert response._hina_error_codes == ["budget_exceeded"]
 
 
 @pytest.mark.asyncio
