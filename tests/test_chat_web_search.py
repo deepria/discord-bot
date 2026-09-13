@@ -56,11 +56,11 @@ async def test_relation_question_requires_search_without_local_evidence(chat_llm
     try:
         await llm.answer(store, Scope(None, 20, 100), "사용자", "나기사 만나본 적 있어?")
         payload = calls[-1]
-        assert payload["tools"] == [{"type": "web_search"}]
+        assert payload["tools"] == [{"type": "web_search", "search_context_size": "low"}]
         assert payload["tool_choice"] == "required"
-        assert "세계관 사실 질문의 답변 방식" in payload["instructions"]
-        assert "직접 확인되는 대면" in payload["instructions"]
-        assert "같은 사건에 관여했다는 사실만으로" in payload["instructions"]
+        assert "현재 응답의 웹 검색" in payload["instructions"]
+        assert "세계관 사실 질문" in payload["instructions"]
+        assert "같은 사건 참여만으로 직접 대면했다고" in payload["instructions"]
     finally:
         store.close()
 
@@ -83,6 +83,7 @@ async def test_relation_question_still_searches_with_one_local_fact(chat_llm):
         await llm.answer(store, Scope(None, 20, 100), "사용자", "나기사 만나본 적 있어?")
         payload = calls[-1]
         assert payload["tool_choice"] == "required"
+        assert payload["tools"][0]["search_context_size"] == "low"
         reference = json.loads(payload["input"][0]["content"].split("\n", 1)[1])
         assert reference["lore_reference"][0]["reference"] == "test.hina.nagisa.meeting"
     finally:
@@ -90,7 +91,7 @@ async def test_relation_question_still_searches_with_one_local_fact(chat_llm):
 
 
 @pytest.mark.asyncio
-async def test_simple_fact_with_local_world_fact_keeps_search_optional(chat_llm):
+async def test_simple_fact_with_local_world_fact_has_no_web_tool_overhead(chat_llm):
     llm, calls = chat_llm
     llm.lore = LoreIndex([{
         "id": "test.hina.weapon",
@@ -105,7 +106,11 @@ async def test_simple_fact_with_local_world_fact_keeps_search_optional(chat_llm)
     store = Store(":memory:")
     try:
         await llm.answer(store, Scope(None, 20, 100), "사용자", "총 이름 뭐야?")
-        assert calls[-1]["tool_choice"] == "auto"
+        payload = calls[-1]
+        assert "tools" not in payload
+        assert "tool_choice" not in payload
+        assert "현재 응답의 웹 검색" not in payload["instructions"]
+        assert "세계관 사실 질문" in payload["instructions"]
     finally:
         store.close()
 
@@ -118,7 +123,8 @@ async def test_named_who_question_is_world_fact_not_self_identity(chat_llm):
         await llm.answer(store, Scope(None, 20, 100), "사용자", "나기사 누구야?")
         payload = calls[-1]
         assert payload["tool_choice"] == "required"
-        assert "세계관 사실 질문의 답변 방식" in payload["instructions"]
+        assert payload["tools"][0]["search_context_size"] == "low"
+        assert "세계관 사실 질문" in payload["instructions"]
     finally:
         store.close()
 
@@ -129,33 +135,53 @@ async def test_current_release_question_requires_search(chat_llm):
     store = Store(":memory:")
     try:
         await llm.answer(store, Scope(None, 20, 100), "사용자", "한섭에 지금 어디까지 공개됐어?")
-        assert calls[-1]["tool_choice"] == "required"
+        payload = calls[-1]
+        assert payload["tool_choice"] == "required"
+        assert payload["tools"] == [{"type": "web_search", "search_context_size": "low"}]
     finally:
         store.close()
 
 
 @pytest.mark.asyncio
-async def test_self_identity_question_is_not_forced_into_fact_search(chat_llm):
+async def test_self_identity_question_has_no_web_tool_overhead(chat_llm):
     llm, calls = chat_llm
     store = Store(":memory:")
     try:
         await llm.answer(store, Scope(None, 20, 100), "사용자", "너 누구야?")
         payload = calls[-1]
-        assert payload["tool_choice"] == "auto"
-        assert "세계관 사실 질문의 답변 방식" not in payload["instructions"]
+        assert "tools" not in payload
+        assert "tool_choice" not in payload
+        assert "현재 응답의 웹 검색" not in payload["instructions"]
+        assert "세계관 사실 질문" not in payload["instructions"]
     finally:
         store.close()
 
 
 @pytest.mark.asyncio
-async def test_personal_memory_question_is_not_forced_into_web_search(chat_llm):
+async def test_personal_memory_question_has_no_web_tool_overhead(chat_llm):
     llm, calls = chat_llm
     store = Store(":memory:")
     try:
         await llm.answer(store, Scope(None, 20, 100), "사용자", "내 생일 기억하고 있어?")
         payload = calls[-1]
-        assert payload["tool_choice"] == "auto"
-        assert "세계관 사실 질문의 답변 방식" not in payload["instructions"]
+        assert "tools" not in payload
+        assert "tool_choice" not in payload
+        assert "현재 응답의 웹 검색" not in payload["instructions"]
+        assert "세계관 사실 질문" not in payload["instructions"]
+    finally:
+        store.close()
+
+
+@pytest.mark.asyncio
+async def test_general_chat_has_no_web_search_prompt_or_tool(chat_llm):
+    llm, calls = chat_llm
+    store = Store(":memory:")
+    try:
+        await llm.answer(store, Scope(None, 20, 100), "사용자", "오늘 좀 피곤하네")
+        payload = calls[-1]
+        assert "tools" not in payload
+        assert "tool_choice" not in payload
+        assert "현재 응답의 웹 검색" not in payload["instructions"]
     finally:
         store.close()
 

@@ -3,6 +3,7 @@ import re
 
 from .llm import LLM as BaseLLM
 from .llm import POLICY
+from .web_search_runtime import tool_config
 
 WEB_SEARCH_POLICY = """[현재 응답의 웹 검색]
 이 응답에서는 필요할 때 웹 검색 도구를 사용할 수 있습니다. 앞선 기본 정책에 웹 검색 능력이
@@ -29,26 +30,11 @@ WEB_SEARCH_POLICY = """[현재 응답의 웹 검색]
 먼저 하지 말고 세계 안의 히나로 자연스럽게 답하세요.
 """
 
-WORLD_FACT_DETAIL_POLICY = """[세계관 사실 질문의 답변 방식]
-사용자가 인물·사건·관계·소속·장비·스토리에서 직접 있었던 일을 묻는 경우, 단순한 일반론
-한두 문장으로 끝내지 마세요. 먼저 질문에 직접 답하고, 근거가 있으면 실제로 어느 사건이나
-장면에서 어떤 상호작용이 있었는지 1~3개의 구체적인 맥락을 덧붙이세요. 마지막에는 현재
-관계나 의미를 과장하지 않고 짧게 정리할 수 있습니다.
-
-특히 '만나본 적 있어?', '무슨 사이야?', '그때 뭐 했어?', '알고 있었어?' 같은 질문은 다음을
-구분하세요.
-- 작중에서 직접 확인되는 대면·대사·행동
-- 여러 사건이나 역할을 연결하면 자연스럽게 도출되는 추론
-- 자료만으로는 확인할 수 없는 부분
-
-직접 확인되지 않은 만남 횟수, 친분, 대화 내용은 만들지 마세요. 서로 같은 사건에 참여했거나
-서로의 역할을 알고 있다는 사실은 관계의 맥락으로 활용할 수 있지만, 그것만으로 직접 만났다고
-단정하지 마세요. 반대로 명시적 대면 장면이 없더라도 업무상 위치, 공유 사건, 서로에 대한
-구체적인 언급이 여러 개 있으면 '서로 어떤 위치의 사람인지는 알고 있는 관계'처럼 근거 범위
-안에서 자연스럽게 정리할 수 있습니다.
-
-이런 사실 질문은 일반 대화의 1~4문장 제한보다 구체성이 우선하며, 보통 3~8문장 정도까지
-자연스럽게 답해도 됩니다. 다만 질문보다 불필요하게 장황해지지는 마세요.
+WORLD_FACT_DETAIL_POLICY = """[세계관 사실 질문]
+질문에 먼저 직접 답하고, 관련 장면·사건·시점이 확인되면 구체적인 맥락 1~3개를 덧붙이세요.
+직접 확인된 사실과 여러 정황을 연결한 추론을 구분하고, 같은 사건 참여만으로 직접 대면했다고
+단정하지 마세요. 확인되지 않은 만남 횟수·친분·대화 내용은 만들지 마세요. 이런 질문에서는
+일반 대화의 1~4문장 제한보다 구체성을 우선하되 불필요하게 장황해지지 마세요.
 """
 
 # 관계·사건·인지 범위 질문은 한 개의 로컬 claim으로 충분해 보이더라도 여러 장면을 연결해야
@@ -168,7 +154,7 @@ class LLM(BaseLLM):
         }, {"role": "user", "content": content}]
 
         instruction_parts = [POLICY, self.character, self.relationship_instructions(scope)]
-        if self.settings.chat_web_search:
+        if search_mode == "required":
             instruction_parts.append(WEB_SEARCH_POLICY)
         if fact_question:
             instruction_parts.append(WORLD_FACT_DETAIL_POLICY)
@@ -183,9 +169,10 @@ class LLM(BaseLLM):
             "max_output_tokens": self.settings.output_tokens,
             "store": False,
         }
-        if search_mode != "none":
-            request["tools"] = [{"type": "web_search"}]
-            request["tool_choice"] = search_mode
+        tools = tool_config(search_mode)
+        if tools:
+            request["tools"] = tools
+            request["tool_choice"] = "required"
 
         response = await self.usage.request(self.client, "answer", **request)
         if response.status != "completed" or not response.output_text.strip():
