@@ -10,7 +10,8 @@ WEB_SEARCH_POLICY = """[현재 응답의 웹 검색]
 
 웹 검색은 로컬 lore와 대화 문맥의 빈틈을 메우는 일회성 참고 수단입니다. 검색 결과를 자동으로
 기억이나 lore에 저장하지 마세요. 로컬 world_fact와 충돌하면 검색 결과만으로 기존 카논을
-덮어쓰지 말고 불확실성을 유지하세요.
+덮어쓰지 말고 불확실성을 유지하세요. 사용자의 개인 기억, 최근 채팅, 서버 안에서 방금 있었던
+대화처럼 이미 전달된 대화 문맥을 확인하는 질문에는 웹 검색을 사용하지 마세요.
 
 블루 아카이브의 구체적인 사실 질문에서는 모델의 사전 지식만으로 세부 사실을 확정하지 마세요.
 특히 인물 사이의 접점, 사건 참여, 누가 무엇을 알고 있었는지, 시점과 인과관계를 묻는 질문은
@@ -73,7 +74,12 @@ _CURRENT_QUERY = re.compile(
     re.IGNORECASE,
 )
 _SELF_IDENTITY_QUERY = re.compile(
-    r"(?:너|넌|니가|네가).*(?:누구|정체|AI|봇|모델)|(?:누구야|정체가\s*뭐야)$",
+    r"^\s*(?:너|넌|니가|네가|너는)\b.*(?:누구|정체|AI|봇|모델)",
+    re.IGNORECASE,
+)
+_PERSONAL_CONTEXT_QUERY = re.compile(
+    r"(?:내\s*(?:생일|이름|취향|정보|기억)|나에\s*대해|내가\s*(?:말한|얘기한)|"
+    r"기억해|기억하고|방금|아까|저번에|전에\s*말한|우리\s*(?:대화|얘기))",
     re.IGNORECASE,
 )
 
@@ -85,7 +91,7 @@ class LLM(BaseLLM):
 
     @classmethod
     def _looks_like_world_fact_question(cls, content: str) -> bool:
-        if _SELF_IDENTITY_QUERY.search(content):
+        if _SELF_IDENTITY_QUERY.search(content) or _PERSONAL_CONTEXT_QUERY.search(content):
             return False
         return bool(
             cls._looks_like_relation_or_event_question(content)
@@ -103,6 +109,8 @@ class LLM(BaseLLM):
     def _web_search_mode(self, content: str, references: list[dict]) -> str:
         if not self.settings.chat_web_search:
             return "none"
+        if _PERSONAL_CONTEXT_QUERY.search(content) or _SELF_IDENTITY_QUERY.search(content):
+            return "auto"
         if _CURRENT_QUERY.search(content):
             return "required"
         # 관계/사건 질문은 간접 사실 여러 개를 합쳐야 하는 경우가 많으므로 로컬 lore가 있어도
