@@ -1,7 +1,7 @@
 """Discord transport, slash commands, and runtime entry points."""
 
-from importlib import import_module
 import sys
+from importlib import import_module
 
 _CORE_ALIASES = (
     "admin_db",
