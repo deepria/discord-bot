@@ -5,9 +5,9 @@ import httpx
 import pytest
 
 from hina_bot.ai.providers import (
+    _gemini_input,
     _GeminiResponses,
     _OpenRouterResponses,
-    _gemini_input,
     normalize_provider,
 )
 
