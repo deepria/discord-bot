@@ -24,15 +24,15 @@ def slash_bot():
 def test_runtime_registers_unified_slash_commands(slash_bot):
     memory = slash_bot.tree.get_command("memory")
     assert memory is not None
-    for name in {
+    for name in (
         "mode", "chatlog", "status", "overview", "show", "note", "note-clear", "clear",
         "server-show", "server-note", "server-clear",
-    }:
+    ):
         assert memory.get_command(name) is not None
 
     emoji = slash_bot.tree.get_command("emoji")
     assert emoji is not None
-    for name in {"add", "list", "edit", "remove"}:
+    for name in ("add", "list", "edit", "remove"):
         assert emoji.get_command(name) is not None
 
     assert slash_bot.tree.get_command("instruction") is not None
