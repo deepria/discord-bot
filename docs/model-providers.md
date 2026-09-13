@@ -26,8 +26,11 @@ MEMORY_MODEL=
 
 ```dotenv
 LLM_PROVIDER=gemini
-LLM_MODEL=gemini-3.8-flash
+LLM_MODEL=gemini-3.5-flash
 GEMINI_API_KEY=...
+
+GEMINI_THINKING_LEVEL=low
+GEMINI_TOTAL_OUTPUT_TOKENS=4096
 
 MEMORY_PROVIDER=
 MEMORY_MODEL=
@@ -35,6 +38,22 @@ MEMORY_MODEL=
 
 Gemini는 Interactions API를 직접 사용합니다. `CHAT_WEB_SEARCH=true`일 때 검색이 필요한 답변은
 기존 내부 `web_search` 요청을 Google Search 도구로 변환합니다.
+
+Gemini 3.x의 `max_output_tokens`에는 사용자에게 보이는 답변뿐 아니라 내부 thought token도 포함됩니다.
+따라서 공통 설정인 `MAX_OUTPUT_TOKENS=1000`을 그대로 Gemini의 총 생성 한도로 사용하면, 요청에 따라
+모델이 생각에 토큰을 많이 쓰는 순간 `status=incomplete`와 빈 출력이 간헐적으로 발생할 수 있습니다.
+어댑터는 이를 피하기 위해 Gemini에 별도의 총 생성 예산을 적용합니다.
+
+- `GEMINI_THINKING_LEVEL`: `minimal`, `low`, `medium`, `high`. 짧은 Discord RP에는 `low`가 기본입니다.
+- `GEMINI_TOTAL_OUTPUT_TOKENS`: thought token을 포함한 Gemini의 총 생성 상한입니다. 기본값은
+  `max(4096, MAX_OUTPUT_TOKENS)`입니다.
+- `MAX_OUTPUT_TOKENS`: 앱의 일반 출력 크기 기준으로 계속 사용하며, Gemini 요청에서는 위 총 생성
+  예산보다 작을 경우 총 예산을 줄이지 않습니다.
+
+문제가 다시 발생하면 `data/logs/usage.jsonl`의 마지막 `answer` 행에서 `status`,
+`reasoning_tokens`, `response_error_codes`를 확인하세요. `status`가 `incomplete`이고
+`reasoning_tokens`가 총 생성 예산에 가까우면 `GEMINI_TOTAL_OUTPUT_TOKENS`를 늘리거나
+`GEMINI_THINKING_LEVEL=minimal`로 낮추는 것이 좋습니다.
 
 ### OpenRouter
 
@@ -57,7 +76,7 @@ OpenRouter에서는 OpenAI-compatible Responses API를 사용하고, 검색이 �
 
 ```dotenv
 LLM_PROVIDER=gemini
-LLM_MODEL=gemini-3.8-flash
+LLM_MODEL=gemini-3.5-flash
 GEMINI_API_KEY=...
 
 MEMORY_PROVIDER=openai
@@ -71,7 +90,7 @@ OPENAI_API_KEY=...
 
 ```bash
 uv run hina-eval --provider openai --model gpt-4.1-mini --limit 5
-uv run hina-eval --provider gemini --model gemini-3.8-flash --limit 5
+uv run hina-eval --provider gemini --model gemini-3.5-flash --limit 5
 uv run hina-eval --provider openrouter --model anthropic/claude-sonnet-4.6 --limit 5
 ```
 
