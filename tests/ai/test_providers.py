@@ -9,6 +9,7 @@ from hina_bot.ai.providers import (
     _GeminiResponses,
     _OpenRouterResponses,
     normalize_provider,
+    ProviderAPIError,
 )
 
 
@@ -111,6 +112,34 @@ async def test_gemini_custom_reasoning_budget_is_forwarded():
     assert response.usage.output_tokens is None
     assert response.usage.output_tokens_details.reasoning_tokens == 2048
     assert response._hina_error_codes == ["budget_exceeded"]
+
+
+@pytest.mark.asyncio
+async def test_gemini_http_error_exposes_safe_diagnostics():
+    async def handler(request: httpx.Request):
+        return httpx.Response(400, json={
+            "error": {
+                "code": 400,
+                "status": "INVALID_ARGUMENT",
+                "message": "generation_config.foo is not supported",
+            }
+        })
+
+    http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    try:
+        with pytest.raises(ProviderAPIError) as caught:
+            await _GeminiResponses(http).create(
+                model="gemini-test", input="secret prompt", max_output_tokens=200, store=False,
+            )
+    finally:
+        await http.aclose()
+
+    error = caught.value
+    assert error.provider == "gemini"
+    assert error.status_code == 400
+    assert error.error_code == "INVALID_ARGUMENT"
+    assert error.error_message == "generation_config.foo is not supported"
+    assert "secret prompt" not in error.safe_diagnostic
 
 
 @pytest.mark.asyncio
