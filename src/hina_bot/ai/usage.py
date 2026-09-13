@@ -168,6 +168,9 @@ class UsageLogger:
                                                 "reasoning_tokens", None),
                        web_search_calls=web_calls,
                        web_search_used=web_calls > 0)
+            error_codes = getattr(response, "_hina_error_codes", None)
+            if error_codes:
+                row["response_error_codes"] = list(error_codes)
             return response
         except BaseException as exc:
             row.update(status="error", error_type=type(exc).__name__)
