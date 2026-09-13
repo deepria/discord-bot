@@ -111,6 +111,19 @@ async def test_simple_fact_with_local_world_fact_keeps_search_optional(chat_llm)
 
 
 @pytest.mark.asyncio
+async def test_named_who_question_is_world_fact_not_self_identity(chat_llm):
+    llm, calls = chat_llm
+    store = Store(":memory:")
+    try:
+        await llm.answer(store, Scope(None, 20, 100), "사용자", "나기사 누구야?")
+        payload = calls[-1]
+        assert payload["tool_choice"] == "required"
+        assert "세계관 사실 질문의 답변 방식" in payload["instructions"]
+    finally:
+        store.close()
+
+
+@pytest.mark.asyncio
 async def test_current_release_question_requires_search(chat_llm):
     llm, calls = chat_llm
     store = Store(":memory:")
@@ -127,6 +140,19 @@ async def test_self_identity_question_is_not_forced_into_fact_search(chat_llm):
     store = Store(":memory:")
     try:
         await llm.answer(store, Scope(None, 20, 100), "사용자", "너 누구야?")
+        payload = calls[-1]
+        assert payload["tool_choice"] == "auto"
+        assert "세계관 사실 질문의 답변 방식" not in payload["instructions"]
+    finally:
+        store.close()
+
+
+@pytest.mark.asyncio
+async def test_personal_memory_question_is_not_forced_into_web_search(chat_llm):
+    llm, calls = chat_llm
+    store = Store(":memory:")
+    try:
+        await llm.answer(store, Scope(None, 20, 100), "사용자", "내 생일 기억하고 있어?")
         payload = calls[-1]
         assert payload["tool_choice"] == "auto"
         assert "세계관 사실 질문의 답변 방식" not in payload["instructions"]
