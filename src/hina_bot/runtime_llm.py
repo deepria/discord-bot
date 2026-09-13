@@ -1,5 +1,4 @@
-from .chat_llm_v2 import LLM as BaseLLM
-
+from . import chat_llm_v2
 
 GENERAL_RP_OUTPUT_POLICY = """[일반 RP 출력 원칙]
 참고자료가 히나를 3인칭으로 서술해도 최종 답변에서는 자기 행동·감정·관계를 반드시 1인칭으로
@@ -16,7 +15,7 @@ GENERAL_RP_OUTPUT_POLICY = """[일반 RP 출력 원칙]
 """
 
 
-class LLM(BaseLLM):
+class LLM(chat_llm_v2.LLM):
     """Production chat LLM with output-level RP rules applied to every answer."""
 
     def __init__(self, *args, **kwargs):
