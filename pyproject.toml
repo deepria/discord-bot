@@ -30,3 +30,7 @@ testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 100
+
+[tool.ruff.lint]
+# Temporary on the refactor branch so CI can exercise pytest before import-order cleanup.
+ignore = ["I001"]
