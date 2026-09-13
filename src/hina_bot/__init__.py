@@ -1,7 +1,7 @@
 """Hina Discord bot package."""
 
-from importlib import abc, import_module, util
 import sys
+from importlib import abc, import_module, util
 
 # Preserve the existing public LLM behavior after splitting implementation modules
 # into feature-oriented subpackages.
@@ -10,7 +10,7 @@ from .ai.chat_llm import LLM as _ChatLLM
 
 _llm.LLM = _ChatLLM
 
-# Temporary compatibility for the repository's existing flat import paths.  Runtime
+# Temporary compatibility for the repository's existing flat import paths. Runtime
 # entry points use the new package paths; these aliases keep scripts/tests and local
 # integrations working while callers migrate naturally.
 _LEGACY_MODULES = {
