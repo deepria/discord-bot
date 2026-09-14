@@ -44,7 +44,7 @@ class InstructionCommands(app_commands.Group):
             await interaction.response.send_message(text, ephemeral=True)
 
     @app_commands.command(name="add", description="새 동적 instruction 추가 및 즉시 활성화")
-    @app_commands.describe(identifier="영문 ID", text="히나에게 추가할 보조 지침")
+    @app_commands.describe(identifier="영문 ID", text="리오에게 추가할 보조 지침")
     async def add(self, interaction: discord.Interaction, identifier: str, text: str):
         try:
             self.registry.add(identifier, text)

@@ -20,7 +20,7 @@ log = logging.getLogger("hina")
 _ADMIN_MEMORY_COMMANDS = {"mode", "status", "overview", "purge"}
 _EMOJI_ALIAS_RE = re.compile(r"[a-z][a-z0-9_]{1,31}")
 
-HELP_TEXT = """일반 대화는 @멘션, 답장 핑, 또는 메시지 맨 앞의 `히나야`로 호출해 주세요.
+HELP_TEXT = """일반 대화는 @멘션, 답장 핑, 또는 메시지 맨 앞의 `리오야`로 호출해 주세요.
 관리·설정 기능은 Discord 슬래시 명령으로만 사용합니다.
 
 장기 기억
@@ -270,7 +270,7 @@ def upgrade_memory_group(client):
 @app_commands.allowed_installs(guilds=True, users=True)
 class EmojiSlashCommands(app_commands.Group):
     def __init__(self, client):
-        super().__init__(name="emoji", description="히나가 사용할 이모지 관리 (봇 관리자 전용)")
+        super().__init__(name="emoji", description="리오가 사용할 이모지 관리 (봇 관리자 전용)")
         self.client = client
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
@@ -312,7 +312,7 @@ class EmojiSlashCommands(app_commands.Group):
             markup = await self.client.emoji_registry.add(
                 alias, description, attachment=image, source=source)
         except ValueError as exc:
-            text = str(exc).replace("히나야 /이모지 수정", "/emoji edit")
+            text = str(exc).replace("리오야 /이모지 수정", "/emoji edit")
             await interaction.followup.send(text, ephemeral=True)
             return
         await interaction.followup.send(f"등록했어요: {markup} `:{alias}:`", ephemeral=True)
@@ -354,7 +354,7 @@ class EmojiSlashCommands(app_commands.Group):
                 markup = await self.client.emoji_registry.add(
                     alias, description, source=str(emoji.id))
             except ValueError as exc:
-                reason = str(exc).replace("히나야 /이모지 수정", "/emoji edit")
+                reason = str(exc).replace("리오야 /이모지 수정", "/emoji edit")
                 lines.append(f"`:{alias}:` ❌ {reason}")
                 continue
             success += 1
@@ -373,7 +373,7 @@ class EmojiSlashCommands(app_commands.Group):
         if not rows:
             await interaction.response.send_message("등록된 이모지가 없어요.", ephemeral=True)
             return
-        lines = [f"히나 이모지 {len(rows)}/20"]
+        lines = [f"리오 이모지 {len(rows)}/20"]
         for row in rows:
             preview = catalog.get(row["alias"], {}).get("markup", "(사용 불가)")
             description = discord.utils.escape_markdown(row["description"])
@@ -408,7 +408,7 @@ def install_slash_commands(client):
     client.tree.add_command(ChatLogCommands(client))
     client.tree.add_command(EmojiSlashCommands(client))
 
-    @app_commands.command(name="help", description="히나 봇 사용법과 관리 명령 보기")
+    @app_commands.command(name="help", description="리오 봇 사용법과 관리 명령 보기")
     async def help_command(interaction: discord.Interaction):
         await interaction.response.send_message(HELP_TEXT, ephemeral=True)
 

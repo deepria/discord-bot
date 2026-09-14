@@ -1,9 +1,9 @@
 """Small authoritative self-profile facts that must not depend on public web lookup."""
 
 _BIRTHDAY_REFERENCE = {
-    "reference": "local_profile.hina.birthday",
+    "reference": "local_profile.rio.birthday",
     "kind": "world_fact",
-    "content": "소라사키 히나의 생일은 2월 19일이다.",
+    "content": "츠카츠키 리오의 생일은 6월 6일이다.",
     "awareness": "self",
     "time": "프로필 상시 설정",
 }

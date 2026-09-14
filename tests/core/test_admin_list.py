@@ -3,13 +3,13 @@ from hina_bot.admin_list import clip_display, display_width, fit_table, sort_row
 
 def test_display_width_handles_korean_and_ascii():
     assert display_width("abc") == 3
-    assert display_width("히나") == 4
-    assert display_width("A히나") == 5
-    assert display_width(clip_display("히나의 기관총", 8)) <= 8
+    assert display_width("리오") == 4
+    assert display_width("A리오") == 5
+    assert display_width(clip_display("리오의 기관총", 8)) <= 8
 
 
 def test_fit_table_aligns_and_truncates():
-    rows = [[f"item-{i}", "사실/ON", "09-12 10:00Z", "히나 관련 설명 " * 4] for i in range(20)]
+    rows = [[f"item-{i}", "사실/ON", "09-12 10:00Z", "리오 관련 설명 " * 4] for i in range(20)]
     text = fit_table(
         "knowledge 20/200 · 추가 시간순",
         ["ID", "종류/상태", "추가(UTC)", "내용"],

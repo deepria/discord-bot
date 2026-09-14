@@ -7,7 +7,7 @@ from .chatlog_capture import capture_mode_chain, set_capture_mode_override
 
 _CAPTURE_CHOICES = [
     app_commands.Choice(name="all — 같은 채널의 일반 대화까지 포함", value="all"),
-    app_commands.Choice(name="direct — 히나에게 직접 말한 대화와 히나 답변만", value="direct"),
+    app_commands.Choice(name="direct — 리오에게 직접 말한 대화와 리오 답변만", value="direct"),
     app_commands.Choice(name="inherit — 상위 설정 따르기", value="inherit"),
 ]
 _TARGET_CHOICES = [

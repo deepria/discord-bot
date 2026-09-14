@@ -31,7 +31,7 @@ class RegistryTests(unittest.IsolatedAsyncioTestCase):
         self.store.close()
 
     async def test_source_registration_and_permissions(self):
-        await self.registry.add("hina_happy", "기쁠 때", source="<:히나웃음:1234>")
+        await self.registry.add("hina_happy", "기쁠 때", source="<:리오웃음:1234>")
         self.client.create_application_emoji.assert_not_awaited()
         same = NS(guild=NS(id=100, me=NS()))
         self.assertEqual((await self.registry.catalog(same))[0]["name"], "hina_happy")

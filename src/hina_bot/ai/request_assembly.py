@@ -95,7 +95,7 @@ class RequestAssembler(BaseLLM):
                 "message_id": str(turn["message_id"]),
                 "at": turn["created_at"],
                 "user": turn["content"],
-                "hina": turn["reply"],
+                "rio": turn["reply"],
             })
             used += size
             if len(selected) >= _SERVER_RECENT_TURNS:

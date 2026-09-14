@@ -36,7 +36,7 @@ def test_settings_load_uses_code_defaults_when_runtime_env_is_absent(monkeypatch
         monkeypatch.delenv(name, raising=False)
 
     settings = Settings.load()
-    assert settings.call_prefixes == ("히나야",)
+    assert settings.call_prefixes == ("리오야",)
     assert settings.dm_always_reply is False
     assert settings.public_memory_in_dm is True
     assert settings.chat_web_search is True
@@ -71,7 +71,7 @@ def test_runtime_settings_fall_back_to_code_defaults_without_db_override():
     store = Store(":memory:")
     try:
         settings = RuntimeSettings(_base(), store)
-        assert settings.call_prefixes == ("히나야",)
+        assert settings.call_prefixes == ("리오야",)
         assert settings.dm_always_reply is False
         assert settings.public_memory_in_dm is True
         assert settings.chat_web_search is True
@@ -94,7 +94,7 @@ def test_runtime_override_is_immediate_and_survives_reload(tmp_path: Path):
     settings = RuntimeSettings(base, store)
     assert settings.set_text("CHANNEL_CONTEXT_CHARS", "8000") == 8000
     assert settings.set_text("chat_web_search", "off") is False
-    assert settings.set_text("CALL_PREFIXES", "히나야, 히나") == ("히나야", "히나")
+    assert settings.set_text("CALL_PREFIXES", "리오야, 리오") == ("리오야", "리오")
     store.close()
 
     store = Store(str(db))
@@ -102,7 +102,7 @@ def test_runtime_override_is_immediate_and_survives_reload(tmp_path: Path):
         reloaded = RuntimeSettings(base, store)
         assert reloaded.channel_context_chars == 8000
         assert reloaded.chat_web_search is False
-        assert reloaded.call_prefixes == ("히나야", "히나")
+        assert reloaded.call_prefixes == ("리오야", "리오")
         assert reloaded.source("CHANNEL_CONTEXT_CHARS") == "db"
     finally:
         store.close()

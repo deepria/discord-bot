@@ -25,7 +25,7 @@ FACT_TYPE_TO_KIND = {
 }
 REFERENCE_ONLY_FACT_TYPES = {"adaptation", "fandom"}
 _TOKEN = re.compile(r"[0-9A-Za-z가-힣]{2,}")
-_STOPWORDS = {"히나", "히나야", "소라사키", "블루", "아카이브", "뭐야", "알려줘", "어떻게"}
+_STOPWORDS = {"리오", "리오야", "츠카츠키", "블루", "아카이브", "뭐야", "알려줘", "어떻게"}
 
 
 class LoreValidationError(ValueError):

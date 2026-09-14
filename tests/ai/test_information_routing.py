@@ -15,9 +15,9 @@ def fact(reference, content, awareness="direct_experience"):
 
 
 def test_self_profile_uses_local_lore_without_web():
-    request = classify_information_request("히나야 생일 언제야?")
+    request = classify_information_request("리오야 생일 언제야?")
     assert request.route == InformationRoute.LOCAL_LORE
-    assert request.lore_query == "소라사키 히나 생일"
+    assert request.lore_query == "츠카츠키 리오 생일"
     assert request.world_fact_question
     assert search_mode(request, [], enabled=True) == "none"
 
@@ -25,7 +25,7 @@ def test_self_profile_uses_local_lore_without_web():
 def test_omitted_self_subject_is_canonicalized():
     request = classify_information_request("오늘 키 몇이야?")
     assert request.route == InformationRoute.LOCAL_LORE
-    assert request.lore_query == "소라사키 히나 키"
+    assert request.lore_query == "츠카츠키 리오 키"
 
 
 def test_named_character_profile_can_fall_back_to_web():
@@ -50,7 +50,7 @@ def test_live_real_world_question_uses_web():
 
 def test_relation_query_uses_matching_local_event_evidence():
     request = classify_information_request("나기사 직접 만나본 적 있어?")
-    refs = [fact("canon.hina.nagisa.meeting", "히나는 나기사와 직접 만난 적이 있다.")]
+    refs = [fact("canon.hina.nagisa.meeting", "리오는 나기사와 직접 만난 적이 있다.")]
     assert request.route == InformationRoute.LOCAL_THEN_WEB
     assert "만남" in request.lore_query
     assert search_mode(request, refs, enabled=True) == "none"

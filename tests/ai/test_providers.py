@@ -231,7 +231,7 @@ async def test_ollama_chat_request_forces_thinking_off():
         response = await _OllamaResponses(http).create(
             model="qwen3.5:9b",
             instructions="system",
-            input=[{"role": "user", "content": "히나야"}],
+            input=[{"role": "user", "content": "리오야"}],
             max_output_tokens=200,
             store=False,
         )
@@ -245,7 +245,7 @@ async def test_ollama_chat_request_forces_thinking_off():
     assert payload["options"] == {"num_predict": 200}
     assert payload["messages"] == [
         {"role": "system", "content": "system"},
-        {"role": "user", "content": "히나야"},
+        {"role": "user", "content": "리오야"},
     ]
     assert response.status == "completed"
     assert response.output_text == "응."

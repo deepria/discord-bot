@@ -27,7 +27,7 @@ async def test_collects_image_attachment_and_ignores_non_image_attachment():
         filename="note.txt",
         read=AsyncMock(return_value=b"not an image"),
     )
-    message = NS(content="히나야 이거 봐", attachments=[image, text], stickers=[])
+    message = NS(content="리오야 이거 봐", attachments=[image, text], stickers=[])
 
     visuals = await collect_visual_inputs(message)
 
@@ -47,12 +47,12 @@ async def test_collects_custom_emoji_once_and_raster_sticker():
         return GIF if "/emojis/123." in url else PNG
 
     sticker = NS(
-        name="히나 스티커",
+        name="리오 스티커",
         url="https://cdn.discordapp.com/stickers/456.png",
         format=NS(name="png"),
     )
     message = NS(
-        content="히나야 <:hina_test:123> <:hina_test:123>",
+        content="리오야 <:hina_test:123> <:hina_test:123>",
         attachments=[],
         stickers=[sticker],
     )
@@ -61,7 +61,7 @@ async def test_collects_custom_emoji_once_and_raster_sticker():
 
     assert [(v.source, v.name) for v in visuals] == [
         ("emoji", "hina_test"),
-        ("sticker", "히나 스티커"),
+        ("sticker", "리오 스티커"),
     ]
     assert len([url for url in urls if "/emojis/123." in url]) == 1
     assert visuals[0].mime_type == "image/gif"
@@ -87,7 +87,7 @@ async def test_source_quotas_are_independent_and_skip_extra_downloads():
         )
         for index in range(3)
     ]
-    content = "히나야 " + " ".join(
+    content = "리오야 " + " ".join(
         f"<:emoji_{index}:{200 + index}>" for index in range(5)
     )
     message = NS(content=content, attachments=attachments, stickers=stickers)
@@ -138,7 +138,7 @@ async def test_lottie_sticker_is_not_sent_as_image():
         format=NS(name="lottie"),
     )
     downloader = AsyncMock(return_value=PNG)
-    message = NS(content="히나야", attachments=[], stickers=[sticker])
+    message = NS(content="리오야", attachments=[], stickers=[sticker])
 
     assert await collect_visual_inputs(message, downloader=downloader) == []
     downloader.assert_not_awaited()
@@ -180,7 +180,7 @@ async def test_image_only_trigger_reaches_llm_with_ephemeral_visual_context():
     )
     message = NS(
         id=1,
-        content="히나야",
+        content="리오야",
         author=author,
         guild=None,
         channel=channel,
@@ -196,6 +196,6 @@ async def test_image_only_trigger_reaches_llm_with_ephemeral_visual_context():
         assert len(observed) == 1
         assert observed[0].source == "attachment"
         assert observed[0].name == "photo.png"
-        assert message.content == "히나야"
+        assert message.content == "리오야"
     finally:
         await bot.close()

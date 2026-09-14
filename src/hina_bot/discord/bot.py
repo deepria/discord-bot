@@ -18,7 +18,7 @@ from .routing import Scope, chunks, trigger_text
 from .store import Store
 
 log = logging.getLogger("hina")
-HELP = """호출: @봇 멘션, 핑을 켠 답장, 또는 메시지 맨 앞의 `히나야`
+HELP = """호출: @봇 멘션, 핑을 켠 답장, 또는 메시지 맨 앞의 `리오야`
 관리는 호출 뒤에 아래 문구를 붙여 주세요. Discord 슬래시 명령은 아닙니다.
 `/기억` — 현재 채널의 내 요약과 개인 메모 확인
 `/메모 내용` — 같은 서버 내 채널에서 공유할 내 메모 교체 (DM은 분리)
@@ -172,7 +172,7 @@ class HinaClient(discord.Client):
             return "현재 모드는 새 기억 저장이 꺼져 있어요. /memory mode로 변경해 주세요."
         if cmd == "/메모":
             if not arg or len(arg) > 1500:
-                return "`히나야 /메모 내용` 형식으로 1~1500자를 입력해 주세요. 기존 메모를 교체해요."
+                return "`리오야 /메모 내용` 형식으로 1~1500자를 입력해 주세요. 기존 메모를 교체해요."
             self.store.set_note(scope.user_note, arg)
             return "개인 메모를 저장했어요. 서버에서는 같은 서버의 다른 채널에서도 참고해요."
         if cmd == "/메모삭제":
@@ -184,7 +184,7 @@ class HinaClient(discord.Client):
                     and not message.author.guild_permissions.manage_guild):
                 return "서버 단기 문맥 전체가 초기화되므로 봇 관리자 또는 서버 관리 권한이 필요해요."
             if arg != "확인":
-                return ("내 기억을 삭제하려면 `히나야 /기억삭제 확인`을 보내 주세요."
+                return ("내 기억을 삭제하려면 `리오야 /기억삭제 확인`을 보내 주세요."
                         + (" 현재 서버 전체의 단기 문맥도 초기화돼요." if scope.guild_id is not None else ""))
             self.store.forget(scope)
             self.recent.forget(scope)
@@ -331,7 +331,7 @@ class HinaClient(discord.Client):
                             for part in list(chunks(answer))[1:]:
                                 await message.channel.send(part, allowed_mentions=discord.AllowedMentions.none())
                             if guild_id is not None and use_chat_log:
-                                self.recent.add(scope, sent.id, "히나", answer, role="assistant")
+                                self.recent.add(scope, sent.id, "리오", answer, role="assistant")
                         # Commit only after Discord delivery. Never memorize a failed model request.
                         if save_memory:
                             self.store.add(scope, message.id, text, answer)

@@ -88,7 +88,7 @@ class SDKTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(payload["store"])
         self.assertNotIn("DM 비밀", str(payload))
         self.assertNotIn("must not enter server", str(payload))
-        self.assertIn("소라사키 히나", payload["instructions"])
+        self.assertIn("츠카츠키 리오", payload["instructions"])
 
     async def test_dm_reads_public_context_without_copying_to_summary_input(self):
         dm = Scope(None, 20, 100)
@@ -172,11 +172,11 @@ class SDKTests(unittest.IsolatedAsyncioTestCase):
         self.llm.lore = LoreIndex([{
             "id": "test.meme.head", "lane": "community_meme",
             "summary": "테스트용 반응 자료", "keywords": ["머리", "머리 크기"],
-            "subjects": ["히나"], "knowledge": "unknown", "timeline": "상시",
+            "subjects": ["리오"], "knowledge": "unknown", "timeline": "상시",
             "reaction": "머리 크기 놀림에는 짧게 발끈하거나 받아친다.",
         }])
         await self.llm.answer(self.store, Scope(None, 20, 100), "사용자",
-                              "히나야 머리가 왜 이렇게 크니")
+                              "리오야 머리가 왜 이렇게 크니")
         reference = json.loads(self.calls[-1]["input"][0]["content"].split("\n", 1)[1])
         lore = json.dumps(reference["lore_reference"], ensure_ascii=False)
         self.assertIn("optional_reaction", lore)
@@ -203,7 +203,7 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self):
         await self.bot.close()
 
-    def message(self, text="히나야 안녕", id=1):
+    def message(self, text="리오야 안녕", id=1):
         return NS(id=id, content=text, author=self.author, guild=self.guild,
                   channel=self.channel, mentions=[], webhook_id=None)
 
@@ -262,7 +262,7 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(self.store.note(other.user_note), "other stays")
 
     async def test_non_admin_cannot_write_server_note(self):
-        await self.bot.on_message(self.message("히나야 /서버메모 override"))
+        await self.bot.on_message(self.message("리오야 /서버메모 override"))
         self.assertEqual(self.store.note("guild:1"), "")
         self.llm.answer.assert_not_awaited()
 
@@ -290,7 +290,7 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
         self.llm.answer.assert_not_awaited()
         self.author = NS(id=200, bot=False, display_name="B",
                          guild_permissions=NS(manage_guild=False))
-        await self.bot.on_message(self.message("히나야 방금 A가 한 말 이상하지 않아?", id=2))
+        await self.bot.on_message(self.message("리오야 방금 A가 한 말 이상하지 않아?", id=2))
         context = self.llm.answer.call_args.kwargs["channel_context"]
         self.assertEqual(context[0]["user_id"], "100")
         self.assertEqual(context[0]["content"], "A의 일반 발언")
@@ -301,7 +301,7 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_emoji_message_bypasses_llm_and_memory_and_slash_tree(self):
         self.bot.emoji_admin_ids.add(self.author.id)
-        await self.bot.on_message(self.message("히나야 /이모지 목록"))
+        await self.bot.on_message(self.message("리오야 /이모지 목록"))
         self.llm.answer.assert_not_awaited()
         self.assertFalse(self.store.seen(1))
         self.assertEqual(self.bot.recent.context(Scope(1, 10, 100), 2), [])
@@ -309,7 +309,7 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(self.bot.tree.get_command("memory"))
 
     async def test_management_commands_do_not_enter_recent_context(self):
-        await self.bot.on_message(self.message("히나야 /메모 비밀처럼보이는메모", id=1))
+        await self.bot.on_message(self.message("리오야 /메모 비밀처럼보이는메모", id=1))
         self.assertEqual(self.bot.recent.context(Scope(1, 10, 100), 2), [])
 
     async def test_other_speakers_public_sources_available_in_server(self):
@@ -325,7 +325,7 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
         self.store.set_memory_mode(scope, "off")
         self.bot.public_sources = AsyncMock()
         await self.bot.on_message(self.message("ordinary", id=1))
-        await self.bot.on_message(self.message("히나야 current", id=2))
+        await self.bot.on_message(self.message("리오야 current", id=2))
         self.bot.public_sources.assert_not_awaited()
         self.assertFalse(self.llm.answer.call_args.kwargs["use_memory"])
         context = self.llm.answer.call_args.kwargs["channel_context"]
@@ -361,7 +361,7 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
         scope = Scope(1, 10, 100)
         self.store.set_note(scope.user_note, "old")
         self.store.set_memory_mode(scope, "off")
-        await self.bot.on_message(self.message("히나야 /메모 new", id=1))
+        await self.bot.on_message(self.message("리오야 /메모 new", id=1))
         self.assertEqual(self.store.note(scope.user_note), "old")
-        await self.bot.on_message(self.message("히나야 /메모삭제", id=2))
+        await self.bot.on_message(self.message("리오야 /메모삭제", id=2))
         self.assertEqual(self.store.note(scope.user_note), "")

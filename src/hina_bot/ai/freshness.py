@@ -46,7 +46,7 @@ _QUESTIONISH = re.compile(
     re.IGNORECASE,
 )
 _ROLEPLAY_NOW = re.compile(
-    r"^\s*(?:히나야[,!\s]*)?(?:(?:너|넌|너는)\s*)?(?:지금|오늘|요즘)?\s*"
+    r"^\s*(?:리오야[,!\s]*)?(?:(?:너|넌|너는)\s*)?(?:지금|오늘|요즘)?\s*"
     r"(?:뭐\s*해|뭐\s*하고|어디야|바빠|자고\s*있|기분\s*어때)",
     re.IGNORECASE,
 )

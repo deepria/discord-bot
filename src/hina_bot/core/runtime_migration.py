@@ -77,12 +77,12 @@ def parser() -> argparse.ArgumentParser:
     load_dotenv(Path.cwd() / ".env.local", override=False)
     load_dotenv(Path.cwd() / ".env", override=False)
     root = argparse.ArgumentParser(
-        description="기존 instruction/knowledge JSON을 hina SQLite DB로 이전합니다."
+        description="기존 instruction/knowledge JSON을 rio SQLite DB로 이전합니다."
     )
     root.add_argument(
         "--database",
-        default=os.getenv("DATABASE_PATH", "data/hina.sqlite3"),
-        help="대상 SQLite 경로 (기본: DATABASE_PATH 또는 data/hina.sqlite3)",
+        default=os.getenv("DATABASE_PATH", "data/rio.sqlite3"),
+        help="대상 SQLite 경로 (기본: DATABASE_PATH 또는 data/rio.sqlite3)",
     )
     root.add_argument(
         "--instructions",

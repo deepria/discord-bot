@@ -51,7 +51,7 @@ class ChatLogAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.store.set_chat_log_mode_override(scope.channel, "off")
 
         await self.bot.on_message(self.message("호출하지 않은 앞 대화", 1))
-        await self.bot.on_message(self.message("히나야 지금 질문", 2))
+        await self.bot.on_message(self.message("리오야 지금 질문", 2))
 
         self.llm.answer.assert_awaited_once()
         self.assertEqual(self.llm.answer.call_args.kwargs["channel_context"], [])
@@ -64,7 +64,7 @@ class ChatLogAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.store.set_memory_mode(scope, "off")
 
         await self.bot.on_message(self.message("호출하지 않은 앞 대화", 1))
-        await self.bot.on_message(self.message("히나야 지금 질문", 2))
+        await self.bot.on_message(self.message("리오야 지금 질문", 2))
 
         context = self.llm.answer.call_args.kwargs["channel_context"]
         self.assertEqual([row["content"] for row in context], ["호출하지 않은 앞 대화"])

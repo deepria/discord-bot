@@ -81,9 +81,9 @@ class HistoryBackfillTests(unittest.IsolatedAsyncioTestCase):
         messages = [
             self.old_message(1, "너무 오래된 대화", now - timedelta(minutes=20)),
             self.old_message(2, "최근 일반 대화", now - timedelta(minutes=5)),
-            self.old_message(3, "히나야 /메모 숨길 내용", now - timedelta(minutes=4)),
+            self.old_message(3, "리오야 /메모 숨길 내용", now - timedelta(minutes=4)),
             self.old_message(4, "다른 봇", now - timedelta(minutes=3), author_id=77, bot=True),
-            self.old_message(5, "이전 히나 답변", now - timedelta(minutes=2), author_id=99, bot=True),
+            self.old_message(5, "이전 리오 답변", now - timedelta(minutes=2), author_id=99, bot=True),
         ]
         channel = FakeHistoryChannel(messages)
         current = NS(id=10, created_at=now, channel=channel)
@@ -95,7 +95,7 @@ class HistoryBackfillTests(unittest.IsolatedAsyncioTestCase):
         await self.bot.hydrate_recent_history(current, scope)
 
         rows = self.bot.recent.context(scope, current.id)
-        self.assertEqual([row["content"] for row in rows], ["최근 일반 대화", "이전 히나 답변"])
+        self.assertEqual([row["content"] for row in rows], ["최근 일반 대화", "이전 리오 답변"])
         self.assertEqual([row["role"] for row in rows], ["user", "assistant"])
         self.assertFalse(self.bot.recent.needs_hydration(scope))
         self.assertEqual(channel.kwargs["before"], current)

@@ -22,11 +22,11 @@ _SIMPLE_WORLD_FACT_QUERY = re.compile(
     re.IGNORECASE,
 )
 _SELF_PROFILE_QUERY = re.compile(
-    r"^\s*(?:히나야[,!~\s]*)?(?:(?:지금|오늘|현재)\s*)?"
-    r"(?:(?:(?:소라사키\s*)?히나|너|넌|너는|너의|네|니)(?:은|는|이|가|의)?\s*)?"
+    r"^\s*(?:리오야[,!~\s]*)?(?:(?:지금|오늘|현재)\s*)?"
+    r"(?:(?:(?:츠카츠키\s*)?리오|너|넌|너는|너의|네|니)(?:은|는|이|가|의)?\s*)?"
     r"(?:(?:지금|오늘|현재)\s*)?"
     r"(?:생일|나이|몇\s*살|키|학년|소속|직책|취미|고유\s*무기|무기|"
-    r"(?:기관)?총\s*이름|무슨\s*총|학교|부서|헤일로|날개|뿔)",
+    r"(?:권총|총)\s*이름|무슨\s*총|학교|부서|헤일로|별명|빅\s*시스터)",
     re.IGNORECASE,
 )
 
@@ -36,11 +36,10 @@ _PROFILE_FIELDS = (
     (r"키", "키"),
     (r"학년", "학년"),
     (r"(?:소속|학교|부서|직책)", "소속 직책 학교 부서"),
-    (r"(?:고유\s*무기|무기|(?:기관)?총\s*이름|무슨\s*총)", "고유무기 무기 총 이름"),
+    (r"(?:고유\s*무기|무기|(?:권총|총)\s*이름|무슨\s*총)", "고유무기 무기 총 이름"),
     (r"취미", "취미"),
     (r"헤일로", "헤일로"),
-    (r"날개", "날개"),
-    (r"뿔", "뿔"),
+    (r"(?:별명|빅\s*시스터)", "별명 빅 시스터"),
 )
 
 
@@ -77,7 +76,7 @@ def lore_query(content: str, *, profile: bool, relation: bool) -> str:
             if re.search(pattern, content, re.IGNORECASE):
                 fields.extend(canonical.split())
         suffix = " ".join(dict.fromkeys(fields)) or content.strip()
-        return f"소라사키 히나 {suffix}".strip()
+        return f"츠카츠키 리오 {suffix}".strip()
     if relation:
         hints = []
         if re.search(r"만나|마주|대면|대화|친분|접점|서로\s*알", content):

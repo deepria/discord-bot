@@ -101,7 +101,7 @@ def eval_settings(args) -> Settings:
         or "http://127.0.0.1:11434",
         model=model,
         memory_model=model,
-        db_path=os.getenv("DATABASE_PATH", "data/hina.sqlite3"),
+        db_path=os.getenv("DATABASE_PATH", "data/rio.sqlite3"),
         prompt_path=os.getenv("CHARACTER_PROMPT_PATH", ""),
         instruction_path=os.getenv("INSTRUCTION_PATH", "data/instructions.json"),
         runtime_lore_path=os.getenv("RUNTIME_LORE_PATH", "data/runtime_lore.json"),
@@ -172,7 +172,7 @@ def write_results(results: list[dict], output: Path) -> tuple[Path, Path]:
     ), encoding="utf-8")
     report = output.with_suffix(".md")
     lines = [
-        "# Hina character eval results",
+        "# Rio character eval results",
         "",
         f"- cases: {len(results)}",
         f"- provider: `{results[0]['provider'] if results else ''}`",
@@ -232,7 +232,7 @@ async def run(args) -> None:
 
 
 def parser() -> argparse.ArgumentParser:
-    root = argparse.ArgumentParser(description="실제 모델로 히나 캐릭터·설정 회귀 테스트를 실행합니다.")
+    root = argparse.ArgumentParser(description="실제 모델로 리오 캐릭터·설정 회귀 테스트를 실행합니다.")
     root.add_argument("--cases", default=str(DEFAULT_CASES))
     root.add_argument("--id", action="append", help="특정 case id만 실행합니다. 반복 지정할 수 있습니다.")
     root.add_argument("--limit", type=int, help="앞에서부터 N개 case만 실행합니다.")

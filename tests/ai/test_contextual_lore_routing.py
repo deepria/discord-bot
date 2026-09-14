@@ -47,9 +47,9 @@ async def test_lore_followup_uses_previous_entity_but_keeps_visible_message():
         "id": "canon.test.kayoko.hina",
         "lane": "canon",
         "fact_type": "fact_direct",
-        "summary": "카요코와 히나는 과거 사건에서 직접 대면한 적이 있다.",
-        "keywords": ["카요코", "히나", "만남", "대면"],
-        "subjects": ["카요코", "히나"],
+        "summary": "카요코와 리오는 과거 사건에서 직접 대면한 적이 있다.",
+        "keywords": ["카요코", "리오", "만남", "대면"],
+        "subjects": ["카요코", "리오"],
         "knowledge": "direct_experience",
         "timeline": "테스트 사건",
     }])
@@ -57,12 +57,12 @@ async def test_lore_followup_uses_previous_entity_but_keeps_visible_message():
     scope = Scope(None, 20, 100)
     store.add(scope, 1, "카요코가 예전에 뭐 했어?", "예전 이야기를 물어보는 거네.")
     try:
-        await llm.answer(store, scope, "사용자", "그럼 걔는 히나랑 만난 적 있어?")
+        await llm.answer(store, scope, "사용자", "그럼 걔는 리오랑 만난 적 있어?")
         payload = calls[-1]
         reference = json.loads(payload["input"][0]["content"].split("\n", 1)[1])
         refs = [row.get("reference") for row in reference["lore_reference"]]
         assert "canon.test.kayoko.hina" in refs
-        assert payload["input"][-1]["content"] == "그럼 걔는 히나랑 만난 적 있어?"
+        assert payload["input"][-1]["content"] == "그럼 걔는 리오랑 만난 적 있어?"
     finally:
         await llm.close()
         store.close()

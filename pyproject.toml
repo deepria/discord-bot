@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "hina-discord-bot"
 version = "0.1.0"
-description = "Hina roleplay Discord bot with isolated persistent memory and OpenAI Responses API"
+description = "Rio roleplay Discord bot with isolated persistent memory and multi-provider LLM support"
 requires-python = ">=3.11"
 dependencies = ["discord.py>=2.7,<3", "openai>=1.68,<3", "python-dotenv>=1.0,<2"]
 

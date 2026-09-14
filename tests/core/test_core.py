@@ -15,16 +15,16 @@ def message(text="", *, mentions=(), bot=False, webhook=None, dm=False, referenc
 
 class RoutingTests(unittest.TestCase):
     def test_keyword_only_at_start(self):
-        self.assertEqual(trigger_text(message("  히나야, 안녕"), 99), "안녕")
-        self.assertIsNone(trigger_text(message("안녕 히나야"), 99))
-        self.assertEqual(trigger_text(message("히나야안녕"), 99), "안녕")
+        self.assertEqual(trigger_text(message("  리오야, 안녕"), 99), "안녕")
+        self.assertIsNone(trigger_text(message("안녕 리오야"), 99))
+        self.assertEqual(trigger_text(message("리오야안녕"), 99), "안녕")
 
     def test_configurable_prefixes_and_overlapping_match(self):
-        prefixes = parse_call_prefixes("히나, 히나야, 히나쨩, 히나")
-        self.assertEqual(prefixes, ("히나", "히나야", "히나쨩"))
-        self.assertEqual(trigger_text(message("히나쨩! 안녕"), 99, prefixes=prefixes), "안녕")
-        self.assertEqual(trigger_text(message("히나야안녕"), 99, prefixes=prefixes), "안녕")
-        self.assertIsNone(trigger_text(message("안녕 히나쨩"), 99, prefixes=prefixes))
+        prefixes = parse_call_prefixes("리오, 리오야, 리오쨩, 리오")
+        self.assertEqual(prefixes, ("리오", "리오야", "리오쨩"))
+        self.assertEqual(trigger_text(message("리오쨩! 안녕"), 99, prefixes=prefixes), "안녕")
+        self.assertEqual(trigger_text(message("리오야안녕"), 99, prefixes=prefixes), "안녕")
+        self.assertIsNone(trigger_text(message("안녕 리오쨩"), 99, prefixes=prefixes))
 
     def test_invalid_prefix_configuration(self):
         with self.assertRaises(ValueError):
@@ -43,13 +43,13 @@ class RoutingTests(unittest.TestCase):
         self.assertIsNone(trigger_text(message("안녕", reference=NS()), 99))
 
     def test_bot_and_webhook_never_trigger(self):
-        self.assertIsNone(trigger_text(message("히나야 안녕", bot=True), 99))
-        self.assertIsNone(trigger_text(message("히나야 안녕", webhook=1), 99))
+        self.assertIsNone(trigger_text(message("리오야 안녕", bot=True), 99))
+        self.assertIsNone(trigger_text(message("리오야 안녕", webhook=1), 99))
 
     def test_dm_config(self):
         self.assertIsNone(trigger_text(message("안녕", dm=True), 99))
         self.assertEqual(trigger_text(message("안녕", dm=True), 99, True), "안녕")
-        self.assertEqual(trigger_text(message("히나야 안녕", dm=True), 99), "안녕")
+        self.assertEqual(trigger_text(message("리오야 안녕", dm=True), 99), "안녕")
 
     def test_ping_only(self):
         self.assertEqual(trigger_text(message("<@99>", mentions=[99]), 99), "")

@@ -53,12 +53,12 @@ class Settings:
     ollama_base_url: str = "http://127.0.0.1:11434"
     gemini_thinking_level: str = "low"
     gemini_total_output_tokens: int = 4096
-    db_path: str = "data/hina.sqlite3"
+    db_path: str = "data/rio.sqlite3"
     prompt_path: str = ""
     instruction_path: str = ""
     runtime_lore_path: str = ""
     context_path: str = ""
-    call_prefixes: tuple[str, ...] = ("히나야",)
+    call_prefixes: tuple[str, ...] = ("리오야",)
     dm_always_reply: bool = False
     public_memory_in_dm: bool = True
     allowed_guild_ids: frozenset[int] = frozenset()
@@ -187,12 +187,12 @@ class Settings:
                                    os.getenv("BOT_ADMIN_IDS", "").split(",") if x.strip()),
             model=model,
             memory_model=memory_model,
-            db_path=os.getenv("DATABASE_PATH", "data/hina.sqlite3"),
+            db_path=os.getenv("DATABASE_PATH", "data/rio.sqlite3"),
             prompt_path=os.getenv("CHARACTER_PROMPT_PATH", ""),
             instruction_path=os.getenv("INSTRUCTION_PATH", "data/instructions.json"),
             runtime_lore_path=os.getenv("RUNTIME_LORE_PATH", "data/runtime_lore.json"),
             context_path=os.getenv("CONTEXT_PATH", "data/contexts.json"),
-            call_prefixes=parse_call_prefixes(os.getenv("CALL_PREFIXES", "히나야")),
+            call_prefixes=parse_call_prefixes(os.getenv("CALL_PREFIXES", "리오야")),
             dm_always_reply=dm == "true",
             public_memory_in_dm=public_memory == "true",
             allowed_guild_ids=frozenset(int(x.strip()) for x in

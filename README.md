@@ -1,6 +1,6 @@
-# Hina Discord Bot
+# Rio Discord Bot
 
-소라사키 히나를 연기하는 비공식 한국어 Discord 봇입니다. Python 3.11+, discord.py, SQLite와
+츠카츠키 리오를 연기하는 비공식 한국어 Discord 봇입니다. Python 3.11+, discord.py, SQLite와
 OpenAI/Gemini/OpenRouter/Ollama LLM provider를 사용합니다. 공식 서비스나 공식 대사 재현물은 아닙니다.
 
 현재 저장소는 캐릭터 RP, 장기 기억, 최근 채널 문맥, lore/runtime knowledge, 웹 검색 routing,
@@ -9,7 +9,7 @@ Discord에서 검증하고 있으며, 검증 전에는 버그 수정과 문서 �
 
 ## 주요 기능
 
-- `@멘션`, 답장 핑, 메시지 시작의 `히나야` 같은 호출어로 일반 대화
+- `@멘션`, 답장 핑, 메시지 시작의 `리오야` 같은 호출어로 일반 대화
 - 사용자별 장기 기억과 서버 내 공개 호출의 제한된 공유 기억
 - 장기 기억과 독립된 TTL 기반 최근 채널 문맥
 - 관리자용 서버 공통 메모, 동적 instruction, runtime knowledge
@@ -28,16 +28,18 @@ Discord에서 검증하고 있으며, 검증 전에는 버그 수정과 문서 �
 ```bash
 uv sync --extra dev
 cp .env.example .env.local
-# .env.local에 DISCORD_TOKEN과 선택한 provider API key를 입력
+# .env.local에 DISCORD_TOKEN을 입력하고 Ollama LAN 주소를 확인
 uv run hina-bot
 ```
 
-기본 provider 예시는 OpenAI입니다.
+기본 provider 예시는 Windows 데스크탑의 Ollama입니다. 11434 포트는 외부 인터넷에 열지 말고 LAN에서만
+접근하게 두세요.
 
 ```dotenv
-LLM_PROVIDER=openai
-LLM_MODEL=gpt-4.1-mini
-OPENAI_API_KEY=...
+LLM_PROVIDER=ollama
+LLM_MODEL=qwen3.5:9b
+OLLAMA_BASE_URL=http://172.30.1.71:11434
+CHAT_WEB_SEARCH=false
 DISCORD_TOKEN=...
 ```
 
@@ -64,7 +66,7 @@ Docker Compose에서는 named volume으로 보존합니다. 같은 SQLite를 여
 
 ## Discord 설정
 
-Discord Developer Portal에서 Bot을 만들고 **Message Content Intent**를 켭니다. `히나야`처럼 멘션
+Discord Developer Portal에서 Bot을 만들고 **Message Content Intent**를 켭니다. `리오야`처럼 멘션
 없는 호출어를 읽는 데 필요합니다.
 
 서버 초대에는 일반적으로 다음 권한이면 충분합니다.
@@ -81,18 +83,18 @@ Discord Developer Portal에서 Bot을 만들고 **Message Content Intent**를 �
 
 | 입력 | 기본 동작 |
 | --- | --- |
-| `@히나 오늘 어땠어?` | 응답 |
-| `히나야 오늘 어땠어?` | 응답 |
-| 히나 메시지에 답장 + 답장 핑 | 응답 |
-| 히나 메시지에 답장, 답장 핑 없음 | 다른 호출 조건이 없으면 응답하지 않음 |
+| `@리오 오늘 어땠어?` | 응답 |
+| `리오야 오늘 어땠어?` | 응답 |
+| 리오 메시지에 답장 + 답장 핑 | 응답 |
+| 리오 메시지에 답장, 답장 핑 없음 | 다른 호출 조건이 없으면 응답하지 않음 |
 | DM 일반 메시지 | 기본적으로 호출어/멘션 필요. `DM_ALWAYS_REPLY=true`로 변경 가능 |
 | 봇·웹훅 메시지 | 응답하지 않음 |
 
-기본 호출어는 `히나야`이며 `CALL_PREFIXES`에 쉼표로 구분해 여러 개를 지정할 수 있습니다.
+기본 호출어는 `리오야`이며 `CALL_PREFIXES`에 쉼표로 구분해 여러 개를 지정할 수 있습니다.
 
 ## 현재 턴 이미지 입력
 
-`feature/vision-input`의 1차 구현은 **현재 히나를 호출한 메시지**에 실제로 포함된 시각 입력만
+`feature/vision-input`의 1차 구현은 **현재 리오를 호출한 메시지**에 실제로 포함된 시각 입력만
 모델에 전달합니다.
 
 지원:
@@ -142,7 +144,7 @@ information routing이 provider의 웹 검색 기능을 사용합니다.
 - `지금 몇 시야?` → runtime clock
 - `서울 날씨 어때?` → web
 - `이번 추석 연휴 시작까지 며칠 남았어?` → 현재 날짜 + 공개 일정 확인
-- `히나 생일 언제야?` → local lore
+- `리오 생일 언제야?` → local lore
 
 비전은 이 routing과 별개의 입력 modality입니다. 예를 들어 이미지 속 장소를 보고 `지금 열었어?`라고
 묻는 요청은 이미지 해석과 web route를 동시에 사용할 수 있습니다.

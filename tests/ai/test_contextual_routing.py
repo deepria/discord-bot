@@ -15,11 +15,11 @@ def test_short_followup_reuses_same_speaker_topic():
         "content": "카요코가 예전에 뭐 했어?",
     }]
     try:
-        assert is_followup("그럼 걔는 히나랑 만난 적 있어?")
+        assert is_followup("그럼 걔는 리오랑 만난 적 있어?")
         anchor = find_anchor(store, scope, rows, use_memory=True)
-        query = build_query("그럼 걔는 히나랑 만난 적 있어?", anchor)
+        query = build_query("그럼 걔는 리오랑 만난 적 있어?", anchor)
         assert "카요코" in query
-        assert "히나랑 만난 적 있어?" in query
+        assert "리오랑 만난 적 있어?" in query
     finally:
         store.close()
 

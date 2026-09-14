@@ -17,15 +17,15 @@ class RuntimeKnowledgeRegistryTests(unittest.TestCase):
             database = AdminDatabase(str(Path(directory) / "hina.sqlite3"))
             registry = RuntimeKnowledgeRegistry(database, kind="world_fact")
             registry.add(
-                "hina.quote", "히나는 사건 뒤 선생과 대화했다.",
-                "에덴조약,선생,대화", "히나,선생", "self", "에덴조약 이후")
+                "hina.quote", "리오는 사건 뒤 선생과 대화했다.",
+                "에덴조약,선생,대화", "리오,선생", "self", "에덴조약 이후")
 
             item = registry.search("에덴조약 뒤 선생과 무슨 대화를 했어?")[0]
             self.assertEqual(item["kind"], "world_fact")
             self.assertEqual(item["awareness"], "self")
             self.assertTrue(item["reference"].startswith("runtime_lore."))
 
-            registry.edit("hina.quote", content="히나는 회복한 선생과 대화했다.")
+            registry.edit("hina.quote", content="리오는 회복한 선생과 대화했다.")
             self.assertIn("회복한", registry.get("hina.quote")["content"])
             registry.set_enabled("hina.quote", False)
             self.assertEqual(registry.search("에덴조약 선생"), [])
@@ -37,8 +37,8 @@ class RuntimeKnowledgeRegistryTests(unittest.TestCase):
         database = AdminDatabase(":memory:")
         registry = RuntimeKnowledgeRegistry(database, kind="interpretation")
         registry.add(
-            "hina.hoshino", "히나가 호시노를 비교 대상으로 든 이유에 대한 해석이다.",
-            "호시노처럼,호시노,비교", "히나,호시노", "inference", "에덴조약 이후")
+            "hina.hoshino", "리오가 호시노를 비교 대상으로 든 이유에 대한 해석이다.",
+            "호시노처럼,호시노,비교", "리오,호시노", "inference", "에덴조약 이후")
         item = registry.search("호시노처럼 될 수 없다는 말이 무슨 뜻이야?")[0]
         self.assertEqual(item["kind"], "interpretation")
         self.assertEqual(item["certainty"], "plausible_interpretation_not_established_fact")
@@ -52,9 +52,9 @@ class RuntimeKnowledgeRegistryTests(unittest.TestCase):
         database = AdminDatabase(":memory:")
         registry = RuntimeKnowledgeRegistry(database, kind="world_fact")
         with self.assertRaises(ValueError):
-            registry.add("valid.id", "내용", "", "히나", "self")
+            registry.add("valid.id", "내용", "", "리오", "self")
         with self.assertRaises(ValueError):
-            registry.add("valid.id", "내용", "키워드", "히나", "bad-awareness")
+            registry.add("valid.id", "내용", "키워드", "리오", "bad-awareness")
         database.close()
 
     def test_legacy_import_keeps_unknown_created_at_null(self):
@@ -64,7 +64,7 @@ class RuntimeKnowledgeRegistryTests(unittest.TestCase):
             "id": "legacy.fact",
             "content": "예전 지식",
             "keywords": ["예전"],
-            "subjects": ["히나"],
+            "subjects": ["리오"],
             "awareness": "unknown",
             "timeline": "시점 미지정",
             "enabled": True,
@@ -99,9 +99,9 @@ class KnowledgeIngestorTests(unittest.IsolatedAsyncioTestCase):
                 {
                     "id": "eden.hina.hoshino-quote",
                     "kind": "world_fact",
-                    "content": "히나는 에덴조약 사태 이후 자신이 호시노처럼 될 수 없다고 말했다.",
+                    "content": "리오는 에덴조약 사태 이후 자신이 호시노처럼 될 수 없다고 말했다.",
                     "keywords": ["호시노처럼", "에덴조약"],
-                    "subjects": ["히나", "호시노"],
+                    "subjects": ["리오", "호시노"],
                     "awareness": "self",
                     "timeline": "에덴조약 사태 이후",
                     "action": "add",
@@ -112,9 +112,9 @@ class KnowledgeIngestorTests(unittest.IsolatedAsyncioTestCase):
                 {
                     "id": "hina.hoshino-comparison",
                     "kind": "interpretation",
-                    "content": "히나는 상실 뒤에도 후배들을 이끄는 호시노를 자신과 대비했을 수 있다.",
+                    "content": "리오는 상실 뒤에도 후배들을 이끄는 호시노를 자신과 대비했을 수 있다.",
                     "keywords": ["호시노", "비교", "유메"],
-                    "subjects": ["히나", "호시노", "유메"],
+                    "subjects": ["리오", "호시노", "유메"],
                     "awareness": "inference",
                     "timeline": "에덴조약 사태 이후",
                     "action": "add",
@@ -127,7 +127,7 @@ class KnowledgeIngestorTests(unittest.IsolatedAsyncioTestCase):
                     "kind": "world_fact",
                     "content": "서로 모순되는 세부 정보다.",
                     "keywords": ["세부 정보"],
-                    "subjects": ["히나"],
+                    "subjects": ["리오"],
                     "awareness": "unknown",
                     "timeline": "시점 미지정",
                     "action": "hold",
@@ -154,14 +154,14 @@ class KnowledgeIngestorTests(unittest.IsolatedAsyncioTestCase):
         facts = RuntimeKnowledgeRegistry(database, kind="world_fact")
         contexts = RuntimeKnowledgeRegistry(database, kind="interpretation")
         facts.add(
-            "existing.quote", "히나는 에덴조약 이후 선생과 대화하며 호시노처럼 될 수 없다고 말했다.",
-            "호시노처럼,에덴조약", "히나,호시노,선생", "self", "에덴조약 이후")
+            "existing.quote", "리오는 에덴조약 이후 선생과 대화하며 호시노처럼 될 수 없다고 말했다.",
+            "호시노처럼,에덴조약", "리오,호시노,선생", "self", "에덴조약 이후")
         payload = {"items": [{
             "id": "new.quote",
             "kind": "world_fact",
-            "content": "히나는 에덴조약 이후 선생과 대화하며 호시노처럼 될 수 없다고 말했다.",
+            "content": "리오는 에덴조약 이후 선생과 대화하며 호시노처럼 될 수 없다고 말했다.",
             "keywords": ["호시노처럼", "에덴조약"],
-            "subjects": ["히나", "호시노", "선생"],
+            "subjects": ["리오", "호시노", "선생"],
             "awareness": "self",
             "timeline": "에덴조약 이후",
             "action": "add",
@@ -182,24 +182,24 @@ class KnowledgeIngestorTests(unittest.IsolatedAsyncioTestCase):
         contexts = RuntimeKnowledgeRegistry(database, kind="interpretation")
         facts.add(
             "ingame_no_exact_model_name",
-            "히나가 쓰는 총의 정확한 총기 모델명은 인게임에서 나온 적이 없다.",
-            "총기 모델명,MG42,인게임", "히나,기관총", "public_knowledge", "상시")
+            "리오가 쓰는 총의 정확한 총기 모델명은 인게임에서 나온 적이 없다.",
+            "총기 모델명,MG42,인게임", "리오,기관총", "public_knowledge", "상시")
         contexts.add(
             "hina_mg42_guess",
-            "히나가 사용하는 총은 MG42로 추측된다.",
-            "MG42,기관총,총", "히나,기관총", "inference", "상시")
+            "리오가 사용하는 총은 MG42로 추측된다.",
+            "MG42,기관총,총", "리오,기관총", "inference", "상시")
         contexts.add(
             "appearance_and_usage_basis",
             "외형과 사용법을 보면 MG42로 추측할 수 있다.",
-            "외형,사용법,MG42", "히나,기관총", "inference", "상시")
+            "외형,사용법,MG42", "리오,기관총", "inference", "상시")
 
         payload = {"items": [
             {
                 "id": "hina.weapon-name",
                 "kind": "world_fact",
-                "content": "히나가 사용하는 기관총의 게임 내 이름은 '종막의 디스트로이어'다.",
-                "keywords": ["종막의 디스트로이어", "기관총", "무기 이름"],
-                "subjects": ["히나", "기관총"],
+                "content": "리오가 사용하는 기관총의 게임 내 이름은 'Planner'다.",
+                "keywords": ["Planner", "기관총", "무기 이름"],
+                "subjects": ["리오", "기관총"],
                 "awareness": "self",
                 "timeline": "상시",
                 "action": "add",
@@ -210,9 +210,9 @@ class KnowledgeIngestorTests(unittest.IsolatedAsyncioTestCase):
             {
                 "id": "real-gun-model-not-explicit",
                 "kind": "world_fact",
-                "content": "히나의 기관총이 현실의 어떤 총기 모델에 대응되는지는 게임에서 명시되지 않았다.",
+                "content": "리오의 기관총이 현실의 어떤 총기 모델에 대응되는지는 게임에서 명시되지 않았다.",
                 "keywords": ["현실 총기", "MG42", "모델", "명시"],
-                "subjects": ["히나", "기관총"],
+                "subjects": ["리오", "기관총"],
                 "awareness": "public_knowledge",
                 "timeline": "상시",
                 "action": "update",
@@ -223,9 +223,9 @@ class KnowledgeIngestorTests(unittest.IsolatedAsyncioTestCase):
             {
                 "id": "hina_mg42_guess",
                 "kind": "interpretation",
-                "content": "히나의 기관총은 외형과 운용 방식 때문에 현실의 MG42를 모티브로 한 것으로 추측된다.",
+                "content": "리오의 기관총은 외형과 운용 방식 때문에 현실의 MG42를 모티브로 한 것으로 추측된다.",
                 "keywords": ["MG42", "모티브", "외형", "운용 방식"],
-                "subjects": ["히나", "기관총", "MG42"],
+                "subjects": ["리오", "기관총", "MG42"],
                 "awareness": "inference",
                 "timeline": "상시",
                 "action": "update",
@@ -236,7 +236,7 @@ class KnowledgeIngestorTests(unittest.IsolatedAsyncioTestCase):
         ]}
         llm = self.fake_llm(database, facts, contexts, payload)
         result = await KnowledgeIngestor(llm).ingest(
-            "히나가 사용하는 기관총의 이름은 게임 기준으로 종막의 디스트로이어이며, "
+            "리오가 사용하는 기관총의 이름은 게임 기준으로 Planner이며, "
             "현실의 MG42가 모티브로 추측된다. 현실 대응 총기 모델은 명시되지 않았다.")
 
         self.assertEqual(len(result["added"]), 1)
@@ -244,7 +244,7 @@ class KnowledgeIngestorTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["removed"], [{
             "id": "appearance_and_usage_basis", "superseded_by": "hina_mg42_guess"}])
         self.assertIn("현실의 어떤 총기", facts.get("ingame_no_exact_model_name")["content"])
-        self.assertIn("종막의 디스트로이어", facts.get("hina.weapon-name")["content"])
+        self.assertIn("Planner", facts.get("hina.weapon-name")["content"])
         self.assertIn("외형과 운용 방식", contexts.get("hina_mg42_guess")["content"])
         with self.assertRaises(ValueError):
             contexts.get("appearance_and_usage_basis")

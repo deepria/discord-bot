@@ -45,7 +45,7 @@ async def test_explicit_reply_is_available_even_when_direct_capture_omits_side_c
         )
         message = NS(
             id=42,
-            content="히나야 이 사람 왜 이럴까",
+            content="리오야 이 사람 왜 이럴까",
             author=NS(id=100, bot=False),
             channel=channel,
             reference=NS(message_id=41, channel_id=10, resolved=target),
@@ -81,7 +81,7 @@ async def test_reply_to_other_bot_is_marked_as_bot_context():
     )
     message = NS(
         id=52,
-        content="히나야 얘 왜 이래",
+        content="리오야 얘 왜 이래",
         author=NS(id=100, bot=False),
         channel=channel,
         reference=NS(message_id=51, channel_id=10, resolved=target),

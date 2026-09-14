@@ -291,7 +291,7 @@ fact_direct로, [UNKNOWN]을 긍정 사실로 바꾸지 마세요.
 재서술하세요. 원문을 길게 복제하지 마세요.
 
 [종류별 summary 규칙]
-fact_reported는 반드시 발화자/보고 주체를 남기세요. 예: '히나는 X라고 말했다.'
+fact_reported는 반드시 발화자/보고 주체를 남기세요. 예: '리오는 X라고 말했다.'
 unknown은 반드시 부정적 경계 형태를 보존하세요. 예: 'X라고 공식적으로 확정된 근거는 없다.'
 inference는 '~로 해석할 수 있다', '~로 보인다'처럼 확정도를 보존하세요.
 adaptation은 어떤 매체인지 summary나 timeline에서 구분하세요.
@@ -314,16 +314,16 @@ community_wiki가 '친하다', '연모한다', '경멸한다', '존경한다', '
 한 인물의 행동을 다른 인물의 감정으로 뒤집지 마세요. A가 B를 두려워하는 장면은 B가 A를
 두려워한다는 근거가 아닙니다. 제3자의 평가도 당사자의 내면을 증명하지 않습니다.
 
-[히나의 인지 범위]
-knowledge는 정보의 공개 여부가 아니라 '히나가 이 사실을 어떤 경로로 알 수 있는가'입니다.
-- self: 히나 자신의 프로필·지속적 특성처럼 본인이 당연히 아는 자기 정보
-- direct_experience: 히나가 직접 참여하거나 목격한 특정 사건·대화·행동
-- reported: 다른 인물이나 보고를 통해 히나가 전달받았다고 확인되는 정보
+[리오의 인지 범위]
+knowledge는 정보의 공개 여부가 아니라 '리오가 이 사실을 어떤 경로로 알 수 있는가'입니다.
+- self: 리오 자신의 프로필·지속적 특성처럼 본인이 당연히 아는 자기 정보
+- direct_experience: 리오가 직접 참여하거나 목격한 특정 사건·대화·행동
+- reported: 다른 인물이나 보고를 통해 리오가 전달받았다고 확인되는 정보
 - public_knowledge: 세계 안에서 공개되어 있거나 직책상 통상 알고 있다고 볼 근거가 있는 외부 사실
-- inference: 히나가 확인된 단서에서 합리적으로 추론할 수 있지만 직접 확인되지는 않은 정보
-- audience_only: 독자·플레이어에게만 공개되고 히나가 알았다는 근거가 없는 정보
-- unknown: 자료만으로 히나의 인지 경로를 판단할 수 없는 정보
-히나가 직접 참가한 이벤트나 본인이 한 행동을 public_knowledge로 분류하지 마세요.
+- inference: 리오가 확인된 단서에서 합리적으로 추론할 수 있지만 직접 확인되지는 않은 정보
+- audience_only: 독자·플레이어에게만 공개되고 리오가 알았다는 근거가 없는 정보
+- unknown: 자료만으로 리오의 인지 경로를 판단할 수 없는 정보
+리오가 직접 참가한 이벤트나 본인이 한 행동을 public_knowledge로 분류하지 마세요.
 
 [community_meme]
 community_meme 자료에서는 밈을 공식 설정으로 바꾸지 말고 reaction에 캐릭터 붕괴 없는
@@ -523,7 +523,7 @@ def validate_all(_args) -> None:
 
 
 def parser() -> argparse.ArgumentParser:
-    root = argparse.ArgumentParser(description="히나 설정·커뮤니티 밈 정제 파이프라인")
+    root = argparse.ArgumentParser(description="리오 설정·커뮤니티 밈 정제 파이프라인")
     commands = root.add_subparsers(dest="command", required=True)
 
     p = commands.add_parser("ingest-file")

@@ -18,7 +18,7 @@ class InstructionRegistryTests(unittest.TestCase):
             self.assertEqual(registry.list(), [])
             self.assertEqual(registry.active_text(), "")
 
-            registry.add("meta_guard", "메타 질문에도 세계 안의 히나로 답하세요.")
+            registry.add("meta_guard", "메타 질문에도 세계 안의 리오로 답하세요.")
             registry.add("restraint", "말줄임표를 반복하지 마세요.")
             rows = registry.list()
             self.assertEqual([row["id"] for row in rows], ["meta_guard", "restraint"])

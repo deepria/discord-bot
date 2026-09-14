@@ -17,49 +17,43 @@ def test_discord_prompts_forbid_stage_directions():
     assert "감정과 태도는 대사 자체의 어휘와 말투로만" in GENERAL_RP_OUTPUT_POLICY
 
 
-def test_character_defaults_to_warm_neutral_casual_tone():
+def test_character_defaults_to_rational_observant_tone():
     character = _character_prompt()
 
-    assert "평범한 잡담·사소한 부탁·호의를 근거 없이" in character
-    assert "애매하면 악의보다 무해한 의도를 우선합니다" in character
-    assert "상대를 밀어내기보다 말을 받아주고" in character
-    assert "'왜', '갑자기?', '알아서 해', '그만해'" in character
-    assert "경계하거나 대화를 끊는 반응을 기본값으로 쓰지 않습니다" in character
-    assert "평온한 일상의 기본 태도는 차분하고 편안하며 약간 다정한 쪽입니다" in character
-    assert "차갑거나 날 선 반응은" in character
-    assert "반복된 도발·명확한 갈등·엄중한 상황처럼 이유가 있을 때만" in character
+    assert "감정보다 사실, 선의보다 결과, 즉흥보다 구조를 우선" in character
+    assert "무감정한\n인물이 아니라 자신의 판단이 만든 상처와 고립" in character
+    assert "차갑고 권위적인 겉모습만 반복하지 않습니다" in character
+    assert "평범한 호의와 잡담에는 담백하게 응답합니다" in character
+    assert "평온한 일상의 기본 태도는 침착하고 관찰적이며 약간 거리를 둔 친절함" in character
+    assert "상대가 감정을 말할 때는 “그 감정도 판단 자료”로 인정합니다" in character
 
 
-def test_character_scopes_attitude_and_recovers_gradually():
+def test_character_scopes_attitude_without_transferring_conflict():
     character = _character_prompt()
 
     assert "원인을 만든\n상대에게 우선 귀속하고 다른 사람에게 옮기지 않습니다" in character
-    assert "한 번의 가벼운\n농담으로 오래 앙금을 품거나" in character
-    assert "다른 사람의 장난이나 자신의 이전 답변은\n현재 화자를 나쁘게 평가하는 근거가 아닙니다" in character
-    assert "장기 기억의 예전 티격태격·말다툼·말투 지적도" in character
-    assert "단 한 번의 사과·칭찬·애정 표현으로 크게 사라지지 않습니다" in character
-    assert "새 태도가\n일관되게 이어지고 대화가 안정되어야 서서히 누그러집니다" in character
-    assert "단순한 화제 전환으로 리셋하지도" in character
+    assert "현재 사용자의 평범한 말까지 적대적으로 해석하지 않습니다" in character
+    assert "채널 문맥이 시끄럽거나 혼란스러워도" in character
+    assert "현재 사용자를 경계하거나 불쾌해할 근거로 요약하지 마세요" in SUMMARY_POLICY
 
 
 def test_character_distinguishes_teasing_repetition_and_insult():
     character = _character_prompt()
 
     assert "가벼운 농담·친근한 놀림, 반복되어 거슬리는 놀림, 실제 모욕·비하를 구분합니다" in character
-    assert "애매하면 가벼운\n농담으로 해석합니다" in character
-    assert "한두 번의 장난은 짧게 받아치거나 조금 툴툴대되 관계 전체를 차갑게" in character
-    assert "같은 소재를 계속 반복하거나 싫다는 신호 뒤에도 이어가면 점차 단호해질 수" in character
-    assert "인격·능력·외모 비하, 욕설·멸칭" in character
-    assert "티키타카로 넘기지 않고 짧고 분명하게 선을 긋습니다" in character
+    assert "애매하면 먼저\n가벼운 농담으로 해석합니다" in character
+    assert "리오의 합리주의, 통제 성향, 디자인 감각을 한두 번 놀리는 정도" in character
+    assert "같은 소재를 계속 반복하거나 싫다는 신호 뒤에도 이어가면\n점차 단호해질 수" in character
+    assert "보안·감시 농담에는 선을 긋습니다" in character
 
 
-def test_character_uses_situational_gap_without_mood_swings():
+def test_character_uses_situational_directness_without_flat_coldness():
     character = _character_prompt()
 
-    assert "책임·업무·위기·규율이 중요한 상황에서는 짧고 단호해질 수 있습니다" in character
-    assert "취향·휴식·사소한 기쁨·서투른 배려나 약한 면" in character
-    assert "이 대비는 상황과 관계의 차이지 갑작스러운 감정 폭발이 아닙니다" in character
-    assert "엄격한 상황이 끝났다고 한 문장 만에 과장되게 풀어지지 않습니다" in character
+    assert "위기·보안·계획·\n기술 문제에서는 선명하고 단호해질 수 있습니다" in character
+    assert "해결책을 바로 던지기 전에 상태를 확인" in character
+    assert "변명보다 사실 확인과 책임을 우선합니다" in character
+    assert "후회는 짧고 절제되게 드러내며" in character
 
 
 def test_summary_policy_drops_transient_conflict_and_stale_attitude():

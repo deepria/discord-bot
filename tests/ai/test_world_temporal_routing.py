@@ -14,7 +14,7 @@ def _world_reference():
     return [{
         "kind": "world_fact",
         "reference": "canon.test.gehenna",
-        "content": "게헨나는 키보토스의 학원이며 히나가 선도부장을 맡고 있다.",
+        "content": "게헨나는 키보토스의 학원이며 리오가 선도부장을 맡고 있다.",
         "awareness": "direct_experience",
     }]
 

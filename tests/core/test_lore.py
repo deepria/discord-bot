@@ -77,7 +77,7 @@ class LoreSearchTests(unittest.TestCase):
         self.index = LoreIndex([
             record(),
             record("meme.head", "community_meme", summary="머리 크기는 커뮤니티 농담이다.",
-                   keywords=["머리 크기", "머리 부피"], subjects=["히나"], knowledge="unknown"),
+                   keywords=["머리 크기", "머리 부피"], subjects=["리오"], knowledge="unknown"),
             record("canon.ako", summary="아코는 선도부 행정관이다.", keywords=["행정관", "보좌"],
                    subjects=["아코"]),
         ])
@@ -90,7 +90,7 @@ class LoreSearchTests(unittest.TestCase):
     def test_interpretation_and_unknown_are_not_exposed_as_world_facts(self):
         index = LoreIndex([
             record("canon.interpretation", fact_type="inference",
-                   summary="히나는 호시노와 자신을 대비했다고 해석할 수 있다.",
+                   summary="리오는 호시노와 자신을 대비했다고 해석할 수 있다.",
                    keywords=["호시노", "대비"], subjects=["호시노"]),
             record("canon.guard", fact_type="unknown", knowledge="unknown",
                    summary="날개가 있는 학생 모두가 날 수 있다고 확정할 근거는 없다.",
@@ -105,22 +105,22 @@ class LoreSearchTests(unittest.TestCase):
     def test_reference_only_canon_is_not_retrieved_by_default(self):
         index = LoreIndex([
             record("canon.animation", fact_type="adaptation", summary="애니메이션의 연출이다.",
-                   keywords=["애니메이션", "연출"], subjects=["히나"]),
+                   keywords=["애니메이션", "연출"], subjects=["리오"]),
         ])
-        self.assertEqual(index.search("히나 애니메이션 연출"), [])
-        result = index.search("히나 애니메이션 연출", include_reference_only=True)
+        self.assertEqual(index.search("리오 애니메이션 연출"), [])
+        result = index.search("리오 애니메이션 연출", include_reference_only=True)
         self.assertEqual(result[0]["source_scope"], "adaptation")
         self.assertEqual(result[0]["kind"], "interpretation")
 
     def test_community_lane_is_labeled_and_can_be_disabled(self):
-        result = self.index.search("히나 머리 부피를 구하자")
+        result = self.index.search("리오 머리 부피를 구하자")
         self.assertEqual(result[0]["kind"], "optional_reaction")
         self.assertNotRegex(str(result[0]), "공식|커뮤니티|밈|meme")
         self.assertNotIn("optional_reaction", str(self.index.search(
-            "히나 머리 부피를 구하자", include_community=False)))
+            "리오 머리 부피를 구하자", include_community=False)))
 
     def test_generic_hina_does_not_retrieve_every_meme(self):
-        self.assertEqual(self.index.search("히나야 안녕"), [])
+        self.assertEqual(self.index.search("리오야 안녕"), [])
 
     def test_budget_and_limit_are_enforced(self):
         self.assertEqual(len(self.index.search("마코토 아코", limit=1)), 1)
@@ -132,7 +132,7 @@ class LoreSearchTests(unittest.TestCase):
         self.assertEqual(len({row["id"] for row in packaged.records}), len(packaged.records))
         self.assertTrue(all(row["status"] == "accepted" for row in packaged.records))
         self.assertTrue(any(row["lane"] == "canon" for row in packaged.records))
-        result = packaged.search("히나는 게헨나 선도부장이야?")
+        result = packaged.search("리오는 게헨나 선도부장이야?")
         self.assertTrue(result)
         self.assertTrue(any(item["kind"] == "world_fact" for item in result))
 
@@ -140,8 +140,8 @@ class LoreSearchTests(unittest.TestCase):
 class LorePipelineTests(unittest.TestCase):
     def test_extract_stays_candidate_and_canon_approval_needs_kr_confirmation(self):
         parsed = {"candidates": [{
-            "slug": "hina.test-fact", "summary": "히나는 시험 설정을 알고 있다.",
-            "fact_type": "fact_direct", "keywords": ["시험 설정"], "subjects": ["히나"],
+            "slug": "hina.test-fact", "summary": "리오는 시험 설정을 알고 있다.",
+            "fact_type": "fact_direct", "keywords": ["시험 설정"], "subjects": ["리오"],
             "knowledge": "self", "reaction": "", "evidence": "장면 일부", "uncertainty": "",
             "timeline": "테스트 장면", "kr_release_evidence": "한국 공지",
         }]}
@@ -179,7 +179,7 @@ class LorePipelineTests(unittest.TestCase):
     def test_declared_fact_type_overrides_model_and_reference_only_is_suppressed(self):
         parsed = {"candidates": [{
             "slug": "hina.anim", "summary": "애니메이션에서 날개 크기가 바뀐다.",
-            "fact_type": "fact_direct", "keywords": ["날개"], "subjects": ["히나"],
+            "fact_type": "fact_direct", "keywords": ["날개"], "subjects": ["리오"],
             "knowledge": "self", "reaction": "", "evidence": "7화", "uncertainty": "",
             "timeline": "The Animation 7화", "kr_release_evidence": "",
         }]}
@@ -214,7 +214,7 @@ class LorePipelineTests(unittest.TestCase):
             "canon.hina.test-edit",
             summary="수정 전 요약",
             keywords=["수정 전"],
-            subjects=["히나"],
+            subjects=["리오"],
             knowledge="public_knowledge",
             confidence="candidate",
             status="candidate",
@@ -233,17 +233,17 @@ class LorePipelineTests(unittest.TestCase):
                   patch.object(lore_pipeline, "RUNTIME_PATH", runtime_path)):
                 lore_pipeline.edit_candidate(NS(
                     id=candidate["id"],
-                    summary="히나는 자신의 수영 실력을 알고 있다.",
+                    summary="리오는 자신의 수영 실력을 알고 있다.",
                     knowledge="self",
                     timeline="수영복 이벤트 이전부터의 자기 정보",
                     keyword=["수영", "수영 실력"],
-                    subject=["히나"],
+                    subject=["리오"],
                 ))
                 edited = lore_pipeline.read_jsonl(queue_path)[0]
-                self.assertEqual(edited["summary"], "히나는 자신의 수영 실력을 알고 있다.")
+                self.assertEqual(edited["summary"], "리오는 자신의 수영 실력을 알고 있다.")
                 self.assertEqual(edited["knowledge"], "self")
                 self.assertEqual(edited["keywords"], ["수영", "수영 실력"])
-                self.assertEqual(edited["subjects"], ["히나"])
+                self.assertEqual(edited["subjects"], ["리오"])
                 lore_pipeline.decide(NS(id=candidate["id"], confidence="crosschecked",
                                         confirm_kr_release=True), "accepted")
                 accepted = lore_pipeline.read_jsonl(runtime_path)[0]

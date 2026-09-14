@@ -43,13 +43,13 @@ class CaptureModeTests(unittest.TestCase):
         recent.add(scope, 1, "A", "옆 대화")
         token = CURRENT_DIRECT_TRIGGER.set(True)
         try:
-            recent.add(scope, 2, "A", "히나야 질문")
+            recent.add(scope, 2, "A", "리오야 질문")
         finally:
             CURRENT_DIRECT_TRIGGER.reset(token)
-        recent.add(scope, 3, "히나", "답변", role="assistant")
+        recent.add(scope, 3, "리오", "답변", role="assistant")
 
         rows = recent.context(scope, 99)
-        self.assertEqual([row["content"] for row in rows], ["히나야 질문", "답변"])
+        self.assertEqual([row["content"] for row in rows], ["리오야 질문", "답변"])
         store.close()
 
     def test_assistant_tone_is_scoped_to_reply_target(self):
@@ -59,17 +59,17 @@ class CaptureModeTests(unittest.TestCase):
         user_b = Scope(1, 10, 200)
         bot_scope = Scope(1, 10, 999)
 
-        recent.add(user_a, 1, "A", "히나야 또 놀릴 거야")
-        recent.add(user_a, 2, "히나", "이제 그만해.", role="assistant")
+        recent.add(user_a, 1, "A", "리오야 또 놀릴 거야")
+        recent.add(user_a, 2, "리오", "이제 그만해.", role="assistant")
         recent.add(
             bot_scope,
             3,
-            "히나",
+            "리오",
             "재시작 전 답변",
             role="assistant",
             unix_time=time.time(),
         )
-        recent.add(user_b, 4, "B", "히나야 배고파")
+        recent.add(user_b, 4, "B", "리오야 배고파")
 
         raw_rows = list(recent.buffers[recent._key(user_a)])
         live = next(row for row in raw_rows if row["message_id"] == 2)
@@ -106,7 +106,7 @@ class TargetContextCaptureTests(unittest.IsolatedAsyncioTestCase):
         now = datetime.now(UTC)
         guild = NS(id=1)
         target = NS(id=200, bot=False, display_name="대상", name="대상")
-        bot = NS(id=99, bot=True, display_name="히나")
+        bot = NS(id=99, bot=True, display_name="리오")
         ordinary = NS(
             id=1,
             content="그냥 옆에서 한 말",
@@ -118,7 +118,7 @@ class TargetContextCaptureTests(unittest.IsolatedAsyncioTestCase):
         )
         direct = NS(
             id=2,
-            content="히나야 이건 직접 한 말",
+            content="리오야 이건 직접 한 말",
             author=target,
             webhook_id=None,
             created_at=now - timedelta(minutes=1),
@@ -128,7 +128,7 @@ class TargetContextCaptureTests(unittest.IsolatedAsyncioTestCase):
         channel = FakeHistoryChannel([direct, ordinary])
         message = NS(
             id=10,
-            content="히나야 <@200> 어떻게 생각해?",
+            content="리오야 <@200> 어떻게 생각해?",
             author=NS(id=100, bot=False),
             guild=guild,
             channel=channel,
@@ -141,11 +141,11 @@ class TargetContextCaptureTests(unittest.IsolatedAsyncioTestCase):
             99,
             "<@200> 어떻게 생각해?",
             direct_only=True,
-            call_prefixes=("히나야",),
+            call_prefixes=("리오야",),
         )
 
         self.assertEqual(len(sampled), 1)
         self.assertEqual(
             [row["content"] for row in sampled[0]["sampled_messages"]],
-            ["히나야 이건 직접 한 말"],
+            ["리오야 이건 직접 한 말"],
         )

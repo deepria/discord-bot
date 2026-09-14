@@ -26,5 +26,5 @@ def test_response_text_sanitizes_even_when_citations_are_visible():
 
 
 def test_does_not_strip_normal_json_content():
-    text = '{"name":"히나","role":"선도부장"}\n이건 일반 JSON이야.'
+    text = '{"name":"리오","role":"선도부장"}\n이건 일반 JSON이야.'
     assert strip_internal_control_prefix(text) == text

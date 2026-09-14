@@ -61,7 +61,7 @@ class EmojiRegistry:
         async with self.lock:
             rows = self.store.emoji_rows()
             if any(r["alias"] == alias for r in rows):
-                raise ValueError("이미 등록된 별칭이에요. 설명 변경은 히나야 /이모지 수정를 사용해 주세요.")
+                raise ValueError("이미 등록된 별칭이에요. 설명 변경은 리오야 /이모지 수정를 사용해 주세요.")
             if len(rows) >= 20:
                 raise ValueError("최대 20개까지 등록할 수 있어요. 먼저 하나를 목록에서 제외해 주세요.")
             if source is not None:
@@ -105,10 +105,10 @@ class EmojiRegistry:
 
 
 class EmojiCommands:
-    HELP = ("히나야 /이모지 등록 별칭 <이모지 또는 ID> 사용 상황\n"
-            "히나야 /이모지 등록 별칭 사용 상황 + 이미지 한 개 첨부\n"
-            "히나야 /이모지 목록\n히나야 /이모지 수정 별칭 사용 상황\n"
-            "히나야 /이모지 삭제 별칭")
+    HELP = ("리오야 /이모지 등록 별칭 <이모지 또는 ID> 사용 상황\n"
+            "리오야 /이모지 등록 별칭 사용 상황 + 이미지 한 개 첨부\n"
+            "리오야 /이모지 목록\n리오야 /이모지 수정 별칭 사용 상황\n"
+            "리오야 /이모지 삭제 별칭")
 
     def __init__(self, client):
         self.client = client
@@ -137,7 +137,7 @@ class EmojiCommands:
             if action == "목록" and not rest:
                 catalog = {e["name"]: e for e in await self.client.emoji_registry.catalog(message.channel)}
                 rows = self.client.store.emoji_rows()
-                lines = [f"히나 이모지 {len(rows)}/20"]
+                lines = [f"리오 이모지 {len(rows)}/20"]
                 for row in rows:
                     preview = catalog.get(row["alias"], {}).get("markup", "(사용 불가)")
                     description = discord.utils.escape_markdown(row["description"])

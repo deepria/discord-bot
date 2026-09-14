@@ -9,7 +9,7 @@ def available_emojis(guild, limit=24):
     if guild is None or guild.unavailable or guild.me is None:
         return []
     usable = [e for e in guild.emojis if e.is_usable()]
-    usable.sort(key=lambda e: (not e.name.lower().startswith("hina"), e.name, e.id))
+    usable.sort(key=lambda e: (not e.name.lower().startswith("rio"), e.name, e.id))
     return [{"name": e.name, "markup": str(e), "id": str(e.id)} for e in usable[:limit]]
 
 

@@ -34,7 +34,7 @@ async def collect(
     text,
     *,
     direct_only: bool = False,
-    call_prefixes: tuple[str, ...] = ("히나야",),
+    call_prefixes: tuple[str, ...] = ("리오야",),
 ):
     if getattr(message, "guild", None) is None or not TARGET_QUERY.search(text):
         return []

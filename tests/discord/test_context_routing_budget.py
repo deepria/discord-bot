@@ -28,7 +28,7 @@ class ContextBudgetTests(unittest.TestCase):
         for message_id in range(1, 13):
             recent.add(user_b, message_id, "B", f"B의 유효한 과거 발언 {message_id}")
         for message_id in range(13, 25):
-            recent.add(user_a, message_id, "히나", f"A에게 한 답변 {message_id}", role="assistant")
+            recent.add(user_a, message_id, "리오", f"A에게 한 답변 {message_id}", role="assistant")
 
         rows = recent.context(user_b, 99)
         self.assertEqual(len(rows), 12)
@@ -41,10 +41,10 @@ class ContextBudgetTests(unittest.TestCase):
         speaker = Scope(1, 10, 200)
         other = Scope(1, 10, 300)
 
-        recent.add(speaker, 1, "B", "히나야 메이드복 입은 거 보고 싶어")
-        recent.add(speaker, 2, "히나", "그런 옷을 입어 달라는 건 좀 곤란해.", role="assistant")
+        recent.add(speaker, 1, "B", "리오야 메이드복 입은 거 보고 싶어")
+        recent.add(speaker, 2, "리오", "그런 옷을 입어 달라는 건 좀 곤란해.", role="assistant")
         recent.add(speaker, 3, "B", "장난 아닌데")
-        recent.add(speaker, 4, "히나", "그래도 지금은 싫어.", role="assistant")
+        recent.add(speaker, 4, "리오", "그래도 지금은 싫어.", role="assistant")
         for message_id in range(5, 21):
             recent.add(other, message_id, "다른 사람", f"끼어든 짧은 채팅 {message_id}")
 
@@ -52,7 +52,7 @@ class ContextBudgetTests(unittest.TestCase):
         contents = [row["content"] for row in rows]
         kinds = [row.get("context_kind") for row in rows]
 
-        self.assertIn("히나야 메이드복 입은 거 보고 싶어", contents)
+        self.assertIn("리오야 메이드복 입은 거 보고 싶어", contents)
         self.assertIn("장난 아닌데", contents)
         self.assertIn("그래도 지금은 싫어.", contents)
         self.assertIn("speaker_thread", kinds)
@@ -66,10 +66,10 @@ class ContextBudgetTests(unittest.TestCase):
         other = Scope(1, 10, 300)
 
         recent.add(user_b, 1, "B", "내 얘기는 기억해 줘")
-        recent.add(user_b, 2, "히나", "응, 그 얘기 말이지.", role="assistant")
+        recent.add(user_b, 2, "리오", "응, 그 얘기 말이지.", role="assistant")
         for message_id in range(3, 13):
             recent.add(other, message_id, "다른 사람", f"주변 대화 {message_id}")
-        recent.add(user_a, 13, "히나", "A한테만 한 날 선 답변", role="assistant")
+        recent.add(user_a, 13, "리오", "A한테만 한 날 선 답변", role="assistant")
 
         rows = recent.context(user_b, 99)
         contents = [row["content"] for row in rows]
@@ -176,7 +176,7 @@ class HydrationTests(unittest.IsolatedAsyncioTestCase):
         now = datetime.now(UTC)
         channel = FakeHistoryChannel([
             self.old_message(1, "최근 사용자 발언", now - timedelta(minutes=3)),
-            self.old_message(2, "누구에게 했는지 모르는 히나 답변", now - timedelta(minutes=2),
+            self.old_message(2, "누구에게 했는지 모르는 리오 답변", now - timedelta(minutes=2),
                              author_id=99, bot=True),
         ])
         current = NS(id=10, created_at=now, channel=channel)
