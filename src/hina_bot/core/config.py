@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from dotenv import load_dotenv
 
-SUPPORTED_MODEL_PROVIDERS = frozenset({"openai", "gemini", "openrouter"})
+SUPPORTED_MODEL_PROVIDERS = frozenset({"openai", "gemini", "openrouter", "ollama"})
 GEMINI_THINKING_LEVELS = frozenset({"minimal", "low", "medium", "high"})
 
 
@@ -33,6 +33,7 @@ def _env_key(provider: str) -> str:
         "openai": "OPENAI_API_KEY",
         "gemini": "GEMINI_API_KEY",
         "openrouter": "OPENROUTER_API_KEY",
+        "ollama": "OLLAMA_BASE_URL",
     }[provider]
 
 
@@ -49,6 +50,7 @@ class Settings:
     openai_api_key: str = ""
     gemini_api_key: str = ""
     openrouter_api_key: str = ""
+    ollama_base_url: str = "http://127.0.0.1:11434"
     gemini_thinking_level: str = "low"
     gemini_total_output_tokens: int = 4096
     db_path: str = "data/hina.sqlite3"
@@ -88,6 +90,7 @@ class Settings:
             "openai": self.openai_api_key,
             "gemini": self.gemini_api_key,
             "openrouter": self.openrouter_api_key,
+            "ollama": "",
         }[provider].strip()
         if explicit:
             return explicit
@@ -126,9 +129,10 @@ class Settings:
             "openai": os.getenv("OPENAI_API_KEY", "").strip(),
             "gemini": os.getenv("GEMINI_API_KEY", "").strip(),
             "openrouter": os.getenv("OPENROUTER_API_KEY", "").strip(),
+            "ollama": "",
         }
         for selected in {provider, memory_provider}:
-            if not keys[selected]:
+            if selected != "ollama" and not keys[selected]:
                 raise ValueError(f"{_env_key(selected)}를 설정해 주세요.")
 
         output_tokens = int(os.getenv("MAX_OUTPUT_TOKENS", "1000"))
@@ -173,6 +177,8 @@ class Settings:
             provider=provider, memory_provider=memory_provider,
             openai_api_key=keys["openai"], gemini_api_key=keys["gemini"],
             openrouter_api_key=keys["openrouter"],
+            ollama_base_url=os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").strip()
+            or "http://127.0.0.1:11434",
             gemini_thinking_level=gemini_thinking_level,
             gemini_total_output_tokens=gemini_total_output_tokens,
             special_dm_user_id=int(os.environ["SPECIAL_DM_USER_ID"])

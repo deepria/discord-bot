@@ -1,7 +1,7 @@
 # Hina Discord Bot
 
 소라사키 히나를 연기하는 비공식 한국어 Discord 봇입니다. Python 3.11+, discord.py, SQLite와
-OpenAI/Gemini/OpenRouter LLM provider를 사용합니다. 공식 서비스나 공식 대사 재현물은 아닙니다.
+OpenAI/Gemini/OpenRouter/Ollama LLM provider를 사용합니다. 공식 서비스나 공식 대사 재현물은 아닙니다.
 
 현재 저장소는 캐릭터 RP, 장기 기억, 최근 채널 문맥, lore/runtime knowledge, 웹 검색 routing,
 멀티 provider와 **현재 턴 이미지 입력**을 함께 다룹니다. 비전 기능은 1차 구현 범위를 먼저 실제
@@ -15,7 +15,7 @@ Discord에서 검증하고 있으며, 검증 전에는 버그 수정과 문서 �
 - 관리자용 서버 공통 메모, 동적 instruction, runtime knowledge
 - 검수된 lore를 질문과 관련된 범위만 로컬 검색해 사용
 - 현재 시각/runtime context와 최신 정보가 필요할 때 provider 웹 검색 사용
-- OpenAI, Gemini, OpenRouter provider 교체
+- OpenAI, Gemini, OpenRouter, Ollama provider 교체
 - 등록된 커스텀 이모지 출력
 - 현재 호출 메시지의 이미지 첨부, 커스텀 이모지, 래스터 스티커 해석
 - Discord slash command 기반 기억/설정/이모지 관리
@@ -41,7 +41,7 @@ OPENAI_API_KEY=...
 DISCORD_TOKEN=...
 ```
 
-Gemini/OpenRouter 설정과 답변 모델·기억 모델 분리는
+Gemini/OpenRouter/Ollama 설정과 답변 모델·기억 모델 분리는
 [`docs/model-providers.md`](docs/model-providers.md)를 참고하세요.
 
 테스트:
@@ -239,6 +239,7 @@ production runtime의 관리·설정 기능은 Discord native slash command를 �
 - `openai`
 - `gemini`
 - `openrouter`
+- `ollama`
 
 답변 모델과 기억 요약 모델을 분리할 수 있습니다. Gemini는 별도 thinking level/total output token 설정을
 사용할 수 있고, 각 provider의 검색 도구 형식은 adapter에서 변환합니다.

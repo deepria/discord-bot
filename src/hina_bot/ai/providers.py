@@ -11,7 +11,7 @@ from openai import AsyncOpenAI
 
 GEMINI_INTERACTIONS_URL = "https://generativelanguage.googleapis.com/v1beta/interactions"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-SUPPORTED_PROVIDERS = frozenset({"openai", "gemini", "openrouter"})
+SUPPORTED_PROVIDERS = frozenset({"openai", "gemini", "openrouter", "ollama"})
 log = logging.getLogger("hina")
 
 
@@ -108,6 +108,68 @@ def _gemini_content(value):
         if isinstance(text, str) and text:
             blocks.append({"type": "text", "text": text})
     return blocks
+
+
+def _text_from_responses_content(value) -> str:
+    if isinstance(value, str):
+        return value
+    if not isinstance(value, list):
+        return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+    pieces = []
+    skipped_images = 0
+    for item in value:
+        if isinstance(item, str):
+            pieces.append(item)
+            continue
+        if not isinstance(item, dict):
+            continue
+        block_type = item.get("type")
+        if block_type in {"input_text", "text", "output_text"}:
+            text = item.get("text")
+            if isinstance(text, str) and text:
+                pieces.append(text)
+            continue
+        if block_type == "input_image":
+            skipped_images += 1
+            continue
+        text = item.get("text")
+        if isinstance(text, str) and text:
+            pieces.append(text)
+    if skipped_images:
+        pieces.append(
+            f"[이미지 입력 {skipped_images}개는 현재 Ollama 텍스트 모델에 전달되지 않았습니다.]"
+        )
+    return "\n".join(part for part in pieces if part)
+
+
+def _ollama_messages(input_value, instructions: str = "") -> list[dict]:
+    messages = []
+    if instructions:
+        messages.append({"role": "system", "content": instructions})
+
+    if isinstance(input_value, str):
+        if input_value:
+            messages.append({"role": "user", "content": input_value})
+        return messages
+
+    if not isinstance(input_value, list):
+        messages.append({
+            "role": "user",
+            "content": json.dumps(input_value, ensure_ascii=False, separators=(",", ":")),
+        })
+        return messages
+
+    for item in input_value:
+        if not isinstance(item, dict):
+            continue
+        role = item.get("role", "user")
+        if role not in {"system", "user", "assistant"}:
+            role = "user"
+        content = _text_from_responses_content(item.get("content", ""))
+        if content:
+            messages.append({"role": role, "content": content})
+    return messages
 
 
 def _gemini_input(value):
@@ -342,8 +404,105 @@ class OpenRouterClient:
         await self._client.close()
 
 
+def _ollama_http_error(response: httpx.Response) -> ProviderAPIError:
+    code = ""
+    message = ""
+    try:
+        data = response.json()
+    except ValueError:
+        data = None
+    if isinstance(data, dict):
+        raw_error = data.get("error")
+        if isinstance(raw_error, str):
+            message = raw_error
+        elif isinstance(raw_error, dict):
+            raw_code = raw_error.get("code")
+            if raw_code is not None:
+                code = str(raw_code)
+            raw_message = raw_error.get("message")
+            if isinstance(raw_message, str):
+                message = raw_message
+    return ProviderAPIError("ollama", response.status_code, code=code, message=message)
+
+
+class _OllamaResponses:
+    def __init__(self, http: httpx.AsyncClient):
+        self.http = http
+
+    async def create(self, **kwargs):
+        tools = kwargs.get("tools") or []
+        if tools:
+            raise ValueError(
+                "Ollama provider는 web_search 도구를 지원하지 않습니다. "
+                "CHAT_WEB_SEARCH=false로 설정해 주세요."
+            )
+
+        payload = {
+            "model": kwargs["model"],
+            "messages": _ollama_messages(kwargs.get("input", ""), kwargs.get("instructions") or ""),
+            "stream": False,
+            "think": False,
+        }
+        max_output_tokens = kwargs.get("max_output_tokens")
+        if isinstance(max_output_tokens, int):
+            payload["options"] = {"num_predict": max_output_tokens}
+
+        response = await self.http.post("/api/chat", json=payload)
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            error = _ollama_http_error(response)
+            log.warning("Provider request failed (%s)", error.safe_diagnostic)
+            raise error from exc
+
+        data = response.json()
+        message = data.get("message") if isinstance(data, dict) else {}
+        text = message.get("content") if isinstance(message, dict) else ""
+        if not isinstance(text, str):
+            text = ""
+        usage = NS(
+            input_tokens=data.get("prompt_eval_count") if isinstance(data, dict) else None,
+            output_tokens=data.get("eval_count") if isinstance(data, dict) else None,
+            total_tokens=(
+                (data.get("prompt_eval_count") or 0) + (data.get("eval_count") or 0)
+                if isinstance(data, dict)
+                and isinstance(data.get("prompt_eval_count"), int)
+                and isinstance(data.get("eval_count"), int)
+                else None
+            ),
+            input_tokens_details=NS(cached_tokens=None),
+            output_tokens_details=NS(reasoning_tokens=None),
+        )
+        return NS(
+            status="completed" if data.get("done", True) else "incomplete",
+            output_text=text,
+            output=[NS(
+                type="message",
+                content=[NS(type="output_text", text=text, annotations=[])],
+            )] if text else [],
+            usage=usage,
+        )
+
+
+class OllamaClient:
+    provider_name = "ollama"
+
+    def __init__(self, base_url: str, *, timeout: float = 120):
+        self._http = httpx.AsyncClient(
+            base_url=base_url.rstrip("/"),
+            timeout=timeout,
+            headers={"Content-Type": "application/json"},
+        )
+        self.responses = _OllamaResponses(self._http)
+
+    async def close(self):
+        await self._http.aclose()
+
+
 def create_provider_client(settings, provider: str):
     provider = normalize_provider(provider)
+    if provider == "ollama":
+        return OllamaClient(settings.ollama_base_url)
     credential = settings.api_key_for(provider)
     if not credential:
         raise ValueError(f"{provider} provider API key가 설정되지 않았습니다.")
