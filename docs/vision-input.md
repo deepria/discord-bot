@@ -69,13 +69,13 @@ Discord message
        ├─ custom emoji
        └─ raster sticker
             ↓
-src/hina_bot/discord/vision.py
+src/rio_bot/discord/vision.py
             ↓
 VisualInput[] / CURRENT_VISUAL_INPUTS
             ↓
 기존 information routing + chat LLM
             ↓
-src/hina_bot/ai/vision.py
+src/rio_bot/ai/vision.py
             ↓
 provider adapter
   ├─ OpenAI

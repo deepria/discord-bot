@@ -1,8 +1,8 @@
 from types import SimpleNamespace
 
-from hina_bot.ai.chat_llm import LLM
-from hina_bot.ai.information_routing import InformationRoute, classify_information_request
-from hina_bot.core.lore import LoreIndex
+from rio_bot.ai.chat_llm import LLM
+from rio_bot.ai.information_routing import InformationRoute, classify_information_request
+from rio_bot.core.lore import LoreIndex
 
 
 def _empty_registry():

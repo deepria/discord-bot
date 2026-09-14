@@ -3,16 +3,16 @@ import unittest
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace as NS
 
-from hina_bot.routing import Scope
-from hina_bot.store import Store
+from rio_bot.routing import Scope
+from rio_bot.store import Store
 
-from hina_bot.discord.chatlog_capture import (
+from rio_bot.discord.chatlog_capture import (
     capture_mode,
     capture_mode_chain,
     set_capture_mode_override,
 )
-from hina_bot.discord.target_context import collect
-from hina_bot.discord.target_recent import CURRENT_DIRECT_TRIGGER, TargetAwareRecentMessages
+from rio_bot.discord.target_context import collect
+from rio_bot.discord.target_recent import CURRENT_DIRECT_TRIGGER, TargetAwareRecentMessages
 
 
 class CaptureModeTests(unittest.TestCase):

@@ -4,8 +4,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from hina_bot.ai.providers import ProviderAPIError
-from hina_bot.usage import UsageLogger
+from rio_bot.ai.providers import ProviderAPIError
+from rio_bot.usage import UsageLogger
 
 
 def response(input_tokens, output_tokens, *, cached=0, reasoning=0, output=None):
@@ -66,7 +66,7 @@ async def test_missing_usage_is_unknown(tmp_path):
     path = tmp_path / 'usage.jsonl'
     logger = UsageLogger(str(path))
     incomplete = NS(
-        status='incomplete', output=[], _hina_error_codes=['budget_exceeded'], usage=None)
+        status='incomplete', output=[], _rio_error_codes=['budget_exceeded'], usage=None)
     client = NS(responses=NS(create=AsyncMock(return_value=incomplete)))
     await logger.request(client, 'answer', model='test')
     logger.close()

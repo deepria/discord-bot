@@ -2,13 +2,13 @@ import json
 
 import httpx
 import pytest
-from hina_bot.config import Settings
-from hina_bot.lore import LoreIndex
-from hina_bot.routing import Scope
-from hina_bot.store import Store
 from openai import AsyncOpenAI
+from rio_bot.config import Settings
+from rio_bot.lore import LoreIndex
+from rio_bot.routing import Scope
+from rio_bot.store import Store
 
-from hina_bot.ai.runtime_llm import LLM
+from rio_bot.ai.runtime_llm import LLM
 
 
 @pytest.mark.asyncio
@@ -44,7 +44,7 @@ async def test_lore_followup_uses_previous_entity_but_keeps_visible_message():
         chat_web_search=True,
     ), client=client)
     llm.lore = LoreIndex([{
-        "id": "canon.test.kayoko.hina",
+        "id": "canon.test.kayoko.Rio",
         "lane": "canon",
         "fact_type": "fact_direct",
         "summary": "카요코와 리오는 과거 사건에서 직접 대면한 적이 있다.",
@@ -61,7 +61,7 @@ async def test_lore_followup_uses_previous_entity_but_keeps_visible_message():
         payload = calls[-1]
         reference = json.loads(payload["input"][0]["content"].split("\n", 1)[1])
         refs = [row.get("reference") for row in reference["lore_reference"]]
-        assert "canon.test.kayoko.hina" in refs
+        assert "canon.test.kayoko.Rio" in refs
         assert payload["input"][-1]["content"] == "그럼 걔는 리오랑 만난 적 있어?"
     finally:
         await llm.close()

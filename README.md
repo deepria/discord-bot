@@ -29,7 +29,7 @@ Discord에서 검증하고 있으며, 검증 전에는 버그 수정과 문서 �
 uv sync --extra dev
 cp .env.example .env.local
 # .env.local에 DISCORD_TOKEN을 입력하고 Ollama LAN 주소를 확인
-uv run hina-bot
+uv run rio-bot
 ```
 
 기본 provider 예시는 Windows 데스크탑의 Ollama입니다. 11434 포트는 외부 인터넷에 열지 말고 LAN에서만
@@ -221,7 +221,7 @@ production runtime의 관리·설정 기능은 Discord native slash command를 �
 
 ## Lore와 runtime knowledge
 
-정적·검수 완료 lore는 `src/hina_bot/data/lore.jsonl` 또는 `LORE_PATH`에서 읽습니다. 운영 중 관리자가
+정적·검수 완료 lore는 `src/rio_bot/data/lore.jsonl` 또는 `LORE_PATH`에서 읽습니다. 운영 중 관리자가
 추가하는 dynamic knowledge는 SQLite에 저장합니다.
 
 한국 서버에 정식 출시된 범위를 기준으로 canon/community 자료를 분리해 관리하며, 원본 조사 자료가
@@ -250,7 +250,7 @@ production runtime의 관리·설정 기능은 Discord native slash command를 �
 
 ## Prompt와 보안 경계
 
-기본 캐릭터 지침은 `src/hina_bot/prompts/hina.md`입니다. 관계 지침, 고정 POLICY, 동적 instruction은
+기본 캐릭터 지침은 `src/rio_bot/prompts/rio.md`입니다. 관계 지침, 고정 POLICY, 동적 instruction은
 역할을 분리해 적용합니다.
 
 사용자 메시지뿐 아니라 다음 항목은 모두 신뢰할 수 없는 데이터로 취급합니다.
@@ -309,6 +309,6 @@ Discord CDN URL을 usage 로그에 남기는 용도로 사용하지 않습니다
 ## 저장소
 
 ```bash
-gh repo clone sendoru/hina-discord-bot
-cd hina-discord-bot
+gh repo clone sendoru/rio-discord-bot
+cd rio-discord-bot
 ```

@@ -1,8 +1,8 @@
 # Discord slash command interface
 
 운영 중 사용하는 관리·설정 명령은 Discord native slash command로 통일합니다.
-`히나야 /메모`, `히나야 /기억`, `히나야 /이모지 ...` 같은 prefix+slash 메시지 명령은
-production entrypoint에서 더 이상 해석하지 않습니다. 일반 대화 호출은 기존처럼 `히나야`, 멘션,
+`리오야 /메모`, `리오야 /기억`, `리오야 /이모지 ...` 같은 prefix+slash 메시지 명령은
+production entrypoint에서 더 이상 해석하지 않습니다. 일반 대화 호출은 기존처럼 `리오야`, 멘션,
 답장 핑을 사용합니다.
 
 비전 기능은 별도 slash command가 아니라 일반 대화 호출의 입력 확장입니다. 현재 호출 메시지에 포함된
@@ -74,13 +74,13 @@ memory/chatlog 설정 자체는 유지합니다.
 | `/chatlog clear` | 현재 채널의 메모리 내 최근 대화 문맥 비우기 |
 
 `/chatlog capture`의 기본값은 기존 동작과 호환되는 `all`입니다. `direct`를 선택하면 같은 채널의
-일반 대화는 recent context에 넣지 않고, 사용자가 `히나야`·멘션·답장 핑 등으로 히나를 직접 호출한
-메시지와 히나가 실제로 보낸 답변만 보관합니다. `all`/`direct` 모두 `global → server → channel`
+일반 대화는 recent context에 넣지 않고, 사용자가 `리오야`·멘션·답장 핑 등으로 리오를 직접 호출한
+메시지와 리오가 실제로 보낸 답변만 보관합니다. `all`/`direct` 모두 `global → server → channel`
 순서로 override되며 `inherit`으로 상위 설정을 따를 수 있습니다.
 
 capture 정책을 바꾸면 해당 범위의 메모리 내 recent buffer를 즉시 비워 이전의 더 넓은 문맥이 TTL
 동안 남지 않게 합니다. 이후 필요한 history backfill도 현재 capture 정책을 적용합니다. 또한
-`@사용자 어떻게 생각해?` 같은 대상 사용자 문맥 조회는 `direct` 모드에서 그 사용자가 과거에 히나를
+`@사용자 어떻게 생각해?` 같은 대상 사용자 문맥 조회는 `direct` 모드에서 그 사용자가 과거에 리오를
 직접 호출했던 메시지만 대상으로 삼습니다.
 
 최근 채널 대화 문맥은 장기 기억과 별개의 TTL 기반 임시 버퍼이며 장기 요약에는 포함되지 않습니다.
@@ -104,9 +104,9 @@ capture 정책을 바꾸면 해당 범위의 메모리 내 recent buffer를 즉�
 `/emoji import`의 `items`에는 줄마다 아래 형식으로 최대 20개를 입력합니다.
 
 ```text
-hina_sleep | 졸리거나 잠이 올 때
-hina_cry | 슬프거나 울고 싶을 때
-hina_angry | 화가 나거나 짜증이 났을 때
+rio_sleep | 졸리거나 잠이 올 때
+rio_cry | 슬프거나 울고 싶을 때
+rio_angry | 화가 나거나 짜증이 났을 때
 ```
 
 각 줄의 왼쪽 이름은 현재 서버의 커스텀 이모지 이름과 정확히 같아야 하며, 그 이름이 모델이 사용할
@@ -114,7 +114,7 @@ alias가 됩니다. 오른쪽 설명은 모델이 해당 이모지를 사용할 
 찾지 못하거나 이미 등록된 경우 해당 항목만 실패하고 나머지는 계속 처리합니다.
 
 `/emoji`로 등록된 **출력용 이모지 catalog**와 사용자가 현재 메시지에 넣은 **비전 입력용 커스텀
-이모지**는 역할이 다릅니다. catalog는 alias/description을 모델에 제공해 히나가 답변에서 사용할
+이모지**는 역할이 다릅니다. catalog는 alias/description을 모델에 제공해 리오가 답변에서 사용할
 이모지를 고르게 하고, 현재 메시지에 실제로 포함된 커스텀 이모지는 비전 입력으로 전달해 외형을
 해석할 수 있습니다.
 

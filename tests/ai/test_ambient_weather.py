@@ -3,14 +3,14 @@ from types import SimpleNamespace as NS
 
 import pytest
 
-from hina_bot.ai.ambient_weather import (
+from rio_bot.ai.ambient_weather import (
     CURRENT_AMBIENT_WEATHER,
     WEATHER_RETRY_SECONDS,
     WEATHER_TTL_SECONDS,
     AmbientWeatherCache,
     WeatherSnapshot,
 )
-from hina_bot.ai.runtime_context import build_runtime_context, runtime_instruction
+from rio_bot.ai.runtime_context import build_runtime_context, runtime_instruction
 
 
 def _settings(location="서울"):

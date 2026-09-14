@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 
-from hina_bot.ai.providers import (
+from rio_bot.ai.providers import (
     ProviderAPIError,
     _gemini_input,
     _GeminiResponses,
@@ -159,7 +159,7 @@ async def test_gemini_custom_reasoning_budget_is_forwarded():
     assert response.status == "incomplete"
     assert response.usage.output_tokens is None
     assert response.usage.output_tokens_details.reasoning_tokens == 2048
-    assert response._hina_error_codes == ["budget_exceeded"]
+    assert response._rio_error_codes == ["budget_exceeded"]
 
 
 @pytest.mark.asyncio

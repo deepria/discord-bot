@@ -1,11 +1,11 @@
 from importlib.resources import files
 
-from hina_bot.ai.llm import POLICY
-from hina_bot.ai.runtime_llm import GENERAL_RP_OUTPUT_POLICY, SUMMARY_POLICY
+from rio_bot.ai.llm import POLICY
+from rio_bot.ai.runtime_llm import GENERAL_RP_OUTPUT_POLICY, SUMMARY_POLICY
 
 
 def _character_prompt() -> str:
-    return files("hina_bot").joinpath("prompts", "hina.md").read_text(encoding="utf-8")
+    return files("rio_bot").joinpath("prompts", "rio.md").read_text(encoding="utf-8")
 
 
 def test_discord_prompts_forbid_stage_directions():

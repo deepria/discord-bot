@@ -2,9 +2,9 @@ from pathlib import Path
 
 import pytest
 
-from hina_bot.core.config import Settings
-from hina_bot.core.runtime_config import RuntimeSettings
-from hina_bot.core.store import Store
+from rio_bot.core.config import Settings
+from rio_bot.core.runtime_config import RuntimeSettings
+from rio_bot.core.store import Store
 
 
 def _base(**overrides):

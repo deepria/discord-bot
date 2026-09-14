@@ -5,12 +5,12 @@ from pathlib import Path
 from types import SimpleNamespace as NS
 from unittest.mock import patch
 
-from hina_bot import lore_cli, lore_pipeline
-from hina_bot.lore import read_jsonl, write_jsonl
-from hina_bot.lore_web import _extract_web_sources, verify_candidate
+from rio_bot import lore_cli, lore_pipeline
+from rio_bot.lore import read_jsonl, write_jsonl
+from rio_bot.lore_web import _extract_web_sources, verify_candidate
 
 
-def candidate(identifier: str = "canon.hina.test", **overrides) -> dict:
+def candidate(identifier: str = "canon.rio.test", **overrides) -> dict:
     row = {
         "id": identifier,
         "source_id": "source-001",
@@ -110,11 +110,11 @@ class LoreWebTests(unittest.TestCase):
             "note": "2차 자료가 설정을 뒷받침한다.",
             "kr_release": "confirmed",
             "kr_release_note": "출시되었다고 적혀 있다.",
-            "relied_urls": ["https://example-wiki.test/hina"],
+            "relied_urls": ["https://example-wiki.test/Rio"],
         }
         response = FakeResponse(
             parsed,
-            [{"url": "https://example-wiki.test/hina", "title": "Wiki"}],
+            [{"url": "https://example-wiki.test/Rio", "title": "Wiki"}],
         )
         client = NS(responses=NS(create=lambda **kwargs: response))
         result = verify_candidate(client, candidate(), model="gpt-5.4-mini")

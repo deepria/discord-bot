@@ -1,14 +1,14 @@
 from datetime import UTC, datetime
 
-from hina_bot.ai.freshness import (
+from rio_bot.ai.freshness import (
     FreshnessMode,
     classify_freshness,
     is_live_domain,
     is_location_dependent,
     needs_location_clarification,
 )
-from hina_bot.ai.runtime_context import build_runtime_context, runtime_instruction
-from hina_bot.core.config import Settings
+from rio_bot.ai.runtime_context import build_runtime_context, runtime_instruction
+from rio_bot.core.config import Settings
 
 
 def test_clock_queries_do_not_need_external_freshness():

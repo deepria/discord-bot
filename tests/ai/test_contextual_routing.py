@@ -1,8 +1,8 @@
-from hina_bot.routing import Scope
-from hina_bot.store import Store
+from rio_bot.routing import Scope
+from rio_bot.store import Store
 
-from hina_bot.ai.contextual_routing import build_query, find_anchor, is_followup
-from hina_bot.ai.routing_plan import RoutingPlan, build_routing_plan
+from rio_bot.ai.contextual_routing import build_query, find_anchor, is_followup
+from rio_bot.ai.routing_plan import RoutingPlan, build_routing_plan
 
 
 def test_short_followup_reuses_same_speaker_topic():

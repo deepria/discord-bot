@@ -3,16 +3,16 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from hina_bot.ai.llm import POLICY
-from hina_bot.ai.providers import _gemini_input
-from hina_bot.ai.vision import (
+from rio_bot.ai.llm import POLICY
+from rio_bot.ai.providers import _gemini_input
+from rio_bot.ai.vision import (
     CURRENT_VISUAL_INPUTS,
     VISION_INPUT_POLICY,
     VISION_REQUEST_ACTIVE,
     VisionClient,
     VisualInput,
 )
-from hina_bot.discord.slash_commands import HELP_TEXT
+from rio_bot.discord.slash_commands import HELP_TEXT
 
 
 def test_base_policy_describes_conditional_vision_capability():
@@ -60,7 +60,7 @@ async def test_vision_client_does_not_modify_summary_requests():
     raw = NS(responses=NS(create=create), close=AsyncMock())
     client = VisionClient(raw)
     token = CURRENT_VISUAL_INPUTS.set((
-        VisualInput(b"\xff\xd8\xffabc", "image/jpeg", "emoji", "hina_test"),
+        VisualInput(b"\xff\xd8\xffabc", "image/jpeg", "emoji", "rio_test"),
     ))
     try:
         await client.responses.create(

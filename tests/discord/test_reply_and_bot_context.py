@@ -3,14 +3,14 @@ from types import SimpleNamespace as NS
 from unittest.mock import AsyncMock
 
 import pytest
-from hina_bot.config import Settings
-from hina_bot.routing import Scope
-from hina_bot.store import Store
-from hina_bot.web_bot import HinaClient
+from rio_bot.config import Settings
+from rio_bot.routing import Scope
+from rio_bot.store import Store
+from rio_bot.web_bot import RioClient
 
-from hina_bot.discord.chatlog_capture import set_capture_mode_override
-from hina_bot.discord.reply_context import REPLY_CONTEXT, collect_reply_context
-from hina_bot.discord.target_recent import TargetAwareRecentMessages
+from rio_bot.discord.chatlog_capture import set_capture_mode_override
+from rio_bot.discord.reply_context import REPLY_CONTEXT, collect_reply_context
+from rio_bot.discord.target_recent import TargetAwareRecentMessages
 
 
 class FakeHistoryChannel:
@@ -97,7 +97,7 @@ async def test_reply_to_other_bot_is_marked_as_bot_context():
 async def client():
     store = Store(":memory:")
     llm = NS(close=AsyncMock())
-    bot = HinaClient(Settings("test", "test", cooldown=0), store=store, llm=llm)
+    bot = RioClient(Settings("test", "test", cooldown=0), store=store, llm=llm)
     bot._connection.user = NS(id=99)
     try:
         yield bot, store

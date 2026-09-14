@@ -9,12 +9,12 @@ try:
 except ModuleNotFoundError:
     AVAILABLE = False
 
-from hina_bot.routing import Scope
-from hina_bot.store import Store
+from rio_bot.routing import Scope
+from rio_bot.store import Store
 
 if AVAILABLE:
-    from hina_bot.bot import HinaClient
-    from hina_bot.config import Settings
+    from rio_bot.bot import RioClient
+    from rio_bot.config import Settings
 
 
 @unittest.skipUnless(AVAILABLE, "Install project dependencies to test Discord adapters")
@@ -27,7 +27,7 @@ class ChatLogAdapterTests(unittest.IsolatedAsyncioTestCase):
             summarize_shared=AsyncMock(),
             close=AsyncMock(),
         )
-        self.bot = HinaClient(Settings("test", "test", cooldown=0), store=self.store, llm=self.llm)
+        self.bot = RioClient(Settings("test", "test", cooldown=0), store=self.store, llm=self.llm)
         self.bot._connection.user = NS(id=99)
         self.channel = MagicMock(spec=discord.TextChannel)
         self.channel.id = 10

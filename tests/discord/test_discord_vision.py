@@ -2,12 +2,12 @@ from types import SimpleNamespace as NS
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from hina_bot.config import Settings
-from hina_bot.store import Store
-from hina_bot.web_bot import HinaClient
+from rio_bot.config import Settings
+from rio_bot.store import Store
+from rio_bot.web_bot import RioClient
 
-from hina_bot.ai.vision import CURRENT_VISUAL_INPUTS
-from hina_bot.discord.vision import VisionLimits, collect_visual_inputs
+from rio_bot.ai.vision import CURRENT_VISUAL_INPUTS
+from rio_bot.discord.vision import VisionLimits, collect_visual_inputs
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"x" * 16
 GIF = b"GIF89a" + b"x" * 16
@@ -52,7 +52,7 @@ async def test_collects_custom_emoji_once_and_raster_sticker():
         format=NS(name="png"),
     )
     message = NS(
-        content="리오야 <:hina_test:123> <:hina_test:123>",
+        content="리오야 <:rio_test:123> <:rio_test:123>",
         attachments=[],
         stickers=[sticker],
     )
@@ -60,7 +60,7 @@ async def test_collects_custom_emoji_once_and_raster_sticker():
     visuals = await collect_visual_inputs(message, downloader=downloader)
 
     assert [(v.source, v.name) for v in visuals] == [
-        ("emoji", "hina_test"),
+        ("emoji", "rio_test"),
         ("sticker", "리오 스티커"),
     ]
     assert len([url for url in urls if "/emojis/123." in url]) == 1
@@ -159,7 +159,7 @@ async def test_image_only_trigger_reaches_llm_with_ephemeral_visual_context():
         close=AsyncMock(),
     )
     store = Store(":memory:")
-    bot = HinaClient(Settings("test", "test", cooldown=0), store=store, llm=llm)
+    bot = RioClient(Settings("test", "test", cooldown=0), store=store, llm=llm)
     bot._connection.user = NS(id=99)
     channel = MagicMock()
     channel.id = 10

@@ -1,6 +1,6 @@
 # Lore web verification
 
-`hina-lore verify-web`은 `extract`가 만든 canon 항목을 OpenAI Responses API의 built-in web search로
+`rio-lore verify-web`은 `extract`가 만든 canon 항목을 OpenAI Responses API의 built-in web search로
 교차 검증합니다. 승인 전 candidate뿐 아니라 이미 runtime에 반영한 accepted 항목도 audit할 수
 있습니다. 웹 검색 결과가 새 lore를 자동 생성하거나 기존 claim의 `fact_type`/`summary`를
 덮어쓰지는 않습니다.
@@ -28,7 +28,7 @@ Nexon/Blue Archive URL을 실제 검색 결과에서 확인한 경우에만 유�
 한 항목만 먼저 시험할 수 있습니다. 상태를 생략하면 기본적으로 candidate만 대상으로 합니다.
 
 ```bash
-uv run hina-lore verify-web canon.hina.some-fact
+uv run rio-lore verify-web canon.rio.some-fact
 ```
 
 범위 지정도 가능합니다. 실수로 큰 비용이 발생하지 않도록 범위 지정 없이 전체 검증하는 동작은
@@ -36,17 +36,17 @@ uv run hina-lore verify-web canon.hina.some-fact
 
 ```bash
 # 대상만 확인하고 API 호출하지 않음
-uv run hina-lore verify-web \
+uv run rio-lore verify-web \
   --source-type curated_research \
   --fact-type fact_direct \
   --dry-run
 
 # curated canon candidate 중 아직 검증하지 않은 앞 20개
-uv run hina-lore verify-web \
+uv run rio-lore verify-web \
   --source-type curated_research
 
 # 제한 없이 해당 candidate 범위 전부
-uv run hina-lore verify-web \
+uv run rio-lore verify-web \
   --source-type curated_research \
   --limit 0
 ```
@@ -55,18 +55,18 @@ uv run hina-lore verify-web \
 
 ```bash
 # 먼저 실제 검색 대상만 확인
-uv run hina-lore verify-web \
+uv run rio-lore verify-web \
   --source-type curated_research \
   --status accepted \
   --dry-run
 
 # 승인된 curated lore 앞 20개를 실제 웹 검증
-uv run hina-lore verify-web \
+uv run rio-lore verify-web \
   --source-type curated_research \
   --status accepted
 
 # 승인된 curated lore 전체 audit
-uv run hina-lore verify-web \
+uv run rio-lore verify-web \
   --source-type curated_research \
   --status accepted \
   --limit 0
@@ -76,20 +76,20 @@ uv run hina-lore verify-web \
 이미 `verification`이 있는 항목은 건너뜁니다. 다시 확인하려면 `--force`를 사용합니다.
 
 ```bash
-uv run hina-lore verify-web canon.hina.some-fact --status accepted --force
+uv run rio-lore verify-web canon.rio.some-fact --status accepted --force
 ```
 
 기본 모델은 `gpt-5.4-mini`이며 `LORE_VERIFY_MODEL` 또는 `--model`로 변경할 수 있습니다.
 
 ```bash
-LORE_VERIFY_MODEL=gpt-5.4-mini uv run hina-lore verify-web \
+LORE_VERIFY_MODEL=gpt-5.4-mini uv run rio-lore verify-web \
   --source-type curated_research \
   --status accepted
 ```
 
 ## 승인과의 연동
 
-`hina-lore list`는 candidate 옆에 `[web:...]` 상태, 검증 메모, 일부 출처 URL,
+`rio-lore list`는 candidate 옆에 `[web:...]` 상태, 검증 메모, 일부 출처 URL,
 한국 서버 공개 검증 상태를 표시합니다. 이미 accepted인 runtime 항목에서 웹 충돌이 발견되면
 별도의 `WARNING: accepted runtime web conflicts` 요약도 출력합니다.
 

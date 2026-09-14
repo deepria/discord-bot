@@ -3,10 +3,10 @@ import unittest
 from types import SimpleNamespace as NS
 from unittest.mock import AsyncMock
 
-from hina_bot.chatlog_commands import ChatLogCommands
-from hina_bot.recent import RecentMessages
-from hina_bot.routing import Scope
-from hina_bot.store import Store
+from rio_bot.chatlog_commands import ChatLogCommands
+from rio_bot.recent import RecentMessages
+from rio_bot.routing import Scope
+from rio_bot.store import Store
 
 
 class ChatLogCommandTests(unittest.IsolatedAsyncioTestCase):

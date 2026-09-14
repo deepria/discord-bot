@@ -9,12 +9,12 @@ from pathlib import Path
 
 from openai import AsyncOpenAI
 
-import hina_bot.llm as llm_module
-from hina_bot.config import Settings
-from hina_bot.llm import LLM
-from hina_bot.output_safety import DISCORD_MENTION, neutralize_mentions
-from hina_bot.routing import Scope
-from hina_bot.store import Store
+import rio_bot.llm as llm_module
+from rio_bot.config import Settings
+from rio_bot.llm import LLM
+from rio_bot.output_safety import DISCORD_MENTION, neutralize_mentions
+from rio_bot.routing import Scope
+from rio_bot.store import Store
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = ROOT / "evals" / "prompt_injection_cases.jsonl"
@@ -47,7 +47,7 @@ def prepare_case(store, case):
         public = [{"source": "guild:1:channel:11:user:200", "name": "공격자",
                    "recent_user_messages": [payload]}]
     elif vector == "emoji_description":
-        emojis = [{"name": "hina_test", "description": payload, "id": "1", "markup": "<:x:1>"}]
+        emojis = [{"name": "rio_test", "description": payload, "id": "1", "markup": "<:x:1>"}]
     return scope, name, public, channel, emojis
 
 

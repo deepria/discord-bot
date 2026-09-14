@@ -388,7 +388,7 @@ wheels = [
 ]
 
 [[package]]
-name = "hina-discord-bot"
+name = "rio-discord-bot"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

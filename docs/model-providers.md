@@ -125,29 +125,29 @@ OPENAI_API_KEY=...
 
 ## 같은 eval을 여러 provider에서 비교
 
-`hina-eval`은 `--provider`와 `--model`을 지원합니다. 선택한 provider의 환경 변수 키가 필요합니다.
+`rio-eval`은 `--provider`와 `--model`을 지원합니다. 선택한 provider의 환경 변수 키가 필요합니다.
 
 ```bash
-uv run hina-eval --provider openai --model gpt-4.1-mini --limit 5
-uv run hina-eval --provider gemini --model gemini-3.5-flash --limit 5
-uv run hina-eval --provider openrouter --model anthropic/claude-sonnet-4.6 --limit 5
+uv run rio-eval --provider openai --model gpt-4.1-mini --limit 5
+uv run rio-eval --provider gemini --model gemini-3.5-flash --limit 5
+uv run rio-eval --provider openrouter --model anthropic/claude-sonnet-4.6 --limit 5
 ```
 
 같은 `evals/character_lore_cases.jsonl`을 사용하므로 캐릭터 유지, 설정 정확도, 메타 발언 같은 차이를
 동일한 입력으로 비교할 수 있습니다. 결과 JSONL/Markdown에는 provider와 model이 함께 기록됩니다.
 
-현재 `hina-eval`의 기존 character/lore case는 텍스트 중심입니다. 비전 기능 검증은 우선 실제 Discord
+현재 `rio-eval`의 기존 character/lore case는 텍스트 중심입니다. 비전 기능 검증은 우선 실제 Discord
 smoke test와 결정적 adapter/collector 테스트로 진행합니다. 비전 회귀 사례를 자동 eval에 추가하는 것은
 1차 구현 검증 이후에 별도 범위로 다룹니다.
 
 ## 현재 범위
 
 provider 선택은 실제 Discord 답변, 장기 기억 요약, runtime knowledge ingest가 사용하는 LLM 호출,
-`hina-eval`에 적용됩니다. 기존 `hina-lore extract`/`verify-web` 파이프라인과
+`rio-eval`에 적용됩니다. 기존 `rio-lore extract`/`verify-web` 파이프라인과
 `scripts/run_prompt_injection_eval.py`는 아직 OpenAI 전용 보조 도구이므로 이번 provider 전환 범위에
 포함하지 않았습니다.
 
 웹 검색은 각 provider의 기능과 과금 정책을 따릅니다. `CHAT_WEB_SEARCH=false`로 공통 검색 사용을
 끌 수 있습니다. provider마다 모델이 system instruction, 긴 문맥, 검색 결과, 이미지 입력을 따르는
-방식이 다르므로 모델을 바꾼 뒤에는 주요 `hina-eval`과 함께 실제 Discord smoke test를 다시 실행하는
+방식이 다르므로 모델을 바꾼 뒤에는 주요 `rio-eval`과 함께 실제 Discord smoke test를 다시 실행하는
 것을 권장합니다.

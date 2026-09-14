@@ -5,12 +5,12 @@ import httpx
 import pytest
 from openai import AsyncOpenAI
 
-from hina_bot.chat_llm import LLM
-from hina_bot.config import Settings
-from hina_bot.lore import LoreIndex
-from hina_bot.routing import Scope
-from hina_bot.store import Store
-from hina_bot.web_bot import LLM as DiscordLLM
+from rio_bot.chat_llm import LLM
+from rio_bot.config import Settings
+from rio_bot.lore import LoreIndex
+from rio_bot.routing import Scope
+from rio_bot.store import Store
+from rio_bot.web_bot import LLM as DiscordLLM
 
 
 @pytest.fixture
@@ -70,7 +70,7 @@ async def test_relation_question_requires_search_without_local_evidence(chat_llm
 async def test_relation_question_still_searches_with_one_local_fact(chat_llm):
     llm, calls = chat_llm
     llm.lore = LoreIndex([{
-        "id": "test.hina.nagisa.meeting",
+        "id": "test.rio.nagisa.meeting",
         "lane": "canon",
         "fact_type": "fact_direct",
         "summary": "리오는 나기사와 특정 사건에서 직접 만난 적이 있다.",
@@ -86,7 +86,7 @@ async def test_relation_question_still_searches_with_one_local_fact(chat_llm):
         assert payload["tool_choice"] == "required"
         assert payload["tools"][0]["search_context_size"] == "low"
         reference = json.loads(payload["input"][0]["content"].split("\n", 1)[1])
-        assert reference["lore_reference"][0]["reference"] == "test.hina.nagisa.meeting"
+        assert reference["lore_reference"][0]["reference"] == "test.rio.nagisa.meeting"
     finally:
         store.close()
 
@@ -95,7 +95,7 @@ async def test_relation_question_still_searches_with_one_local_fact(chat_llm):
 async def test_simple_fact_with_local_world_fact_has_no_web_tool_overhead(chat_llm):
     llm, calls = chat_llm
     llm.lore = LoreIndex([{
-        "id": "test.hina.weapon",
+        "id": "test.rio.weapon",
         "lane": "canon",
         "fact_type": "fact_direct",
         "summary": "리오의 기관총 이름은 Planner다.",

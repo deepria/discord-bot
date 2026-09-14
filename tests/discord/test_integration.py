@@ -12,14 +12,14 @@ try:
 except ModuleNotFoundError:
     AVAILABLE = False
 
-from hina_bot.routing import Scope
-from hina_bot.store import Store
+from rio_bot.routing import Scope
+from rio_bot.store import Store
 
 if AVAILABLE:
-    from hina_bot.bot import HinaClient
-    from hina_bot.config import Settings
-    from hina_bot.llm import LLM
-    from hina_bot.lore import LoreIndex
+    from rio_bot.bot import RioClient
+    from rio_bot.config import Settings
+    from rio_bot.llm import LLM
+    from rio_bot.lore import LoreIndex
 
 
 @unittest.skipUnless(AVAILABLE, "Install project dev dependencies to test SDK/Discord adapters")
@@ -188,7 +188,7 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.store = Store(":memory:")
         self.llm = NS(answer=AsyncMock(return_value="안녕"), summarize=AsyncMock(), summarize_shared=AsyncMock(), close=AsyncMock())
-        self.bot = HinaClient(Settings("test", "test", cooldown=0), store=self.store, llm=self.llm)
+        self.bot = RioClient(Settings("test", "test", cooldown=0), store=self.store, llm=self.llm)
         self.bot._connection.user = NS(id=99)
         self.channel = MagicMock(spec=discord.TextChannel)
         self.channel.id = 10

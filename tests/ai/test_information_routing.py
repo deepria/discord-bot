@@ -1,5 +1,5 @@
-from hina_bot.ai.information_evidence import search_mode
-from hina_bot.ai.information_routing import (
+from rio_bot.ai.information_evidence import search_mode
+from rio_bot.ai.information_routing import (
     InformationRoute,
     classify_information_request,
 )
@@ -50,7 +50,7 @@ def test_live_real_world_question_uses_web():
 
 def test_relation_query_uses_matching_local_event_evidence():
     request = classify_information_request("나기사 직접 만나본 적 있어?")
-    refs = [fact("canon.hina.nagisa.meeting", "리오는 나기사와 직접 만난 적이 있다.")]
+    refs = [fact("canon.rio.nagisa.meeting", "리오는 나기사와 직접 만난 적이 있다.")]
     assert request.route == InformationRoute.LOCAL_THEN_WEB
     assert "만남" in request.lore_query
     assert search_mode(request, refs, enabled=True) == "none"

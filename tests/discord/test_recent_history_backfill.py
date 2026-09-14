@@ -7,13 +7,13 @@ from unittest.mock import AsyncMock
 
 AVAILABLE = find_spec("discord") is not None
 
-from hina_bot.recent import RecentMessages
-from hina_bot.routing import Scope
+from rio_bot.recent import RecentMessages
+from rio_bot.routing import Scope
 
 if AVAILABLE:
-    from hina_bot.bot import HinaClient
-    from hina_bot.config import Settings
-    from hina_bot.store import Store
+    from rio_bot.bot import RioClient
+    from rio_bot.config import Settings
+    from rio_bot.store import Store
 
 
 class RecentBufferTests(unittest.TestCase):
@@ -58,7 +58,7 @@ class HistoryBackfillTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.store = Store(":memory:")
         self.llm = NS(close=AsyncMock())
-        self.bot = HinaClient(Settings("test", "test", cooldown=0), store=self.store, llm=self.llm)
+        self.bot = RioClient(Settings("test", "test", cooldown=0), store=self.store, llm=self.llm)
         self.bot._connection.user = NS(id=99)
 
     async def asyncTearDown(self):

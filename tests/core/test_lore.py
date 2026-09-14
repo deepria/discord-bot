@@ -5,9 +5,9 @@ from pathlib import Path
 from types import SimpleNamespace as NS
 from unittest.mock import patch
 
-from hina_bot import lore_pipeline
-from hina_bot.lore import LoreIndex, LoreValidationError, validate_record
-from hina_bot.lore_pipeline import _source_rows, _typed_source_rows
+from rio_bot import lore_pipeline
+from rio_bot.lore import LoreIndex, LoreValidationError, validate_record
+from rio_bot.lore_pipeline import _source_rows, _typed_source_rows
 
 
 def record(identifier="canon.test", lane="canon", **overrides):
@@ -59,16 +59,16 @@ class LoreValidationTests(unittest.TestCase):
         self.assertTrue(all(len(row["text"]) <= 24_000 for row in rows))
 
     def test_curated_fact_labels_are_split_before_extraction(self):
-        text = "# header\n\n[FACT_DIRECT]\nid: hina.fact\nstatement: 직접 사실\n\n"
-        text += "[INFERENCE]\nid: hina.guess\nstatement: 해석\n\n"
-        text += "[UNKNOWN]\nid: hina.unknown\nstatement: 미확인\n"
+        text = "# header\n\n[FACT_DIRECT]\nid: rio.fact\nstatement: 직접 사실\n\n"
+        text += "[INFERENCE]\nid: rio.guess\nstatement: 해석\n\n"
+        text += "[UNKNOWN]\nid: rio.unknown\nstatement: 미확인\n"
         rows = _typed_source_rows(
             text, lane="canon", title="curated", url="u", source_type="curated", locator="root")
         self.assertEqual(
             [row["declared_fact_type"] for row in rows],
             ["fact_direct", "inference", "unknown"],
         )
-        self.assertIn("hina.fact", rows[0]["locator"])
+        self.assertIn("rio.fact", rows[0]["locator"])
         self.assertNotIn("# header", rows[0]["text"])
 
 
@@ -119,7 +119,7 @@ class LoreSearchTests(unittest.TestCase):
         self.assertNotIn("optional_reaction", str(self.index.search(
             "리오 머리 부피를 구하자", include_community=False)))
 
-    def test_generic_hina_does_not_retrieve_every_meme(self):
+    def test_generic_rio_does_not_retrieve_every_meme(self):
         self.assertEqual(self.index.search("리오야 안녕"), [])
 
     def test_budget_and_limit_are_enforced(self):
@@ -132,7 +132,7 @@ class LoreSearchTests(unittest.TestCase):
         self.assertEqual(len({row["id"] for row in packaged.records}), len(packaged.records))
         self.assertTrue(all(row["status"] == "accepted" for row in packaged.records))
         self.assertTrue(any(row["lane"] == "canon" for row in packaged.records))
-        result = packaged.search("리오는 게헨나 선도부장이야?")
+        result = packaged.search("리오는 밀레니엄 세미나 학생회장이야?")
         self.assertTrue(result)
         self.assertTrue(any(item["kind"] == "world_fact" for item in result))
 
@@ -140,7 +140,7 @@ class LoreSearchTests(unittest.TestCase):
 class LorePipelineTests(unittest.TestCase):
     def test_extract_stays_candidate_and_canon_approval_needs_kr_confirmation(self):
         parsed = {"candidates": [{
-            "slug": "hina.test-fact", "summary": "리오는 시험 설정을 알고 있다.",
+            "slug": "rio.test-fact", "summary": "리오는 시험 설정을 알고 있다.",
             "fact_type": "fact_direct", "keywords": ["시험 설정"], "subjects": ["리오"],
             "knowledge": "self", "reaction": "", "evidence": "장면 일부", "uncertainty": "",
             "timeline": "테스트 장면", "kr_release_evidence": "한국 공지",
@@ -178,7 +178,7 @@ class LorePipelineTests(unittest.TestCase):
 
     def test_declared_fact_type_overrides_model_and_reference_only_is_suppressed(self):
         parsed = {"candidates": [{
-            "slug": "hina.anim", "summary": "애니메이션에서 날개 크기가 바뀐다.",
+            "slug": "rio.anim", "summary": "애니메이션에서 날개 크기가 바뀐다.",
             "fact_type": "fact_direct", "keywords": ["날개"], "subjects": ["리오"],
             "knowledge": "self", "reaction": "", "evidence": "7화", "uncertainty": "",
             "timeline": "The Animation 7화", "kr_release_evidence": "",
@@ -211,7 +211,7 @@ class LorePipelineTests(unittest.TestCase):
 
     def test_edit_candidate_updates_review_fields_before_approval(self):
         candidate = record(
-            "canon.hina.test-edit",
+            "canon.rio.test-edit",
             summary="수정 전 요약",
             keywords=["수정 전"],
             subjects=["리오"],
@@ -252,7 +252,7 @@ class LorePipelineTests(unittest.TestCase):
 
     def test_edit_can_promote_suppressed_only_by_reclassifying_it(self):
         candidate = record(
-            "canon.hina.reclassify",
+            "canon.rio.reclassify",
             fact_type="fandom",
             confidence="candidate",
             status="suppressed",

@@ -4,15 +4,15 @@ from pathlib import Path
 from types import SimpleNamespace as NS
 from unittest.mock import AsyncMock
 
-from hina_bot.admin_db import AdminDatabase
-from hina_bot.instruction_commands import InstructionCommands
-from hina_bot.instructions import InstructionRegistry
+from rio_bot.admin_db import AdminDatabase
+from rio_bot.instruction_commands import InstructionCommands
+from rio_bot.instructions import InstructionRegistry
 
 
 class InstructionRegistryTests(unittest.TestCase):
     def test_crud_and_active_text(self):
         with tempfile.TemporaryDirectory() as directory:
-            database = AdminDatabase(str(Path(directory) / "hina.sqlite3"))
+            database = AdminDatabase(str(Path(directory) / "rio.sqlite3"))
             registry = InstructionRegistry(database)
 
             self.assertEqual(registry.list(), [])
@@ -48,7 +48,7 @@ class InstructionRegistryTests(unittest.TestCase):
             registry.add("valid-id", "저장할 수 없어야 합니다.")
 
         with tempfile.TemporaryDirectory() as directory:
-            database = AdminDatabase(str(Path(directory) / "hina.sqlite3"))
+            database = AdminDatabase(str(Path(directory) / "rio.sqlite3"))
             registry = InstructionRegistry(database)
             for identifier in ("a", "한글", "bad id", "UPPER CASE"):
                 with self.assertRaises(ValueError):

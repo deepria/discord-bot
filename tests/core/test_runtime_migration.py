@@ -4,17 +4,17 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace as NS
 
-from hina_bot.admin_db import AdminDatabase
-from hina_bot.instructions import InstructionRegistry
-from hina_bot.runtime_knowledge import RuntimeKnowledgeRegistry
-from hina_bot.runtime_migration import migrate
+from rio_bot.admin_db import AdminDatabase
+from rio_bot.instructions import InstructionRegistry
+from rio_bot.runtime_knowledge import RuntimeKnowledgeRegistry
+from rio_bot.runtime_migration import migrate
 
 
 class RuntimeMigrationTests(unittest.TestCase):
     def test_migrates_legacy_json_and_preserves_unknown_dates_as_null(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            database_path = root / "hina.sqlite3"
+            database_path = root / "rio.sqlite3"
             instructions_path = root / "instructions.json"
             facts_path = root / "runtime_lore.json"
             contexts_path = root / "contexts.json"
@@ -90,7 +90,7 @@ class RuntimeMigrationTests(unittest.TestCase):
                 {"id": "dry-run", "text": "저장되면 안 됨", "enabled": True}
             ], ensure_ascii=False), encoding="utf-8")
             args = NS(
-                database=str(root / "hina.sqlite3"),
+                database=str(root / "rio.sqlite3"),
                 instructions=str(source),
                 facts=str(root / "missing-facts.json"),
                 contexts=str(root / "missing-contexts.json"),

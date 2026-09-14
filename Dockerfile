@@ -3,6 +3,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /app
 COPY pyproject.toml ./
 COPY src ./src
-RUN pip install --no-cache-dir . && useradd --create-home --uid 10001 hina && mkdir /app/data && chown hina:hina /app/data
-USER hina
-CMD ["hina-bot"]
+RUN pip install --no-cache-dir . && useradd --create-home --uid 10001 rio && mkdir /app/data && chown rio:rio /app/data
+USER rio
+CMD ["rio-bot"]

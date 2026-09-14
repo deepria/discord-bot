@@ -5,10 +5,10 @@ from pathlib import Path
 from types import SimpleNamespace as NS
 from unittest.mock import AsyncMock
 
-from hina_bot.memory_commands import MemoryCommands, MemoryMode
-from hina_bot.recent import RecentMessages
-from hina_bot.routing import Scope
-from hina_bot.store import Store
+from rio_bot.memory_commands import MemoryCommands, MemoryMode
+from rio_bot.recent import RecentMessages
+from rio_bot.routing import Scope
+from rio_bot.store import Store
 
 
 class ModeTests(unittest.TestCase):

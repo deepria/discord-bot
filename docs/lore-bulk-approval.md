@@ -1,13 +1,13 @@
 # Lore bulk approval
 
-`hina-lore approve-all`은 review queue의 `candidate`를 범위 지정 후 한 번에 승인합니다.
+`rio-lore approve-all`은 review queue의 `candidate`를 범위 지정 후 한 번에 승인합니다.
 실수로 전체 queue를 승인하지 않도록 `--source-type`, `--id-prefix`, `--title` 중 하나 이상을
 반드시 지정해야 합니다.
 
 먼저 dry run을 권장합니다.
 
 ```bash
-uv run hina-lore approve-all \
+uv run rio-lore approve-all \
   --source-type curated_research \
   --confirm-kr-release \
   --dry-run
@@ -19,7 +19,7 @@ uv run hina-lore approve-all \
 검토가 끝났다면 같은 범위에 `--yes`를 사용합니다.
 
 ```bash
-uv run hina-lore approve-all \
+uv run rio-lore approve-all \
   --source-type curated_research \
   --confirm-kr-release \
   --yes
@@ -28,8 +28,8 @@ uv run hina-lore approve-all \
 추가 필터도 사용할 수 있습니다.
 
 ```bash
-uv run hina-lore approve-all \
-  --id-prefix canon.hina.bond. \
+uv run rio-lore approve-all \
+  --id-prefix canon.rio.bond. \
   --fact-type fact_direct \
   --fact-type fact_reported \
   --confirm-kr-release \
@@ -60,7 +60,7 @@ uv run hina-lore approve-all \
 필요하면 전체 승인 대상에 같은 confidence를 강제로 지정할 수 있습니다.
 
 ```bash
-uv run hina-lore approve-all \
+uv run rio-lore approve-all \
   --source-type curated_research \
   --confidence crosschecked \
   --confirm-kr-release \

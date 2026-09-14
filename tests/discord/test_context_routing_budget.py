@@ -3,14 +3,14 @@ from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace as NS
 from unittest.mock import AsyncMock
 
-from hina_bot.config import Settings
-from hina_bot.routing import Scope
-from hina_bot.store import Store
+from rio_bot.config import Settings
+from rio_bot.routing import Scope
+from rio_bot.store import Store
 
-from hina_bot.discord.reply_context import REPLY_CONTEXT
-from hina_bot.discord.target_context import TARGET_CONTEXT
-from hina_bot.discord.target_recent import TargetAwareRecentMessages
-from hina_bot.discord.web_bot import HinaClient, _public_context_request
+from rio_bot.discord.reply_context import REPLY_CONTEXT
+from rio_bot.discord.target_context import TARGET_CONTEXT
+from rio_bot.discord.target_recent import TargetAwareRecentMessages
+from rio_bot.discord.web_bot import RioClient, _public_context_request
 
 
 class ContextBudgetTests(unittest.TestCase):
@@ -154,7 +154,7 @@ class HydrationTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.store = Store(":memory:")
         self.llm = NS(close=AsyncMock())
-        self.bot = HinaClient(Settings("test", "test", cooldown=0), store=self.store, llm=self.llm)
+        self.bot = RioClient(Settings("test", "test", cooldown=0), store=self.store, llm=self.llm)
         self.bot._connection.user = NS(id=99)
 
     async def asyncTearDown(self):
@@ -172,7 +172,7 @@ class HydrationTests(unittest.IsolatedAsyncioTestCase):
             guild=NS(id=1),
         )
 
-    async def test_hydration_does_not_store_untargeted_old_hina_replies(self):
+    async def test_hydration_does_not_store_untargeted_old_rio_replies(self):
         now = datetime.now(UTC)
         channel = FakeHistoryChannel([
             self.old_message(1, "최근 사용자 발언", now - timedelta(minutes=3)),

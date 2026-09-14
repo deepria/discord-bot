@@ -1,6 +1,6 @@
 # Lore fact types
 
-`hina-lore ingest-file`은 일반 원문과 **fact-type이 표시된 curated 원문**을 모두 받을 수 있습니다.
+`rio-lore ingest-file`은 일반 원문과 **fact-type이 표시된 curated 원문**을 모두 받을 수 있습니다.
 
 ## Curated block format
 
@@ -21,11 +21,11 @@ Example:
 
 ```text
 [FACT_VISUAL]
-id: hina.wings.aerial_movement
-statement: 히나는 특정 공식 컷신에서 날개를 펼친 채 공중 기동한다.
+id: rio.wings.aerial_movement
+statement: 리오는 특정 공식 컷신에서 날개를 펼친 채 공중 기동한다.
 
 [INFERENCE]
-id: hina.wings.speed
+id: rio.wings.speed
 statement: 해당 추격 연출상 매우 빠른 공중 이동이 가능한 것으로 보인다.
 
 [UNKNOWN]
@@ -47,12 +47,12 @@ claim을 위 `fact_type` 중 하나로 분류하며, `~로 보인다`, `추측�
 
 ## Review behavior
 
-`hina-lore list`는 일반 승인 후보 수와 `suppressed reference-only` 수를 따로 표시합니다.
+`rio-lore list`는 일반 승인 후보 수와 `suppressed reference-only` 수를 따로 표시합니다.
 `adaptation`/`fandom`인 canon-source claim은 자동으로 `suppressed`되어 runtime lore에 들어가지 않습니다.
 필요하다면 근거를 확인한 뒤 다음처럼 fact type을 재분류해야 승인 후보로 돌아옵니다.
 
 ```bash
-uv run hina-lore edit canon.some-id --fact-type fact_direct
+uv run rio-lore edit canon.some-id --fact-type fact_direct
 ```
 
 `inference`와 `unknown`은 승인할 수 있지만 runtime에서 `world_fact`가 아니라 `interpretation`으로
