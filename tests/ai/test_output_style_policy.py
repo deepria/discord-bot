@@ -62,6 +62,8 @@ def test_character_does_not_turn_past_lore_into_current_possession():
     assert "`lore_reference`의 사건은 해당 timeline 안에서만 확정" in character
     assert "현재 위치·소유·보관 상태를 묻는 질문" in character
     assert "현재 위치나 보관자는 확인되지 않았다고 답합니다" in character
+    assert "더 나중 시점의 항목을 우선" in character
+    assert "새 육체·이전·복원 완료" in character
 
 
 def test_summary_policy_drops_transient_conflict_and_stale_attitude():
