@@ -1,5 +1,35 @@
 [
   {
+    "id": "official_kr_codebox_update",
+    "source": "https://forum.nexon.com/bluearchive/board_view?board=1076&thread=2998604",
+    "locator": "Code: BOX 밀레니엄에 다가오는 그림자 / 밀레니엄 EXPO 특수조사 필드 탐색",
+    "source_medium": "official_patch_note",
+    "checked_at": "2026-09-15",
+    "fact": "Code: BOX 이벤트, 리오 일반 버전 모집, 세이아·네루 조작 필드 탐색, 리오의 강아지 로봇 저장 장치, First Avant Guard 상호작용을 확인하는 공식 공지입니다.",
+    "canon_status": "explicit_in_source",
+    "game_text_crosscheck": "pending_story_text",
+    "rio_knowledge": "mixed",
+    "knowledge_basis": "공지의 이벤트 구조는 public_knowledge, 리오가 직접 관여한 스토리 내용은 인게임 원문 대조 후 direct_experience로 확정합니다.",
+    "disclosure": "public",
+    "runtime_status": "partially_curated",
+    "timeline": "Code: BOX 밀레니엄 EXPO 과외조사"
+  },
+  {
+    "id": "official_kr_steel_continent_update",
+    "source": "https://forum.nexon.com/bluearchive/board_view?bannerBoard=1&thread=3429786",
+    "locator": "Ex. 데카그라마톤 편 제3장 합일의 하늘 Part 2 / 강철대륙 공략전",
+    "source_medium": "official_patch_note",
+    "checked_at": "2026-09-15",
+    "fact": "리오(무장), 히마리(무장), 토키(무장), Ex. 데카그라마톤 편 제3장 Part 2, 강철대륙 공략전, 리오(무장) 상호작용을 확인하는 공식 공지입니다.",
+    "canon_status": "explicit_in_source",
+    "game_text_crosscheck": "pending_story_text",
+    "rio_knowledge": "mixed",
+    "knowledge_basis": "공지의 업데이트·등장 정보는 public_knowledge로 쓰고, 세부 스토리 사건은 인게임 원문 대조 후 확정합니다.",
+    "disclosure": "public",
+    "runtime_status": "partially_curated",
+    "timeline": "Volume EX Chapter 3 강철대륙"
+  },
+  {
     "id": "rio_fandom_profile",
     "source": "https://bluearchive.fandom.com/wiki/Tsukatsuki_Rio",
     "locator": "Profile and personality sections",

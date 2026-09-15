@@ -1,2 +1,3 @@
-{"lane":"canon","locator":"학생 소개","source_type":"official_profile","title":"공식 학생 소개 예시","url":"https://example.com/official-profile"}
-{"lane":"community_meme","locator":"리오 관련 문단","source_type":"community_wiki","title":"커뮤니티 밈 조사 예시","url":"https://example.com/community-page"}
+{"lane":"canon","locator":"Code: BOX 밀레니엄에 다가오는 그림자 / 밀레니엄 EXPO 특수조사 필드 탐색","source_type":"official_patch_note","title":"7/8(화) 업데이트 상세 안내","url":"https://forum.nexon.com/bluearchive/board_view?board=1076&thread=2998604"}
+{"lane":"canon","locator":"Ex. 데카그라마톤 편 제3장 합일의 하늘 Part 2 / 강철대륙 공략전","source_type":"official_patch_note","title":"5/26(화) 업데이트 상세 안내","url":"https://forum.nexon.com/bluearchive/board_view?bannerBoard=1&thread=3429786"}
+{"lane":"canon","locator":"학생 프로필 / 보이스 / 인연 스토리","source_type":"official_game_text","title":"공식 인게임 리오 원문","url":"file://local-official-transcript.txt"}

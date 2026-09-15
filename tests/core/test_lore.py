@@ -135,6 +135,10 @@ class LoreSearchTests(unittest.TestCase):
         result = packaged.search("리오는 밀레니엄 세미나 학생회장이야?")
         self.assertTrue(result)
         self.assertTrue(any(item["kind"] == "world_fact" for item in result))
+        expo = packaged.search("세이아가 밀레니엄 엑스포에서 활약한 일 알아?")
+        self.assertTrue(any("밀레니엄 EXPO" in item["content"] for item in expo))
+        steel = packaged.search("강철대륙에서 리오가 고생한 이야기 알아?")
+        self.assertTrue(any("강철대륙" in item["content"] for item in steel))
 
 
 class LorePipelineTests(unittest.TestCase):
