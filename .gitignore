@@ -10,6 +10,10 @@ __pycache__/
 build/
 dist/
 /data/
+!/data/
+/data/*
+!/data/lore/
+!/data/lore/review.jsonl
 evals/results/
 *.sqlite*
 *.db*
