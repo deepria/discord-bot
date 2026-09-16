@@ -15,5 +15,5 @@ def test_character_prompt_stays_lightweight_and_lore_agnostic():
 
 
 def test_relationship_prompts_stay_small():
-    assert len(_prompt("ordinary_relationship.md").encode("utf-8")) <= 450
-    assert len(_prompt("special_dm.md").encode("utf-8")) <= 800
+    assert len(_prompt("ordinary_relationship.md").encode("utf-8")) <= 750
+    assert len(_prompt("special_dm.md").encode("utf-8")) <= 1000

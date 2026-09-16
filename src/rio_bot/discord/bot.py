@@ -39,12 +39,7 @@ HELP = """호출: @봇 멘션, 핑을 켠 답장, 또는 메시지 맨 앞의 `�
 
 
 def _bare_call_reply(scope: Scope, special_dm_user_id: int | None) -> str:
-    special_dm = (
-        scope.guild_id is None
-        and special_dm_user_id is not None
-        and scope.user_id == special_dm_user_id
-    )
-    return "응, 선생님. 무슨 일이야?" if special_dm else "응? 무슨 일이야?"
+    return "응, 선생 듣고있어."
 
 
 class RioClient(discord.Client):
