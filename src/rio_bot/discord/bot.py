@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import sys
 import time
 import weakref
 from contextlib import nullcontext
@@ -91,7 +92,12 @@ class RioClient(discord.Client):
 
     async def on_error(self, event, *args, **kwargs):
         # Discord's default handler prints message arguments and full tracebacks.
-        log.error("Discord event failed: %s", event)
+        exc_type, _, _ = sys.exc_info()
+        log.error(
+            "Discord event failed: %s (%s)",
+            event,
+            exc_type.__name__ if exc_type else "unknown",
+        )
 
     async def close(self):
         self.stopping = True

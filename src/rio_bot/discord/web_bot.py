@@ -232,42 +232,38 @@ class RioClient(BaseRioClient):
             return
 
         direct_only = scope.guild_id is not None and capture_mode(self.store, scope) == "direct"
-        sampled = (
-            await collect(
-                message,
-                self.user.id,
-                text,
-                direct_only=direct_only,
-                call_prefixes=self.settings.call_prefixes,
-            )
-            if text is not None
-            else []
-        )
-        replied = (
-            await collect_reply_context(message, self.user.id)
-            if text is not None
-            else []
-        )
-        visuals = (
-            await collect_visual_inputs(
-                message,
-                limits=self.vision_limits,
-                include_reply=True,
-                include_recent=scope.guild_id is not None and bool(text),
-                allowed_reply_author_id=scope.user_id,
-                allowed_context_author_id=scope.user_id,
-                recent_filter=lambda old: (
-                    getattr(getattr(old, "author", None), "id", None) == self.user.id
-                    or trigger_text(
-                        old,
-                        self.user.id,
-                        self.settings.dm_always_reply,
-                        self.settings.call_prefixes,
-                    ) is not None
-                ),
-            )
-            if text is not None else []
-        )
+        sampled = []
+        replied = []
+        visuals = []
+        if text is not None:
+            try:
+                sampled = await collect(
+                    message,
+                    self.user.id,
+                    text,
+                    direct_only=direct_only,
+                    call_prefixes=self.settings.call_prefixes,
+                )
+                replied = await collect_reply_context(message, self.user.id)
+                visuals = await collect_visual_inputs(
+                    message,
+                    limits=self.vision_limits,
+                    include_reply=True,
+                    include_recent=scope.guild_id is not None and bool(text),
+                    allowed_reply_author_id=scope.user_id,
+                    allowed_context_author_id=scope.user_id,
+                    recent_filter=lambda old: (
+                        getattr(getattr(old, "author", None), "id", None) == self.user.id
+                        or trigger_text(
+                            old,
+                            self.user.id,
+                            self.settings.dm_always_reply,
+                            self.settings.call_prefixes,
+                        ) is not None
+                    ),
+                )
+            except Exception as exc:  # noqa: BLE001 - request-scoped context must fail open.
+                log.warning("Request context collection skipped (%s)", type(exc).__name__)
         public_request = (
             _public_context_request(scope, text, sampled)
             if text is not None
