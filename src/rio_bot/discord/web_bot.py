@@ -249,7 +249,23 @@ class RioClient(BaseRioClient):
             else []
         )
         visuals = (
-            await collect_visual_inputs(message, limits=self.vision_limits)
+            await collect_visual_inputs(
+                message,
+                limits=self.vision_limits,
+                include_reply=True,
+                include_recent=scope.guild_id is not None and bool(text),
+                allowed_reply_author_id=scope.user_id,
+                allowed_context_author_id=scope.user_id,
+                recent_filter=lambda old: (
+                    getattr(getattr(old, "author", None), "id", None) == self.user.id
+                    or trigger_text(
+                        old,
+                        self.user.id,
+                        self.settings.dm_always_reply,
+                        self.settings.call_prefixes,
+                    ) is not None
+                ),
+            )
             if text is not None else []
         )
         public_request = (

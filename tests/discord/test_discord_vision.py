@@ -13,6 +13,18 @@ PNG = b"\x89PNG\r\n\x1a\n" + b"x" * 16
 GIF = b"GIF89a" + b"x" * 16
 
 
+class FakeHistoryChannel:
+    def __init__(self, messages):
+        self.messages = messages
+        self.id = 10
+
+    def history(self, **kwargs):
+        async def rows():
+            for message in self.messages:
+                yield message
+        return rows()
+
+
 @pytest.mark.asyncio
 async def test_collects_image_attachment_and_ignores_non_image_attachment():
     image = NS(
@@ -199,3 +211,91 @@ async def test_image_only_trigger_reaches_llm_with_ephemeral_visual_context():
         assert message.content == "리오야"
     finally:
         await bot.close()
+
+
+@pytest.mark.asyncio
+async def test_collects_explicit_reply_visual_with_metadata():
+    reply_image = NS(
+        size=len(PNG),
+        content_type="image/png",
+        filename="reply.png",
+        read=AsyncMock(return_value=PNG),
+    )
+    replied = NS(
+        id=2,
+        content="이 사진",
+        author=NS(id=100, display_name="사용자", name="user"),
+        attachments=[reply_image],
+        stickers=[],
+        channel=NS(id=10),
+    )
+    message = NS(
+        id=3,
+        content="리오야 이거 봐",
+        author=NS(id=100, display_name="사용자", name="user"),
+        attachments=[],
+        stickers=[],
+        reference=NS(resolved=replied, channel_id=10),
+        channel=NS(id=10),
+    )
+
+    visuals = await collect_visual_inputs(message, include_reply=True, allowed_reply_author_id=100)
+
+    assert len(visuals) == 1
+    assert visuals[0].context_kind == "replied_message"
+    assert visuals[0].reference_strength == "explicit_reply"
+    assert visuals[0].message_id == "2"
+    assert "답장 대상 메시지" in visuals[0].label(1)
+
+
+@pytest.mark.asyncio
+async def test_recent_visual_collection_respects_filter_and_limits():
+    allowed_image = NS(
+        size=len(PNG),
+        content_type="image/png",
+        filename="allowed.png",
+        read=AsyncMock(return_value=PNG),
+    )
+    skipped_image = NS(
+        size=len(PNG),
+        content_type="image/png",
+        filename="skipped.png",
+        read=AsyncMock(return_value=PNG),
+    )
+    allowed = NS(
+        id=10,
+        content="리오야 전에 보낸 사진",
+        author=NS(id=100, display_name="사용자", name="user"),
+        webhook_id=None,
+        attachments=[allowed_image],
+        stickers=[],
+    )
+    skipped = NS(
+        id=9,
+        content="일반 잡담 사진",
+        author=NS(id=200, display_name="다른 사용자", name="other"),
+        webhook_id=None,
+        attachments=[skipped_image],
+        stickers=[],
+    )
+    message = NS(
+        id=11,
+        content="리오야 아까 사진 다시 봐줘",
+        author=NS(id=100, display_name="사용자", name="user"),
+        attachments=[],
+        stickers=[],
+        channel=FakeHistoryChannel([skipped, allowed]),
+    )
+
+    visuals = await collect_visual_inputs(
+        message,
+        include_recent=True,
+        recent_filter=lambda old: getattr(old.author, "id", None) == 100,
+        recent_message_limit=1,
+    )
+
+    assert len(visuals) == 1
+    assert visuals[0].context_kind == "recent_channel_message"
+    assert visuals[0].name == "allowed.png"
+    allowed_image.read.assert_awaited_once()
+    skipped_image.read.assert_not_awaited()
