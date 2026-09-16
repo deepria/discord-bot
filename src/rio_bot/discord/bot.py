@@ -10,6 +10,7 @@ import discord
 from .config import Settings
 from .emoji_commands import EmojiCommands, EmojiRegistry
 from .emojis import render_emojis
+from .events import EventLogger
 from .llm import LLM
 from .memory_commands import MemoryCommands, MemoryMode
 from .output_safety import neutralize_mentions
@@ -55,6 +56,7 @@ class RioClient(discord.Client):
         self.settings = settings
         self.store = store or Store(settings.db_path, settings.history_turns)
         self.llm = llm or LLM(settings)
+        self.events = EventLogger(settings.event_log_path)
         self.emoji_registry = EmojiRegistry(self, self.store)
         self.emoji_admin_ids = set(settings.bot_admin_ids)
         self.tree = discord.app_commands.CommandTree(self)
@@ -101,6 +103,7 @@ class RioClient(discord.Client):
                 await asyncio.gather(*pending, return_exceptions=True)
         finally:
             await self.llm.close()
+            self.events.close()
             self.store.close()
             await super().close()
 
@@ -262,6 +265,16 @@ class RioClient(discord.Client):
         received_mode = MemoryMode(self.store.memory_mode(scope))
         received_chat_log = self.store.chat_log_enabled(scope)
         management = self._management_text(text)
+        if text is not None:
+            self.events.emit(
+                "message_received",
+                scope="guild" if guild_id is not None else "dm",
+                management=bool(management),
+                memory_mode=str(received_mode.value),
+                chat_log=bool(received_chat_log),
+                has_attachments=bool(getattr(message, "attachments", None)),
+                has_stickers=bool(getattr(message, "stickers", None)),
+            )
         # Recent chat context is independent from persistent memory and has its own switch.
         if guild_id is not None and received_chat_log and not management:
             self.recent.add(
@@ -289,6 +302,13 @@ class RioClient(discord.Client):
                 use_memory = received_mode.reads and mode.reads
                 save_memory = received_mode.writes and mode.writes
                 use_chat_log = received_chat_log and self.store.chat_log_enabled(scope)
+                self.events.emit(
+                    "turn_started",
+                    scope="guild" if guild_id is not None else "dm",
+                    use_memory=bool(use_memory),
+                    save_memory=bool(save_memory),
+                    use_chat_log=bool(use_chat_log),
+                )
                 if self.store.seen(message.id):
                     return
                 if len(text) > 4000:
@@ -339,6 +359,12 @@ class RioClient(discord.Client):
                                 await message.channel.send(part, allowed_mentions=discord.AllowedMentions.none())
                             if guild_id is not None and use_chat_log:
                                 self.recent.add(scope, sent.id, "리오", answer, role="assistant")
+                            self.events.emit(
+                                "turn_completed",
+                                scope="guild" if guild_id is not None else "dm",
+                                saved_memory=bool(save_memory),
+                                used_chat_log=bool(use_chat_log),
+                            )
                         # Commit only after Discord delivery. Never memorize a failed model request.
                         if save_memory:
                             self.store.add(scope, message.id, text, answer)
@@ -350,8 +376,10 @@ class RioClient(discord.Client):
                                     log.warning("Memory summary deferred (%s)", type(exc).__name__)
         except discord.HTTPException as exc:
             log.warning("Discord delivery failed (%s)", type(exc).__name__)
+            self.events.emit("turn_failed", error_type=type(exc).__name__, delivery=True)
         except Exception as exc:  # noqa: BLE001 - isolate event/summary failures; redact logs
             log.warning("Conversation failed (%s)", type(exc).__name__)
+            self.events.emit("turn_failed", error_type=type(exc).__name__, delivery=False)
             try:
                 await self.send_text(message.channel, "지금은 답변을 이어가기 어렵네요. 잠시 후 다시 불러 주세요.")
             except discord.HTTPException:

@@ -18,6 +18,7 @@ _LEGACY_MODULES = {
     "admin_list": "rio_bot.core.admin_list",
     "config": "rio_bot.core.config",
     "emojis": "rio_bot.core.emojis",
+    "events": "rio_bot.core.events",
     "instructions": "rio_bot.core.instructions",
     "knowledge_ingest": "rio_bot.core.knowledge_ingest",
     "lore": "rio_bot.core.lore",

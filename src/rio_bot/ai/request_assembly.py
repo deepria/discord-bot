@@ -11,6 +11,7 @@ from .llm import POLICY
 from .model_routing import build_model_plan
 from .rp_output_policy import hide_web_citations, provenance_instruction
 from .runtime_context import build_runtime_context, runtime_instruction
+from .semantic_routing import classify_semantic_route
 from .web_search_runtime import tool_config
 from .web_search_text import response_text
 
@@ -217,6 +218,13 @@ class RequestAssembler(BaseLLM):
         if dynamic:
             instruction_parts.append(dynamic)
 
+        semantic_route = await classify_semantic_route(
+            self.usage,
+            self.client,
+            self.settings,
+            routing_content,
+            information_plan,
+        )
         model_plan = build_model_plan(
             self.settings,
             content=routing_content,
@@ -224,14 +232,21 @@ class RequestAssembler(BaseLLM):
             channel_context=channel_context,
             public_context=public_context,
             history_turns=history_turn_count + len(server_recent),
+            semantic_route=semantic_route,
         )
+        telemetry = model_plan.telemetry()
+        if semantic_route:
+            telemetry["semantic_route_mode"] = getattr(self.settings, "semantic_routing_mode", "off")
+            telemetry["semantic_route_tier"] = semantic_route.get("tier")
+            telemetry["semantic_route_confidence"] = semantic_route.get("confidence")
+            telemetry["semantic_route_reasons"] = semantic_route.get("reasons", [])
         request = {
             "model": model_plan.model,
             "instructions": "\n".join(instruction_parts),
             "input": messages,
             "max_output_tokens": model_plan.max_output_tokens,
             "store": False,
-            "_rio_telemetry": model_plan.telemetry(),
+            "_rio_telemetry": telemetry,
         }
         tools = tool_config(search_mode)
         if tools:

@@ -9,6 +9,7 @@ from .admin_db import AdminDatabase
 from .config import Settings
 from .instructions import InstructionRegistry
 from .lore import LoreIndex
+from .model_routing import build_memory_model_plan
 from .routing import Scope
 from .runtime_knowledge import RuntimeKnowledgeRegistry
 from .store import Store
@@ -229,9 +230,13 @@ class LLM:
         payload = {"previous_memory": old, "new_turns": [
             {"at": t["created_at"], "user": t["content"],
              **({"rio": t["reply"]} if scope.guild_id is None else {})} for t in pending]}
+        payload_text = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        model_plan = build_memory_model_plan(
+            self.settings, pending_count=len(pending), payload_chars=len(payload_text))
         response = await self.usage.request(self.client, "summarize",
-            model=self.settings.memory_model, instructions=SUMMARY_POLICY,
-            input=json.dumps(payload, ensure_ascii=False, separators=(",", ":")), max_output_tokens=900, store=False)
+            model=model_plan.model, instructions=SUMMARY_POLICY,
+            input=payload_text, max_output_tokens=model_plan.max_output_tokens, store=False,
+            _rio_telemetry=model_plan.telemetry())
         if response.status == "completed" and response.output_text.strip():
             store.save_summary(scope, response.output_text.strip()[:1500], pending[-1]["id"])
 
@@ -242,12 +247,16 @@ class LLM:
         payload = {"previous_memory": store.shared_summary(scope)[0],
                    "speaker_id": str(scope.user_id), "direct_calls": [
                        {"at": t["created_at"], "user": t["content"]} for t in pending]}
+        payload_text = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        model_plan = build_memory_model_plan(
+            self.settings, pending_count=len(pending), payload_chars=len(payload_text))
         response = await self.usage.request(self.client, "summarize_shared",
-            model=self.settings.memory_model,
+            model=model_plan.model,
             instructions=SUMMARY_POLICY + "\n직접 호출한 발화만 요약하세요. 앞선 발언을 가리키는 "
             "대명사나 인용의 빈 맥락을 보충하지 마세요. 화자 자신의 명시적 사실·선호·약속만 "
             "기억하세요. 제3자의 발언이나 사실은 저장하지 마세요.",
-            input=json.dumps(payload, ensure_ascii=False, separators=(",", ":")), max_output_tokens=900, store=False)
+            input=payload_text, max_output_tokens=model_plan.max_output_tokens, store=False,
+            _rio_telemetry=model_plan.telemetry())
         if response.status == "completed" and response.output_text.strip():
             store.save_shared_summary(scope, pending[-1]["name"], response.output_text.strip(),
                                       pending[-1]["id"])

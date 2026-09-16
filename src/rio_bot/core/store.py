@@ -54,20 +54,34 @@ class Store:
                 mode TEXT NOT NULL CHECK(mode IN ('on','off'))
             );
             CREATE TABLE IF NOT EXISTS notes (scope TEXT PRIMARY KEY, text TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS manual_notes (
+                scope TEXT PRIMARY KEY,
+                text TEXT NOT NULL,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            INSERT OR IGNORE INTO manual_notes(scope, text)
+                SELECT scope, text FROM notes;
         """)
 
     def close(self):
         self.db.close()
 
     def note(self, key: str) -> str:
+        row = self.db.execute("SELECT text FROM manual_notes WHERE scope=?", (key,)).fetchone()
+        if row:
+            return row[0]
         row = self.db.execute("SELECT text FROM notes WHERE scope=?", (key,)).fetchone()
         return row[0] if row else ""
 
     def set_note(self, key: str, text: str):
         with self.db:
             if text:
-                self.db.execute("INSERT OR REPLACE INTO notes VALUES (?,?)", (key, text[:1500]))
+                self.db.execute(
+                    "INSERT OR REPLACE INTO manual_notes(scope,text,updated_at) "
+                    "VALUES (?,?,CURRENT_TIMESTAMP)", (key, text[:1500]))
+                self.db.execute("DELETE FROM notes WHERE scope=?", (key,))
             else:
+                self.db.execute("DELETE FROM manual_notes WHERE scope=?", (key,))
                 self.db.execute("DELETE FROM notes WHERE scope=?", (key,))
 
     def summary(self, scope: Scope):
@@ -115,11 +129,12 @@ class Store:
         return row is None or bool(row[0])
 
     def forget(self, scope: Scope):
-        """Delete this user's history and notes across channels in the current realm."""
+        """Delete this user's history and manual notes across channels in the current realm."""
         with self.db:
             for table in ("turns", "summaries", "shared_calls", "shared_summaries"):
                 self.db.execute(f"DELETE FROM {table} WHERE realm=? AND user_id=?",
                                 (scope.realm, str(scope.user_id)))
+            self.db.execute("DELETE FROM manual_notes WHERE scope=?", (scope.user_note,))
             self.db.execute("DELETE FROM notes WHERE scope=?", (scope.user_note,))
 
     @staticmethod
@@ -144,6 +159,9 @@ class Store:
                 cursor = self.db.execute(f"DELETE FROM {table} WHERE realm=?", (scope.realm,))
                 deleted += self._rowcount(cursor)
             cursor = self.db.execute(
+                "DELETE FROM manual_notes WHERE scope LIKE ?", (scope.realm + ":user:%",))
+            deleted += self._rowcount(cursor)
+            cursor = self.db.execute(
                 "DELETE FROM notes WHERE scope LIKE ?", (scope.realm + ":user:%",))
             deleted += self._rowcount(cursor)
         return deleted
@@ -155,6 +173,8 @@ class Store:
             for table in ("turns", "summaries", "shared_calls", "shared_summaries"):
                 cursor = self.db.execute(f"DELETE FROM {table}")
                 deleted += self._rowcount(cursor)
+            cursor = self.db.execute("DELETE FROM manual_notes WHERE instr(scope, ':user:') > 0")
+            deleted += self._rowcount(cursor)
             cursor = self.db.execute("DELETE FROM notes WHERE instr(scope, ':user:') > 0")
             deleted += self._rowcount(cursor)
         return deleted

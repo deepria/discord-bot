@@ -8,6 +8,7 @@ _CORE_ALIASES = (
     "admin_list",
     "config",
     "emojis",
+    "events",
     "instructions",
     "knowledge_ingest",
     "lore",

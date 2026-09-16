@@ -97,6 +97,7 @@ def build_model_plan(
     channel_context: list[dict] | None = None,
     public_context: list[dict] | None = None,
     history_turns: int = 0,
+    semantic_route: dict | None = None,
 ) -> ModelPlan:
     mode = str(getattr(settings, "model_routing_mode", "fixed")).strip().lower()
     if mode != "adaptive":
@@ -156,6 +157,18 @@ def build_model_plan(
         components.append(("visual_context", min(1.0, 0.35 + visuals * 0.15)))
         reasons.append("visual_context")
 
+    semantic_mode = str(getattr(settings, "semantic_routing_mode", "off")).strip().lower()
+    if semantic_mode == "active" and semantic_route:
+        semantic_tier = str(semantic_route.get("tier", "")).strip().lower()
+        confidence = semantic_route.get("confidence", 0.0)
+        confidence = confidence if isinstance(confidence, (int, float)) else 0.0
+        if semantic_tier == "smart" and confidence >= 0.5:
+            components.append(("semantic_classifier", round(min(1.2, confidence * 1.2), 3)))
+            reasons.append("semantic_classifier")
+        elif semantic_tier == "fast" and confidence >= 0.75:
+            components.append(("semantic_classifier_fast", -0.35))
+            reasons.append("semantic_classifier_fast")
+
     score = round(sum(value for _, value in components), 3)
     threshold = float(getattr(settings, "model_routing_smart_threshold", 2.0))
     tier = ModelTier.SMART if score >= threshold else ModelTier.FAST
@@ -176,4 +189,42 @@ def build_model_plan(
     )
 
 
-__all__ = ["ModelPlan", "ModelTier", "build_model_plan"]
+def build_memory_model_plan(settings, *, pending_count: int, payload_chars: int) -> ModelPlan:
+    threshold = float(getattr(settings, "memory_routing_smart_threshold", 2.0))
+    same_provider = (
+        str(getattr(settings, "memory_provider", "") or getattr(settings, "provider", ""))
+        == str(getattr(settings, "provider", ""))
+    )
+    adaptive = str(getattr(settings, "model_routing_mode", "fixed")).strip().lower() == "adaptive"
+    if not adaptive or not same_provider:
+        return ModelPlan(
+            tier=ModelTier.FIXED,
+            model=settings.memory_model,
+            max_output_tokens=int(getattr(settings, "memory_output_tokens", 900)),
+            score=0.0,
+            smart_threshold=threshold,
+            reasons=("memory_fixed",),
+            components=(),
+            policy="memory-fixed",
+        )
+
+    components: list[tuple[str, float]] = []
+    if pending_count:
+        components.append(("pending_turns", round(min(1.3, pending_count * 0.16), 3)))
+    if payload_chars > 2500:
+        components.append(("payload_chars", round(_ramp(payload_chars, start=2500, full=9000, maximum=1.4), 3)))
+    score = round(sum(value for _, value in components), 3)
+    tier = ModelTier.SMART if score >= threshold else ModelTier.FAST
+    return ModelPlan(
+        tier=tier,
+        model=settings.smart_model if tier == ModelTier.SMART else settings.fast_model,
+        max_output_tokens=int(getattr(settings, "memory_output_tokens", 900)),
+        score=score,
+        smart_threshold=threshold,
+        reasons=tuple(name for name, value in components if value) or ("memory_simple",),
+        components=tuple(components),
+        policy="memory-adaptive-v1",
+    )
+
+
+__all__ = ["ModelPlan", "ModelTier", "build_memory_model_plan", "build_model_plan"]

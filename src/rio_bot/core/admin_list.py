@@ -1,5 +1,8 @@
 from datetime import UTC, datetime
+from io import BytesIO
 from unicodedata import combining, east_asian_width
+
+import discord
 
 MAX_DISCORD_TEXT = 1900
 
@@ -115,3 +118,25 @@ def fit_table(
     if hidden:
         result += f"\n… 외 {hidden}개 (검색어를 넣어 범위를 줄일 수 있어요)"
     return result[:max_chars]
+
+
+def text_attachment(filename: str, text: str) -> discord.File:
+    safe_name = "".join(char if char.isalnum() or char in "._-" else "_" for char in filename)
+    if not safe_name.endswith(".txt"):
+        safe_name += ".txt"
+    return discord.File(BytesIO(text.encode("utf-8")), filename=safe_name)
+
+
+async def send_text_or_attachment(
+    interaction: discord.Interaction,
+    text: str,
+    *,
+    filename: str,
+    attachment_text: str | None = None,
+):
+    if len(text) <= MAX_DISCORD_TEXT and attachment_text is None:
+        await interaction.response.send_message(text, ephemeral=True)
+        return
+    file = text_attachment(filename, attachment_text or text)
+    summary = text if len(text) <= MAX_DISCORD_TEXT else text[:1500] + "\n\n전체 내용은 첨부 파일로 보냈어요."
+    await interaction.response.send_message(summary, file=file, ephemeral=True)

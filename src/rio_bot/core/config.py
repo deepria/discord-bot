@@ -9,6 +9,7 @@ SUPPORTED_MODEL_PROVIDERS = frozenset({"openai", "gemini", "openrouter", "ollama
 GEMINI_THINKING_LEVELS = frozenset({"minimal", "low", "medium", "high"})
 EXTERNAL_CONTEXT_POLICIES = frozenset({"full", "bot_interactions_only"})
 MODEL_ROUTING_MODES = frozenset({"fixed", "adaptive"})
+SEMANTIC_ROUTING_MODES = frozenset({"off", "shadow", "active"})
 
 
 def parse_call_prefixes(value: str) -> tuple[str, ...]:
@@ -57,10 +58,14 @@ class Settings:
     memory_model: str = "gpt-4.1-mini"
     model_routing_mode: str = "fixed"
     model_routing_smart_threshold: float = 2.0
+    semantic_routing_mode: str = "off"
+    semantic_routing_model: str = ""
+    memory_routing_smart_threshold: float = 2.0
     fast_model: str = "gpt-4.1-mini"
     smart_model: str = "gpt-4.1-mini"
     fast_output_tokens: int = 1000
     smart_output_tokens: int = 2000
+    memory_output_tokens: int = 900
     provider: str = "openai"
     memory_provider: str = ""
     openai_api_key: str = ""
@@ -86,6 +91,7 @@ class Settings:
     history_turns: int = 12
     history_max_chars: int = 12000
     usage_log_path: str = "data/logs/usage.jsonl"
+    event_log_path: str = "data/logs/events.jsonl"
     channel_context_chars: int = 6000
     special_dm_user_id: int | None = None
     bot_admin_ids: frozenset[int] = frozenset()
@@ -149,12 +155,18 @@ class Settings:
             raise ValueError("MODEL_ROUTING_SMART_THRESHOLD는 숫자여야 합니다.") from exc
         if not 0.1 <= model_routing_smart_threshold <= 10.0:
             raise ValueError("MODEL_ROUTING_SMART_THRESHOLD는 0.1~10.0 사이여야 합니다.")
+        semantic_routing_mode = os.getenv("SEMANTIC_ROUTING_MODE", "off").strip().lower()
+        if semantic_routing_mode not in SEMANTIC_ROUTING_MODES:
+            allowed = ", ".join(sorted(SEMANTIC_ROUTING_MODES))
+            raise ValueError(f"SEMANTIC_ROUTING_MODE은 {allowed} 중 하나여야 합니다.")
 
         fast_model = os.getenv("LLM_FAST_MODEL", "").strip() or model
         smart_model = os.getenv("LLM_SMART_MODEL", "").strip() or model
+        semantic_routing_model = os.getenv("SEMANTIC_ROUTING_MODEL", "").strip() or fast_model
         if any(len(value) > 200 or any(c in value for c in "\r\n\0")
-               for value in (fast_model, smart_model)):
-            raise ValueError("LLM_FAST_MODEL과 LLM_SMART_MODEL은 줄바꿈 없이 200자 이하여야 합니다.")
+               for value in (fast_model, smart_model, semantic_routing_model)):
+            raise ValueError(
+                "LLM_FAST_MODEL, LLM_SMART_MODEL, SEMANTIC_ROUTING_MODEL은 줄바꿈 없이 200자 이하여야 합니다.")
 
         memory_model_env = os.getenv("MEMORY_MODEL", "").strip()
         if memory_provider != provider and not memory_model_env:
@@ -174,6 +186,15 @@ class Settings:
         output_tokens = int(os.getenv("MAX_OUTPUT_TOKENS", "1000"))
         fast_output_tokens = int(os.getenv("FAST_MAX_OUTPUT_TOKENS", str(output_tokens)))
         smart_output_tokens = int(os.getenv("SMART_MAX_OUTPUT_TOKENS", str(max(output_tokens, 2000))))
+        memory_output_tokens = int(os.getenv("MEMORY_MAX_OUTPUT_TOKENS", "900"))
+        try:
+            memory_routing_smart_threshold = float(
+                os.getenv("MEMORY_ROUTING_SMART_THRESHOLD", str(model_routing_smart_threshold))
+            )
+        except ValueError as exc:
+            raise ValueError("MEMORY_ROUTING_SMART_THRESHOLD는 숫자여야 합니다.") from exc
+        if not 0.1 <= memory_routing_smart_threshold <= 10.0:
+            raise ValueError("MEMORY_ROUTING_SMART_THRESHOLD는 0.1~10.0 사이여야 합니다.")
         gemini_thinking_level = os.getenv("GEMINI_THINKING_LEVEL", "low").strip().lower()
         if gemini_thinking_level not in GEMINI_THINKING_LEVELS:
             allowed = ", ".join(sorted(GEMINI_THINKING_LEVELS))
@@ -230,10 +251,14 @@ class Settings:
             memory_model=memory_model,
             model_routing_mode=model_routing_mode,
             model_routing_smart_threshold=model_routing_smart_threshold,
+            semantic_routing_mode=semantic_routing_mode,
+            semantic_routing_model=semantic_routing_model,
+            memory_routing_smart_threshold=memory_routing_smart_threshold,
             fast_model=fast_model,
             smart_model=smart_model,
             fast_output_tokens=fast_output_tokens,
             smart_output_tokens=smart_output_tokens,
+            memory_output_tokens=memory_output_tokens,
             db_path=os.getenv("DATABASE_PATH", "data/rio.sqlite3"),
             prompt_path=os.getenv("CHARACTER_PROMPT_PATH", ""),
             instruction_path=os.getenv("INSTRUCTION_PATH", "data/instructions.json"),
@@ -253,6 +278,7 @@ class Settings:
             history_turns=int(os.getenv("HISTORY_TURNS", "12")),
             history_max_chars=int(os.getenv("HISTORY_MAX_CHARS", "12000")),
             usage_log_path=os.getenv("USAGE_LOG_PATH", "data/logs/usage.jsonl"),
+            event_log_path=os.getenv("EVENT_LOG_PATH", "data/logs/events.jsonl"),
             lore_path=os.getenv("LORE_PATH", ""),
             lore_max_items=int(os.getenv("LORE_MAX_ITEMS", "6")),
             lore_max_chars=int(os.getenv("LORE_MAX_CHARS", "3200")),
@@ -272,6 +298,7 @@ class Settings:
                 and 128 <= s.output_tokens <= 4096
                 and 128 <= s.fast_output_tokens <= 65536
                 and 128 <= s.smart_output_tokens <= 65536
+                and 128 <= s.memory_output_tokens <= 65536
                 and s.output_tokens <= s.gemini_total_output_tokens <= 65536
                 and 0 <= s.history_max_chars <= 120000
                 and 0 <= s.channel_context_chars <= 12000

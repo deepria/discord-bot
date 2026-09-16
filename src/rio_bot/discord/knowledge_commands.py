@@ -3,7 +3,13 @@ import logging
 import discord
 from discord import app_commands
 
-from .admin_list import created_compact, created_label, fit_table, sort_rows
+from .admin_list import (
+    created_compact,
+    created_label,
+    fit_table,
+    send_text_or_attachment,
+    sort_rows,
+)
 from .knowledge_ingest import KnowledgeIngestor
 from .runtime_knowledge import RuntimeKnowledgeRegistry
 
@@ -182,6 +188,73 @@ class KnowledgeCommands(app_commands.Group):
             [26, 9, 12, 43],
         )
         await interaction.response.send_message(text, ephemeral=True)
+
+    @app_commands.command(name="export", description="knowledge 목록을 텍스트 파일로 내보내기")
+    @app_commands.describe(
+        search="ID·본문·키워드·대상·시점에서 찾을 검색어. 비워 두면 전체 export",
+        sort="목록 정렬 방식. 기본은 추가 시간순",
+    )
+    @app_commands.choices(sort=_SORT_CHOICES)
+    async def export(
+        self,
+        interaction: discord.Interaction,
+        search: str | None = None,
+        sort: str = "time",
+    ):
+        try:
+            rows = self._all_rows()
+        except (TypeError, ValueError) as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+            return
+        total = len(rows)
+        query = (search or "").strip().casefold()
+        if query:
+            filtered = []
+            for label, row in rows:
+                haystack = "\n".join([
+                    str(row.get("id", "")),
+                    str(row.get("content", "")),
+                    " ".join(row.get("keywords", [])),
+                    " ".join(row.get("subjects", [])),
+                    str(row.get("timeline", "")),
+                    "사실 world_fact" if label == "fact" else "해석 interpretation",
+                ]).casefold()
+                if query in haystack:
+                    filtered.append((label, row))
+            rows = filtered
+        if not rows:
+            await interaction.response.send_message("내보낼 knowledge가 없어요.", ephemeral=True)
+            return
+        if sort == "kind":
+            rows = sorted(rows, key=lambda item: (item[0] != "fact", item[1]["id"].casefold()))
+        else:
+            rows = sort_rows(rows, sort, lambda item: item[1])
+        lines = [
+            f"runtime knowledge export: {len(rows)}/{total}",
+            f"sort: {sort}",
+            f"search: {(search or '').strip()}",
+            "",
+        ]
+        for label, row in rows:
+            state = "ON" if row["enabled"] else "OFF"
+            kind = "world_fact" if label == "fact" else "interpretation"
+            lines.extend([
+                f"[{state}] {row.get('id', '?')} ({kind})",
+                f"created_at: {row.get('created_at', '')}",
+                f"awareness: {row.get('awareness', '')}",
+                f"timeline: {row.get('timeline', '')}",
+                f"subjects: {', '.join(row.get('subjects', []))}",
+                f"keywords: {', '.join(row.get('keywords', []))}",
+                str(row.get("content", "")),
+                "",
+            ])
+        preview = f"knowledge {len(rows)}/{total}개를 파일로 내보냈어요."
+        await send_text_or_attachment(
+            interaction,
+            preview,
+            filename="rio-knowledge-export.txt",
+            attachment_text="\n".join(lines),
+        )
 
     @app_commands.command(name="show", description="자동 반영된 knowledge 한 항목 자세히 보기")
     async def show(self, interaction: discord.Interaction, identifier: str):

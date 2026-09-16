@@ -3,7 +3,7 @@ import logging
 import discord
 from discord import app_commands
 
-from .admin_list import created_compact, fit_table, sort_rows
+from .admin_list import created_compact, fit_table, send_text_or_attachment, sort_rows
 from .instructions import InstructionRegistry
 
 log = logging.getLogger("rio")
@@ -101,6 +101,50 @@ class InstructionCommands(app_commands.Group):
             [26, 4, 12, 46],
         )
         await interaction.response.send_message(text, ephemeral=True)
+
+    @app_commands.command(name="export", description="instruction 목록을 텍스트 파일로 내보내기")
+    @app_commands.describe(
+        search="ID나 본문에서 찾을 검색어. 비워 두면 전체 export",
+        sort="목록 정렬 방식. 기본은 추가 시간순",
+    )
+    @app_commands.choices(sort=_SORT_CHOICES)
+    async def export(
+        self,
+        interaction: discord.Interaction,
+        search: str | None = None,
+        sort: str = "time",
+    ):
+        rows = self.registry.list()
+        total = len(rows)
+        query = (search or "").strip().casefold()
+        if query:
+            rows = [row for row in rows if query in str(row.get("id", "")).casefold()
+                    or query in str(row.get("text", "")).casefold()]
+        if not rows:
+            await interaction.response.send_message("내보낼 instruction이 없어요.", ephemeral=True)
+            return
+        rows = sort_rows(rows, sort, lambda row: row)
+        lines = [
+            f"dynamic instructions export: {len(rows)}/{total}",
+            f"sort: {sort}",
+            f"search: {(search or '').strip()}",
+            "",
+        ]
+        for row in rows:
+            state = "ON" if row.get("enabled", True) else "OFF"
+            lines.extend([
+                f"[{state}] {row.get('id', '?')}",
+                f"created_at: {row.get('created_at', '')}",
+                str(row.get("text", "")),
+                "",
+            ])
+        preview = f"instruction {len(rows)}/{total}개를 파일로 내보냈어요."
+        await send_text_or_attachment(
+            interaction,
+            preview,
+            filename="rio-instructions-export.txt",
+            attachment_text="\n".join(lines),
+        )
 
     @app_commands.command(name="edit", description="기존 instruction 본문 수정")
     @app_commands.describe(identifier="수정할 ID", text="새 보조 지침")
