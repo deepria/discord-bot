@@ -8,6 +8,7 @@ from .freshness import FreshnessMode
 from .information_plan import InformationPlan
 from .llm import LLM as BaseLLM
 from .llm import POLICY
+from .model_routing import build_model_plan
 from .rp_output_policy import hide_web_citations, provenance_instruction
 from .runtime_context import build_runtime_context, runtime_instruction
 from .web_search_runtime import tool_config
@@ -140,6 +141,7 @@ class RequestAssembler(BaseLLM):
                     {"role": "user", "content": turn["content"]},
                     {"role": "assistant", "content": turn["reply"]},
                 ))
+        history_turn_count = len(history) // 2
         server_recent = (
             self._server_recent_conversation(store, scope, summary_through, channel_context)
             if use_memory
@@ -215,12 +217,21 @@ class RequestAssembler(BaseLLM):
         if dynamic:
             instruction_parts.append(dynamic)
 
+        model_plan = build_model_plan(
+            self.settings,
+            content=routing_content,
+            information=information_plan,
+            channel_context=channel_context,
+            public_context=public_context,
+            history_turns=history_turn_count + len(server_recent),
+        )
         request = {
-            "model": self.settings.model,
+            "model": model_plan.model,
             "instructions": "\n".join(instruction_parts),
             "input": messages,
-            "max_output_tokens": self.settings.output_tokens,
+            "max_output_tokens": model_plan.max_output_tokens,
             "store": False,
+            "_rio_telemetry": model_plan.telemetry(),
         }
         tools = tool_config(search_mode)
         if tools:

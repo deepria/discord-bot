@@ -215,8 +215,14 @@ class UsageLogger:
 
     async def request(self, client, operation: str, **kwargs):
         started = perf_counter()
+        telemetry = kwargs.pop("_rio_telemetry", None)
         row = {"at": datetime.now(UTC).isoformat(), "operation": operation,
                "model": kwargs["model"]}
+        if isinstance(telemetry, dict):
+            row.update({
+                key: value for key, value in telemetry.items()
+                if isinstance(value, (str, int, float, bool, list, dict, type(None)))
+            })
         responses = []
 
         try:

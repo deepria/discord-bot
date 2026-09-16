@@ -32,6 +32,12 @@ def test_settings_load_uses_code_defaults_when_runtime_env_is_absent(monkeypatch
         "DM_ALWAYS_REPLY",
         "PUBLIC_SERVER_MEMORY_IN_DM",
         "EXTERNAL_CONTEXT_POLICY",
+        "MODEL_ROUTING_MODE",
+        "MODEL_ROUTING_SMART_THRESHOLD",
+        "LLM_FAST_MODEL",
+        "LLM_SMART_MODEL",
+        "FAST_MAX_OUTPUT_TOKENS",
+        "SMART_MAX_OUTPUT_TOKENS",
         "CHAT_WEB_SEARCH",
         "COMMUNITY_LORE",
         "MAX_OUTPUT_TOKENS",
@@ -48,6 +54,12 @@ def test_settings_load_uses_code_defaults_when_runtime_env_is_absent(monkeypatch
     assert settings.dm_always_reply is False
     assert settings.public_memory_in_dm is True
     assert settings.external_context_policy == "bot_interactions_only"
+    assert settings.model_routing_mode == "fixed"
+    assert settings.model_routing_smart_threshold == 2.0
+    assert settings.fast_model == settings.model
+    assert settings.smart_model == settings.model
+    assert settings.fast_output_tokens == settings.output_tokens
+    assert settings.smart_output_tokens == 2000
     assert settings.chat_web_search is True
     assert settings.community_lore is True
     assert settings.output_tokens == 1000

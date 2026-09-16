@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 SUPPORTED_MODEL_PROVIDERS = frozenset({"openai", "gemini", "openrouter", "ollama"})
 GEMINI_THINKING_LEVELS = frozenset({"minimal", "low", "medium", "high"})
 EXTERNAL_CONTEXT_POLICIES = frozenset({"full", "bot_interactions_only"})
+MODEL_ROUTING_MODES = frozenset({"fixed", "adaptive"})
 
 
 def parse_call_prefixes(value: str) -> tuple[str, ...]:
@@ -54,6 +55,12 @@ class Settings:
     discord_token: str
     model: str = "gpt-4.1-mini"
     memory_model: str = "gpt-4.1-mini"
+    model_routing_mode: str = "fixed"
+    model_routing_smart_threshold: float = 2.0
+    fast_model: str = "gpt-4.1-mini"
+    smart_model: str = "gpt-4.1-mini"
+    fast_output_tokens: int = 1000
+    smart_output_tokens: int = 2000
     provider: str = "openai"
     memory_provider: str = ""
     openai_api_key: str = ""
@@ -130,6 +137,25 @@ class Settings:
         if not model:
             raise ValueError("LLM_MODEL을 설정해 주세요.")
 
+        model_routing_mode = os.getenv("MODEL_ROUTING_MODE", "fixed").strip().lower()
+        if model_routing_mode not in MODEL_ROUTING_MODES:
+            allowed = ", ".join(sorted(MODEL_ROUTING_MODES))
+            raise ValueError(f"MODEL_ROUTING_MODE은 {allowed} 중 하나여야 합니다.")
+        try:
+            model_routing_smart_threshold = float(
+                os.getenv("MODEL_ROUTING_SMART_THRESHOLD", "2.0")
+            )
+        except ValueError as exc:
+            raise ValueError("MODEL_ROUTING_SMART_THRESHOLD는 숫자여야 합니다.") from exc
+        if not 0.1 <= model_routing_smart_threshold <= 10.0:
+            raise ValueError("MODEL_ROUTING_SMART_THRESHOLD는 0.1~10.0 사이여야 합니다.")
+
+        fast_model = os.getenv("LLM_FAST_MODEL", "").strip() or model
+        smart_model = os.getenv("LLM_SMART_MODEL", "").strip() or model
+        if any(len(value) > 200 or any(c in value for c in "\r\n\0")
+               for value in (fast_model, smart_model)):
+            raise ValueError("LLM_FAST_MODEL과 LLM_SMART_MODEL은 줄바꿈 없이 200자 이하여야 합니다.")
+
         memory_model_env = os.getenv("MEMORY_MODEL", "").strip()
         if memory_provider != provider and not memory_model_env:
             raise ValueError("MEMORY_PROVIDER가 다르면 MEMORY_MODEL도 설정해 주세요.")
@@ -146,6 +172,8 @@ class Settings:
                 raise ValueError(f"{_env_key(selected)}를 설정해 주세요.")
 
         output_tokens = int(os.getenv("MAX_OUTPUT_TOKENS", "1000"))
+        fast_output_tokens = int(os.getenv("FAST_MAX_OUTPUT_TOKENS", str(output_tokens)))
+        smart_output_tokens = int(os.getenv("SMART_MAX_OUTPUT_TOKENS", str(max(output_tokens, 2000))))
         gemini_thinking_level = os.getenv("GEMINI_THINKING_LEVEL", "low").strip().lower()
         if gemini_thinking_level not in GEMINI_THINKING_LEVELS:
             allowed = ", ".join(sorted(GEMINI_THINKING_LEVELS))
@@ -200,6 +228,12 @@ class Settings:
                                    os.getenv("BOT_ADMIN_IDS", "").split(",") if x.strip()),
             model=model,
             memory_model=memory_model,
+            model_routing_mode=model_routing_mode,
+            model_routing_smart_threshold=model_routing_smart_threshold,
+            fast_model=fast_model,
+            smart_model=smart_model,
+            fast_output_tokens=fast_output_tokens,
+            smart_output_tokens=smart_output_tokens,
             db_path=os.getenv("DATABASE_PATH", "data/rio.sqlite3"),
             prompt_path=os.getenv("CHARACTER_PROMPT_PATH", ""),
             instruction_path=os.getenv("INSTRUCTION_PATH", "data/instructions.json"),
@@ -236,6 +270,8 @@ class Settings:
         vision_total = s.vision_max_attachments + s.vision_max_emojis + s.vision_max_stickers
         if not (0 <= s.cooldown <= 3600 and 1 <= s.concurrency <= 20
                 and 128 <= s.output_tokens <= 4096
+                and 128 <= s.fast_output_tokens <= 65536
+                and 128 <= s.smart_output_tokens <= 65536
                 and s.output_tokens <= s.gemini_total_output_tokens <= 65536
                 and 0 <= s.history_max_chars <= 120000
                 and 0 <= s.channel_context_chars <= 12000
