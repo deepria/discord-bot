@@ -150,6 +150,7 @@ class RioClient(discord.Client):
                     old.content,
                     role="assistant" if own_bot else "user",
                     unix_time=old.created_at.timestamp(),
+                    direct_trigger=historical_text is not None,
                 )
         except discord.HTTPException as exc:
             # Do not log message contents or channel data. Retry naturally on a later call.
@@ -263,7 +264,13 @@ class RioClient(discord.Client):
         management = self._management_text(text)
         # Recent chat context is independent from persistent memory and has its own switch.
         if guild_id is not None and received_chat_log and not management:
-            self.recent.add(scope, message.id, message.author.display_name, message.content)
+            self.recent.add(
+                scope,
+                message.id,
+                message.author.display_name,
+                message.content,
+                direct_trigger=text is not None,
+            )
         if text is None:
             return
         channel_lock = self.channel_lock(scope)

@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from rio_bot.core.config import Settings
+from rio_bot.core.config import Settings, parse_external_context_policy
 from rio_bot.core.runtime_config import RuntimeSettings
 from rio_bot.core.store import Store
 
@@ -16,6 +16,13 @@ def _base(**overrides):
     return Settings(**values)
 
 
+def test_external_context_policy_parser():
+    assert parse_external_context_policy("bot_interactions_only") == "bot_interactions_only"
+    assert parse_external_context_policy("FULL") == "full"
+    with pytest.raises(ValueError):
+        parse_external_context_policy("everything")
+
+
 def test_settings_load_uses_code_defaults_when_runtime_env_is_absent(monkeypatch, tmp_path: Path):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("DISCORD_TOKEN", "token")
@@ -24,6 +31,7 @@ def test_settings_load_uses_code_defaults_when_runtime_env_is_absent(monkeypatch
         "CALL_PREFIXES",
         "DM_ALWAYS_REPLY",
         "PUBLIC_SERVER_MEMORY_IN_DM",
+        "EXTERNAL_CONTEXT_POLICY",
         "CHAT_WEB_SEARCH",
         "COMMUNITY_LORE",
         "MAX_OUTPUT_TOKENS",
@@ -39,6 +47,7 @@ def test_settings_load_uses_code_defaults_when_runtime_env_is_absent(monkeypatch
     assert settings.call_prefixes == ("리오야",)
     assert settings.dm_always_reply is False
     assert settings.public_memory_in_dm is True
+    assert settings.external_context_policy == "bot_interactions_only"
     assert settings.chat_web_search is True
     assert settings.community_lore is True
     assert settings.output_tokens == 1000

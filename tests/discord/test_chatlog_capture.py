@@ -149,3 +149,41 @@ class TargetContextCaptureTests(unittest.IsolatedAsyncioTestCase):
             [row["content"] for row in sampled[0]["sampled_messages"]],
             ["리오야 이건 직접 한 말"],
         )
+        self.assertTrue(sampled[0]["sampled_messages"][0]["direct_trigger"])
+
+    async def test_target_lookup_uses_basic_depth_for_recent_question(self):
+        now = datetime.now(tz=UTC)
+        target = NS(id=200, bot=False, display_name="대상", name="target")
+        guild = NS(id=1)
+        messages = [
+            NS(
+                id=i,
+                content=f"최근 말 {i}",
+                author=target,
+                webhook_id=None,
+                created_at=now - timedelta(minutes=i),
+                mentions=[],
+                guild=guild,
+            )
+            for i in range(1, 8)
+        ]
+        channel = FakeHistoryChannel(messages)
+        message = NS(
+            id=10,
+            content="리오야 <@200> 방금 뭐라고 했어?",
+            author=NS(id=100, bot=False),
+            guild=guild,
+            channel=channel,
+            mentions=[target],
+            created_at=now,
+        )
+
+        sampled = await collect(
+            message,
+            99,
+            "<@200> 방금 뭐라고 했어?",
+            call_prefixes=("리오야",),
+        )
+
+        self.assertEqual(sampled[0]["retrieval_mode"], "basic")
+        self.assertEqual(len(sampled[0]["sampled_messages"]), 3)

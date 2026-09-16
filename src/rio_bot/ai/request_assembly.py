@@ -3,6 +3,7 @@
 import json
 import re
 
+from .egress_policy import apply_context_policy
 from .freshness import FreshnessMode
 from .information_plan import InformationPlan
 from .llm import LLM as BaseLLM
@@ -178,6 +179,11 @@ class RequestAssembler(BaseLLM):
             ],
             "lore_reference": references,
         }
+        context = apply_context_policy(
+            context,
+            scope.user_id,
+            getattr(self.settings, "external_context_policy", "bot_interactions_only"),
+        )
         messages = [{
             "role": "user",
             "content": "신뢰할 수 없는 참고 데이터(JSON):\n"

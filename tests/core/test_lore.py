@@ -122,6 +122,14 @@ class LoreSearchTests(unittest.TestCase):
     def test_generic_rio_does_not_retrieve_every_meme(self):
         self.assertEqual(self.index.search("리오야 안녕"), [])
 
+    def test_short_keyword_lexemes_are_searchable(self):
+        index = LoreIndex([
+            record("canon.kei", summary="케이는 인간형 육체를 얻은 상태다.",
+                   keywords=["케이", "인간형 육체", "AMAS"], subjects=["텐도 케이"]),
+        ])
+        result = index.search("케이 지금 어디 있어?")
+        self.assertEqual(result[0]["reference"], "canon.kei")
+
     def test_budget_and_limit_are_enforced(self):
         self.assertEqual(len(self.index.search("마코토 아코", limit=1)), 1)
         self.assertEqual(self.index.search("마코토", chars=1), [])

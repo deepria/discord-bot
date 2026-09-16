@@ -184,6 +184,7 @@ class RioClient(BaseRioClient):
                         old.content,
                         role="bot" if other_bot else "user",
                         unix_time=old.created_at.timestamp(),
+                        direct_trigger=historical_text is not None,
                     )
                 finally:
                     CURRENT_DIRECT_TRIGGER.reset(direct_token)
@@ -226,6 +227,7 @@ class RioClient(BaseRioClient):
                     message.author.display_name,
                     message.content,
                     role="bot",
+                    direct_trigger=False,
                 )
             return
 

@@ -61,6 +61,7 @@ async def test_current_channel_query_excludes_cross_channel_memory():
                 "name": "다른 사용자",
                 "content": "CURRENT_CHANNEL_RECENT",
                 "role": "user",
+                "direct_trigger": True,
             }],
         )
 

@@ -25,7 +25,9 @@ FACT_TYPE_TO_KIND = {
 }
 REFERENCE_ONLY_FACT_TYPES = {"adaptation", "fandom"}
 _TOKEN = re.compile(r"[0-9A-Za-z가-힣]{2,}")
+_LEXEME = re.compile(r"[0-9A-Za-z가-힣]+")
 _STOPWORDS = {"리오", "리오야", "츠카츠키", "블루", "아카이브", "뭐야", "알려줘", "어떻게"}
+_WORD_CHAR = r"0-9A-Za-z가-힣"
 
 
 class LoreValidationError(ValueError):
@@ -107,6 +109,20 @@ def write_jsonl(path: Path, rows: list[dict]) -> None:
                             for row in rows), encoding="utf-8")
 
 
+def _contains_subject(text: str, subject: str) -> bool:
+    """Match a subject as a complete name/phrase, not inside a longer token."""
+    return bool(re.search(
+        rf"(?<![{_WORD_CHAR}]){re.escape(subject)}(?![{_WORD_CHAR}])",
+        text,
+        re.IGNORECASE,
+    ))
+
+
+def _lexemes(text: str) -> set[str]:
+    return {token.casefold() for token in _LEXEME.findall(text)
+            if token.casefold() not in _STOPWORDS}
+
+
 @dataclass
 class LoreIndex:
     records: list[dict]
@@ -130,6 +146,7 @@ class LoreIndex:
             return []
         folded = query.casefold()
         terms = self._terms(query)
+        lexemes = _lexemes(query)
         ranked = []
         for order, record in enumerate(self.records):
             if record["lane"] == "community_meme" and not include_community:
@@ -141,12 +158,14 @@ class LoreIndex:
             score = 0
             for value in record["subjects"]:
                 value = value.casefold()
-                if value not in _STOPWORDS and value in folded:
+                if value not in _STOPWORDS and _contains_subject(folded, value):
                     score += 8 + min(len(value), 8)
             for value in record["keywords"]:
-                value = value.casefold()
-                if value in folded:
-                    score += 5 + min(len(value), 8)
+                folded_value = value.casefold()
+                if folded_value in folded:
+                    score += 5 + min(len(folded_value), 8)
+                else:
+                    score += 3 * len(lexemes & _lexemes(value))
             score += 2 * len(terms & self._terms(record["summary"]))
             if score:
                 ranked.append((score, -order, record))

@@ -28,6 +28,7 @@ class RecentMessages:
         unix_time=None,
         author_user_id=None,
         reply_target_user_id=None,
+        direct_trigger=False,
     ):
         now = time.monotonic()
         wall_now = time.time()
@@ -56,6 +57,7 @@ class RecentMessages:
             "user_id": author_id or "",
             "author_user_id": author_id,
             "reply_target_user_id": reply_target_id,
+            "direct_trigger": bool(direct_trigger),
             "name": name[:100],
             "content": content[:4000],
             "role": role,
