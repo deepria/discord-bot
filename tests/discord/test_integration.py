@@ -93,7 +93,9 @@ class SDKTests(unittest.IsolatedAsyncioTestCase):
     async def test_dm_reads_public_context_without_copying_to_summary_input(self):
         dm = Scope(None, 20, 100)
         await self.llm.answer(self.store, dm, "사용자", "안녕",
-                              public_context=[{"source": "guild:1:channel:10:user:100", "summary": "public-source-marker"}])
+                              public_context=[{"source": "guild:1:channel:10:user:100",
+                                               "user_id": "100",
+                                               "summary": "public-source-marker"}])
         self.assertIn("public-source-marker", str(self.calls[-1]["input"]))
         self.store.add(dm, 1, "안녕", "응")
         self.store.add(dm, 2, "반가워", "응")
@@ -123,7 +125,8 @@ class SDKTests(unittest.IsolatedAsyncioTestCase):
         await self.llm.answer(self.store, scope, "A", "current-only", use_memory=False,
                               public_context=[{"source": "guild:1:channel:10:user:100",
                                                "summary": "secret-public"}],
-                              channel_context=[{"content": "recent-channel"}])
+                              channel_context=[{"role": "user", "content": "recent-channel",
+                                                "direct_trigger": True}])
         payload = str(self.calls[-1]["input"])
         self.assertNotIn("secret", payload)
         self.assertIn("recent-channel", payload)

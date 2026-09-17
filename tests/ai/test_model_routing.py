@@ -12,7 +12,7 @@ def _information(**overrides):
         "routing": RoutingPlan("리오야 안녕", "안녕"),
         "route": InformationRoute.GENERAL,
         "references": (),
-        "freshness": FreshnessMode.NONE,
+        "freshness": FreshnessMode.STATIC,
         "fact_question": False,
         "search_mode": "none",
         "provenance": ProvenanceMode.SILENT,
