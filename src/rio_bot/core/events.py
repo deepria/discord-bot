@@ -66,4 +66,26 @@ class EventLogger:
             self.handler.close()
 
 
-__all__ = ["EventLogger"]
+class RuntimeStatusWriter:
+    """Atomically publish content-free bot runtime state for the control agent."""
+
+    def __init__(self, path: str):
+        self.path = Path(path) if path else None
+
+    def write(self, **fields):
+        if self.path is None:
+            return
+        row = {
+            "at": datetime.now(UTC).isoformat(),
+            **EventLogger._safe_fields(fields),
+        }
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = self.path.with_suffix(self.path.suffix + ".tmp")
+            temporary.write_text(json.dumps(row, ensure_ascii=False), encoding="utf-8")
+            temporary.replace(self.path)
+        except OSError:
+            logging.getLogger("rio").warning("Runtime status write failed")
+
+
+__all__ = ["EventLogger", "RuntimeStatusWriter"]

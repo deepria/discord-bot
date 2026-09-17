@@ -5,13 +5,14 @@ import time
 import weakref
 from contextlib import nullcontext
 from datetime import timedelta
+from pathlib import Path
 
 import discord
 
 from .config import Settings
 from .emoji_commands import EmojiCommands, EmojiRegistry
 from .emojis import render_emojis
-from .events import EventLogger
+from .events import EventLogger, RuntimeStatusWriter
 from .llm import LLM
 from .memory_commands import MemoryCommands, MemoryMode
 from .output_safety import neutralize_mentions
@@ -53,6 +54,12 @@ class RioClient(discord.Client):
         self.store = store or Store(settings.db_path, settings.history_turns)
         self.llm = llm or LLM(settings)
         self.events = EventLogger(settings.event_log_path)
+        status_path = (
+            Path(settings.event_log_path).with_name("status.json")
+            if settings.event_log_path
+            else Path(settings.db_path).parent / "logs" / "status.json"
+        )
+        self.runtime_status = RuntimeStatusWriter(str(status_path))
         self.emoji_registry = EmojiRegistry(self, self.store)
         self.emoji_admin_ids = set(settings.bot_admin_ids)
         self.tree = discord.app_commands.CommandTree(self)
@@ -83,7 +90,35 @@ class RioClient(discord.Client):
         await self.tree.sync()
 
     async def on_ready(self):
-        log.info("Bot connected (id=%s)", self.user.id)
+        self._publish_runtime_status(connected=True)
+        log.info(
+            "Discord connected (id=%s provider=%s model=%s guilds=%s latency_ms=%s)",
+            self.user.id,
+            self.settings.provider,
+            self.settings.model,
+            len(self.guilds),
+            self._latency_ms(),
+        )
+
+    async def on_disconnect(self):
+        self._publish_runtime_status(connected=False)
+        log.warning("Discord disconnected")
+
+    def _latency_ms(self):
+        latency = getattr(self, "latency", float("nan"))
+        return round(latency * 1000, 1) if isinstance(latency, (float, int)) and latency >= 0 else None
+
+    def _publish_runtime_status(self, *, connected: bool):
+        values = {
+            "connected": connected,
+            "provider": self.settings.provider,
+            "model": self.settings.model,
+            "guild_count": len(self.guilds),
+            "latency_ms": self._latency_ms(),
+            "pending_requests": self.pending_count,
+        }
+        self.runtime_status.write(**values)
+        self.events.emit("discord_connection", **values)
 
     async def on_error(self, event, *args, **kwargs):
         # Discord's default handler prints message arguments and full tracebacks.
@@ -96,6 +131,7 @@ class RioClient(discord.Client):
 
     async def close(self):
         self.stopping = True
+        self._publish_runtime_status(connected=False)
         try:
             if self.active_tasks:
                 _, pending = await asyncio.wait(list(self.active_tasks), timeout=50)
@@ -263,6 +299,14 @@ class RioClient(discord.Client):
         scope = Scope(guild_id, message.channel.id, message.author.id, public_at_capture)
         if message.author.bot or message.webhook_id is not None:
             return
+        self.events.emit(
+            "discord_message_received",
+            message_id=str(message.id),
+            guild_id=str(guild_id) if guild_id is not None else None,
+            channel_id=str(message.channel.id),
+            user_id=str(message.author.id),
+            invoked=bool(text is not None),
+        )
         received_mode = MemoryMode(self.store.memory_mode(scope))
         received_chat_log = self.store.chat_log_enabled(scope)
         management = self._management_text(text)
@@ -342,6 +386,13 @@ class RioClient(discord.Client):
                             sources = await self.public_sources(scope.user_id, guild_id) if use_memory else []
                             context = self.store.public_context(sources) if use_memory else []
                             emoji_catalog = await self.emoji_registry.catalog(message.channel)
+                            request_started = time.monotonic()
+                            self.events.emit(
+                                "ai_request_started",
+                                message_id=str(message.id),
+                                provider=self.settings.provider,
+                                model=self.settings.model,
+                            )
                             answer = await self.llm.answer(
                                 self.store, scope, message.author.display_name, text,
                                 public_context=context,
@@ -349,6 +400,11 @@ class RioClient(discord.Client):
                                                  if guild_id is not None and use_chat_log else []),
                                 use_memory=use_memory,
                                 emoji_catalog=emoji_catalog)
+                            self.events.emit(
+                                "ai_request_completed",
+                                message_id=str(message.id),
+                                duration_ms=round((time.monotonic() - request_started) * 1000),
+                            )
                             current = {e["id"] for e in await self.emoji_registry.catalog(message.channel)}
                             answer = render_emojis(answer, [e for e in emoji_catalog if e["id"] in current])
                             answer = neutralize_mentions(answer)
@@ -358,6 +414,12 @@ class RioClient(discord.Client):
                                 next(chunks(answer)), allowed_mentions=discord.AllowedMentions.none())
                             for part in list(chunks(answer))[1:]:
                                 await message.channel.send(part, allowed_mentions=discord.AllowedMentions.none())
+                            self.events.emit(
+                                "discord_response_sent",
+                                message_id=str(message.id),
+                                response_message_id=str(sent.id),
+                                response_chars=len(answer),
+                            )
                             if guild_id is not None and use_chat_log:
                                 self.recent.add(scope, sent.id, "리오", answer, role="assistant")
                             self.events.emit(
