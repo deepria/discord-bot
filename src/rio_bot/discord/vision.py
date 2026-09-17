@@ -6,8 +6,8 @@ import logging
 import re
 from dataclasses import dataclass
 
-import httpx
 import discord
+import httpx
 
 from rio_bot.ai.vision import VisualInput
 
