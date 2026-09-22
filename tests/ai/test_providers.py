@@ -5,6 +5,7 @@ import httpx
 import pytest
 
 from rio_bot.ai.providers import (
+    Gemini503FallbackClient,
     ProviderAPIError,
     ProviderTimeoutError,
     _gemini_input,
@@ -13,6 +14,21 @@ from rio_bot.ai.providers import (
     _OpenRouterResponses,
     normalize_provider,
 )
+
+
+@pytest.mark.asyncio
+async def test_gemini_503_uses_tier1_once_with_fallback_model():
+    primary = NS(responses=NS(create=AsyncMock(side_effect=ProviderAPIError("gemini", 503))),
+                 close=AsyncMock())
+    response = NS(status="completed")
+    fallback = NS(responses=NS(create=AsyncMock(return_value=response)), close=AsyncMock())
+    client = Gemini503FallbackClient(primary, fallback, "gemini-tier1")
+
+    actual = await client.responses.create(model="gemini-free", input="safe")
+
+    assert actual is response
+    assert fallback.responses.create.await_args.kwargs["model"] == "gemini-tier1"
+    assert actual._rio_fallback == {"provider": "gemini", "model": "gemini-tier1", "reason": "http_503"}
 
 
 @pytest.mark.asyncio

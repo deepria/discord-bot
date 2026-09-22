@@ -1,9 +1,10 @@
 import json
+from dataclasses import replace
 
 from .information_pipeline import InformationPipeline
 from .llm import SUMMARY_POLICY as BASE_SUMMARY_POLICY
 from .model_routing import build_memory_model_plan
-from .providers import create_provider_client
+from .providers import Gemini503FallbackClient, create_provider_client
 from .routing_plan import RoutingPlan, build_routing_plan
 from .structured_memory import POLICY as STRUCTURED_MEMORY_POLICY
 from .structured_memory import parse_items
@@ -49,9 +50,16 @@ class LLM(InformationPipeline):
     """Production LLM orchestrating routing, vision, memory, and RP policy."""
 
     def __init__(self, settings, client=None, memory_client=None):
-        primary_client = wrap_vision_client(
-            client or create_provider_client(settings, settings.provider)
-        )
+        primary_client = client or create_provider_client(settings, settings.provider)
+        if (client is None and settings.provider == "gemini" and settings.gemini_tier1_api_key
+                and settings.gemini_tier1_model):
+            tier1_settings = replace(settings, api_key=settings.gemini_tier1_api_key,
+                                     gemini_api_key=settings.gemini_tier1_api_key)
+            primary_client = Gemini503FallbackClient(
+                primary_client, create_provider_client(tier1_settings, "gemini"),
+                settings.gemini_tier1_model,
+            )
+        primary_client = wrap_vision_client(primary_client)
         super().__init__(settings, client=primary_client)
 
         memory_provider = settings.memory_provider or settings.provider
