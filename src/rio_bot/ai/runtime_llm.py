@@ -5,6 +5,8 @@ from .llm import SUMMARY_POLICY as BASE_SUMMARY_POLICY
 from .model_routing import build_memory_model_plan
 from .providers import create_provider_client
 from .routing_plan import RoutingPlan, build_routing_plan
+from .structured_memory import POLICY as STRUCTURED_MEMORY_POLICY
+from .structured_memory import parse_items
 from .vision import VISION_REQUEST_ACTIVE, wrap_vision_client
 
 SUMMARY_POLICY = BASE_SUMMARY_POLICY + """
@@ -140,6 +142,32 @@ class LLM(InformationPipeline):
         )
         if response.status == "completed" and response.output_text.strip():
             store.save_summary(scope, response.output_text.strip()[:1500], pending[-1]["id"])
+        await self.extract_structured_memory(store, scope)
+
+    async def extract_structured_memory(self, store, scope):
+        """Run the optional shadow writer without exposing items to the response path."""
+        if not getattr(self.settings, "structured_memory_shadow", False):
+            return
+        pending = store.pending_structured_memory(scope)
+        if len(pending) < 2:
+            return
+        payload = {"capture": "channel" if scope.public_at_capture else "owner_private", "turns": [
+            {"message_id": row["message_id"], "user": row["content"]} for row in pending
+        ]}
+        try:
+            response = await self.usage.request(
+                self.memory_client, "structured_memory_shadow", model=self.settings.memory_model,
+                instructions=STRUCTURED_MEMORY_POLICY,
+                input=json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+                max_output_tokens=min(self.settings.memory_output_tokens, 900), store=False,
+                _rio_telemetry={"structured_memory_lifecycle": "extract"},
+            )
+            if response.status == "completed":
+                store.save_structured_memory(scope, through_id=pending[-1]["id"],
+                                             items=parse_items(response.output_text))
+        except (ValueError, TypeError):
+            # A malformed extraction must leave the independent cursor untouched for retry.
+            return
 
     async def summarize_shared(self, store, scope):
         pending = store.pending_shared(scope)
