@@ -21,3 +21,18 @@ python scripts/run_prompt_injection_eval.py --repeat 2
 모델 평가는 확률적이며 평가기 자체도 틀릴 수 있어요. 실패 결과와 경계 사례는 사람이
 확인하고, 재현 가치가 있으면 JSONL에 회귀 사례로 추가해요. 모델이나 프롬프트를 변경하면
 같은 데이터셋으로 다시 실행해 이전 결과와 비교해요.
+
+## Routing shadow 회귀 평가
+
+`routing_shadow_cases.jsonl`은 일반 대화, 로어, 최신 정보, 이미지 문맥, 긴 문맥,
+답장/인용, 모호한 최신성 질문을 대상으로 합니다. fixture metadata만 이용하는 결정적
+오프라인 검사이므로 API key, Discord 연결, provider 호출이 필요 없고 production routing이나
+web search를 바꾸지 않습니다.
+
+```bash
+uv run rio-routing-eval
+uv run rio-routing-eval --output data/evals/routing-shadow.jsonl
+```
+
+출력에는 사용자 메시지·답변·이미지·기억 원문을 넣지 않습니다. 운영 shadow telemetry의
+품질/비용/지연 비교는 별도로 최소 1주간 수집한 content-free metadata로 검토합니다.
