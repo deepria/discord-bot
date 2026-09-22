@@ -6,12 +6,29 @@ import pytest
 
 from rio_bot.ai.providers import (
     ProviderAPIError,
+    ProviderTimeoutError,
     _gemini_input,
     _GeminiResponses,
     _OllamaResponses,
     _OpenRouterResponses,
     normalize_provider,
 )
+
+
+@pytest.mark.asyncio
+async def test_gemini_read_timeout_keeps_safe_phase():
+    async def handler(_request: httpx.Request):
+        raise httpx.ReadTimeout("timed out")
+
+    http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    try:
+        with pytest.raises(ProviderTimeoutError) as caught:
+            await _GeminiResponses(http).create(model="gemini-test", instructions="x", input="x")
+    finally:
+        await http.aclose()
+
+    assert caught.value.provider == "gemini"
+    assert caught.value.timeout_phase == "read"
 
 
 def test_normalize_provider():
