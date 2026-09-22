@@ -38,7 +38,7 @@ async def test_inline_quote_is_labeled_separately_from_the_current_speaker():
         api_key="test-not-a-real-key",
         http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
     )
-    llm = LLM(Settings("test", "test"), client=client)
+    llm = LLM(Settings("test", "test", bot_admin_ids=frozenset({100})), client=client)
     store = Store(":memory:")
     try:
         await llm.answer(
@@ -55,11 +55,39 @@ async def test_inline_quote_is_labeled_separately_from_the_current_speaker():
             "author_user_id": "100",
             "content": "이 주장은 맞아?",
             "context_kind": "current_message",
+            "relationship": "husband_admin",
         }
         assert reference["inline_quoted_text"][0]["author_user_id"] is None
         assert reference["inline_quoted_text"][0]["content"] == "다른 사람이 했다는 주장"
         assert payload["input"][-1]["content"] == "이 주장은 맞아?"
         assert "현재 발화와 인용 출처" in payload["instructions"]
+    finally:
+        await llm.close()
+        store.close()
+
+
+@pytest.mark.asyncio
+async def test_relationship_uses_current_author_id_not_name_or_guild_permissions():
+    calls = []
+
+    def handler(request):
+        calls.append(json.loads(request.content))
+        return httpx.Response(200, json=_response())
+
+    client = AsyncOpenAI(
+        api_key="test-not-a-real-key",
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+    llm = LLM(Settings("test", "test", bot_admin_ids=frozenset({100})), client=client)
+    store = Store(":memory:")
+    try:
+        await llm.answer(store, Scope(1, 10, 200), "deepria", "안녕")
+
+        payload = calls[-1]
+        reference = json.loads(payload["input"][0]["content"].split("\n", 1)[1])
+        assert reference["current_user_message"]["relationship"] == "participant"
+        assert "현재는 일반 관계 모드" in payload["instructions"]
+        assert "디프" not in payload["instructions"]
     finally:
         await llm.close()
         store.close()
