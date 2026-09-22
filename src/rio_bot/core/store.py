@@ -53,6 +53,22 @@ class Store:
                 scope TEXT PRIMARY KEY,
                 mode TEXT NOT NULL CHECK(mode IN ('on','off'))
             );
+            CREATE TABLE IF NOT EXISTS policy_config_audit (
+                id TEXT PRIMARY KEY,
+                occurred_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                actor_kind TEXT NOT NULL,
+                actor_id TEXT NOT NULL,
+                policy TEXT NOT NULL,
+                scope TEXT NOT NULL,
+                outcome TEXT NOT NULL,
+                request_id TEXT
+            );
+            CREATE TABLE IF NOT EXISTS policy_config_requests (
+                request_id TEXT PRIMARY KEY,
+                policy TEXT NOT NULL,
+                scope TEXT NOT NULL,
+                payload_digest TEXT NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS notes (scope TEXT PRIMARY KEY, text TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS manual_notes (
                 scope TEXT PRIMARY KEY,

@@ -9,6 +9,7 @@ from .admin_list import MAX_DISCORD_TEXT, table_row
 from .instruction_commands import InstructionCommands
 from .knowledge_commands import KnowledgeCommands
 from .routing import Scope
+from rio_bot.core.policy_settings_service import set_policy_override
 
 log = logging.getLogger("rio")
 
@@ -164,7 +165,10 @@ class MemoryCommands(app_commands.Group):
 
         await interaction.response.defer(ephemeral=True)
         async with self.client.channel_lock(scope):
-            self.client.store.set_memory_mode_override(key, None if value == "inherit" else value)
+            set_policy_override(
+                self.client.store, policy="memory", scope=key, value=value,
+                actor_kind="discord", actor_id=str(interaction.user.id), request_id=str(interaction.id),
+            )
         changed = {"channel": "채널", "server": "서버", "global": "전역"}[target]
         state = "상위 설정을 따르도록 변경" if value == "inherit" else f"{value}로 변경"
         await interaction.followup.send(

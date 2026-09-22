@@ -6,6 +6,7 @@ from discord import app_commands
 
 from .admin_list import MAX_DISCORD_TEXT, table_row
 from .routing import Scope
+from rio_bot.core.policy_settings_service import set_policy_override
 
 log = logging.getLogger("rio")
 
@@ -137,8 +138,10 @@ class ChatLogCommands(app_commands.Group):
 
         await interaction.response.defer(ephemeral=True)
         async with self.client.channel_lock(scope):
-            self.client.store.set_chat_log_mode_override(
-                key, None if value == "inherit" else value)
+            set_policy_override(
+                self.client.store, policy="chatlog", scope=key, value=value,
+                actor_kind="discord", actor_id=str(interaction.user.id), request_id=str(interaction.id),
+            )
             effective_off = not self.client.store.chat_log_enabled(scope)
             if value == "off" or (value == "inherit" and effective_off):
                 if target == "global":
