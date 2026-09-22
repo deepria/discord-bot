@@ -158,6 +158,10 @@ information routing이 provider의 웹 검색 기능을 사용합니다.
 
 자세한 내용은 [`docs/runtime-web-search.md`](docs/runtime-web-search.md)를 참고하세요.
 
+`MODEL_ROUTING_SHADOW=true`와 `SEMANTIC_WEB_ROUTING_SHADOW=true`는 각각 향후 모델 tier와
+웹 검색 필요도의 제안 결과만 usage telemetry에 남깁니다. 답변의 모델 선택·검색 도구 제공에는
+영향을 주지 않으며, 대화 본문·프롬프트·이미지·기억 원문을 telemetry에 기록하지 않습니다.
+
 ## 기억과 최근 채널 문맥
 
 장기 기억과 recent chatlog는 서로 다른 시스템입니다.

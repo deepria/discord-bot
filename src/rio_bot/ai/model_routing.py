@@ -189,6 +189,51 @@ def build_model_plan(
     )
 
 
+def build_shadow_model_plan(
+    settings,
+    *,
+    content: str,
+    information: InformationPlan,
+    channel_context: list[dict] | None = None,
+    public_context: list[dict] | None = None,
+    history_turns: int = 0,
+) -> ModelPlan:
+    """Calculate the adaptive proposal even when production routing is fixed.
+
+    This uses the established, bounded feature set but has no caller-visible side
+    effects.  In particular it must not be used to select the actual request model.
+    """
+    class ShadowSettings:
+        def __init__(self, source):
+            self.source = source
+
+        @property
+        def model_routing_mode(self):
+            return "adaptive"
+
+        def __getattr__(self, name):
+            return getattr(self.source, name)
+
+    proposed = build_model_plan(
+        ShadowSettings(settings),
+        content=content,
+        information=information,
+        channel_context=channel_context,
+        public_context=public_context,
+        history_turns=history_turns,
+    )
+    return ModelPlan(
+        tier=proposed.tier,
+        model=proposed.model,
+        max_output_tokens=proposed.max_output_tokens,
+        score=proposed.score,
+        smart_threshold=proposed.smart_threshold,
+        reasons=proposed.reasons,
+        components=proposed.components,
+        policy="hybrid-v4-shadow",
+    )
+
+
 def build_memory_model_plan(settings, *, pending_count: int, payload_chars: int) -> ModelPlan:
     threshold = float(getattr(settings, "memory_routing_smart_threshold", 2.0))
     same_provider = (
@@ -227,4 +272,7 @@ def build_memory_model_plan(settings, *, pending_count: int, payload_chars: int)
     )
 
 
-__all__ = ["ModelPlan", "ModelTier", "build_memory_model_plan", "build_model_plan"]
+__all__ = [
+    "ModelPlan", "ModelTier", "build_memory_model_plan", "build_model_plan",
+    "build_shadow_model_plan",
+]

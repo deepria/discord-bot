@@ -13,6 +13,7 @@ from .model_routing import build_model_plan
 from .rp_output_policy import hide_web_citations, provenance_instruction
 from .runtime_context import build_runtime_context, runtime_instruction
 from .semantic_routing import classify_semantic_route
+from .shadow_routing import shadow_telemetry
 from .web_search_runtime import tool_config
 from .web_search_text import response_text
 
@@ -263,6 +264,14 @@ class RequestAssembler(BaseLLM):
             telemetry["semantic_route_tier"] = semantic_route.get("tier")
             telemetry["semantic_route_confidence"] = semantic_route.get("confidence")
             telemetry["semantic_route_reasons"] = semantic_route.get("reasons", [])
+        telemetry.update(shadow_telemetry(
+            self.settings,
+            content=routing_content,
+            information=information_plan,
+            channel_context=channel_context,
+            public_context=public_context,
+            history_turns=history_turn_count + len(server_recent),
+        ))
         request = {
             "model": model_plan.model,
             "instructions": "\n".join(instruction_parts),
