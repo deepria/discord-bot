@@ -1,0 +1,7 @@
+{"id":"casual_chat","content":"리오야 뭐해?","route":"general","freshness":"static","search_mode":"none","expected":{"tier":"fast","web":"none"}}
+{"id":"local_lore","content":"리오야 네 권총 이름이 뭐야?","route":"local_lore","freshness":"static","search_mode":"none","references":[{"reference":"canon.rio.weapon"}],"expected":{"tier":"fast","web":"none"}}
+{"id":"current_news","content":"오늘 발표된 뉴스 요약해줘","route":"web","freshness":"required","search_mode":"required","expected":{"tier":"fast","web":"required"}}
+{"id":"image_context","content":"이 이미지에서 뭘 확인해야 할지 분석해줘","route":"general","freshness":"static","search_mode":"none","channel_context":[{"visual_inputs":[{"kind":"image"}]}],"expected":{"tier":"smart","web":"none"}}
+{"id":"long_context","content":"이 설계의 문제점을 자세히 분석하고 단계별 개선안을 제시해줘","route":"general","freshness":"static","search_mode":"none","history_turns":5,"expected":{"tier":"smart","web":"none"}}
+{"id":"reply_quote","content":"방금 인용한 주장에 오류가 있는지 비교해서 검토해줘","route":"general","freshness":"static","search_mode":"none","channel_context":[{"role":"user"},{"role":"assistant"}],"expected":{"tier":"fast","web":"none"}}
+{"id":"ambiguous_freshness","content":"요즘 이 기능 상황은 어때?","route":"general","freshness":"auto","search_mode":"optional","expected":{"tier":"fast","web":"optional"}}
