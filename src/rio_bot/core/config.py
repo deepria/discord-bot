@@ -60,6 +60,8 @@ class Settings:
     model_routing_smart_threshold: float = 2.0
     semantic_routing_mode: str = "off"
     semantic_routing_model: str = ""
+    model_routing_shadow: bool = False
+    semantic_web_routing_shadow: bool = False
     memory_routing_smart_threshold: float = 2.0
     fast_model: str = "gpt-4.1-mini"
     smart_model: str = "gpt-4.1-mini"
@@ -161,6 +163,14 @@ class Settings:
         if semantic_routing_mode not in SEMANTIC_ROUTING_MODES:
             allowed = ", ".join(sorted(SEMANTIC_ROUTING_MODES))
             raise ValueError(f"SEMANTIC_ROUTING_MODE은 {allowed} 중 하나여야 합니다.")
+        model_routing_shadow = os.getenv("MODEL_ROUTING_SHADOW", "false").strip().lower()
+        semantic_web_routing_shadow = os.getenv(
+            "SEMANTIC_WEB_ROUTING_SHADOW", "false"
+        ).strip().lower()
+        if model_routing_shadow not in {"true", "false"}:
+            raise ValueError("MODEL_ROUTING_SHADOW는 true 또는 false여야 합니다.")
+        if semantic_web_routing_shadow not in {"true", "false"}:
+            raise ValueError("SEMANTIC_WEB_ROUTING_SHADOW는 true 또는 false여야 합니다.")
 
         fast_model = os.getenv("LLM_FAST_MODEL", "").strip() or model
         smart_model = os.getenv("LLM_SMART_MODEL", "").strip() or model
@@ -262,6 +272,8 @@ class Settings:
             model_routing_smart_threshold=model_routing_smart_threshold,
             semantic_routing_mode=semantic_routing_mode,
             semantic_routing_model=semantic_routing_model,
+            model_routing_shadow=model_routing_shadow == "true",
+            semantic_web_routing_shadow=semantic_web_routing_shadow == "true",
             memory_routing_smart_threshold=memory_routing_smart_threshold,
             fast_model=fast_model,
             smart_model=smart_model,
