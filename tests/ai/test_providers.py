@@ -1,3 +1,4 @@
+import asyncio
 from types import SimpleNamespace as NS
 from unittest.mock import AsyncMock
 
@@ -6,6 +7,7 @@ import pytest
 
 from rio_bot.ai.providers import (
     Gemini503FallbackClient,
+    GeminiClient,
     ProviderAPIError,
     ProviderTimeoutError,
     _gemini_input,
@@ -14,6 +16,14 @@ from rio_bot.ai.providers import (
     _OpenRouterResponses,
     normalize_provider,
 )
+
+
+def test_gemini_client_defaults_to_an_8_second_timeout():
+    client = GeminiClient("key")
+    try:
+        assert client._http.timeout.read == 8
+    finally:
+        asyncio.run(client.close())
 
 
 @pytest.mark.asyncio
