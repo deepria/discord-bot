@@ -14,12 +14,13 @@ def test_dashboard_overview_uses_read_only_database(tmp_path):
     connection.commit()
     connection.close()
     usage = tmp_path / "usage.jsonl"
-    usage.write_text(json.dumps({"status": "error"}) + "\nnot-json\n", encoding="utf-8")
+    usage.write_text(json.dumps({"status": "error", "at": "2026-09-22T00:00:00Z"}) + "\nnot-json\n", encoding="utf-8")
 
     result = overview(str(db), str(usage))
 
     assert result == {"db_available": True, "turns": 1, "structured_memory_items": None,
-                      "usage_rows": 1, "usage_errors": 1}
+                      "usage_rows": 1, "usage_errors": 1,
+                      "usage_window": {"oldest_at": "2026-09-22T00:00:00Z", "newest_at": "2026-09-22T00:00:00Z"}}
     assert sqlite3.connect(db).execute("SELECT COUNT(*) FROM turns").fetchone()[0] == 1
 
 
