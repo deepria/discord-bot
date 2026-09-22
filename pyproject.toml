@@ -17,6 +17,7 @@ rio-bot = "rio_bot.discord.runtime_entry:main"
 rio-lore = "rio_bot.tooling.lore_cli:main"
 rio-eval = "rio_bot.tooling.eval_runner:main"
 rio-routing-eval = "rio_bot.tooling.routing_eval:main"
+rio-dashboard = "rio_bot.tooling.dashboard:main"
 rio-migrate-runtime = "rio_bot.core.runtime_migration:main"
 
 [tool.setuptools.packages.find]
