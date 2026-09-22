@@ -13,7 +13,7 @@ def overview(db_path: str, usage_path: str) -> dict:
     """Read only bounded aggregate metadata; never construct the production Store."""
     database = Path(db_path)
     result = {"db_available": database.exists(), "turns": None, "structured_memory_items": None,
-              "usage_rows": 0, "usage_errors": 0}
+              "usage_rows": 0, "usage_errors": 0, "usage_window": {"oldest_at": None, "newest_at": None}}
     if database.exists():
         connection = sqlite3.connect(f"file:{database.absolute()}?mode=ro", uri=True)
         try:
@@ -34,6 +34,11 @@ def overview(db_path: str, usage_path: str) -> dict:
                 continue
             result["usage_rows"] += 1
             result["usage_errors"] += int(row.get("status") == "error")
+            timestamp = row.get("at")
+            if isinstance(timestamp, str):
+                window = result["usage_window"]
+                window["oldest_at"] = min(window["oldest_at"], timestamp) if window["oldest_at"] else timestamp
+                window["newest_at"] = max(window["newest_at"], timestamp) if window["newest_at"] else timestamp
     return result
 
 
