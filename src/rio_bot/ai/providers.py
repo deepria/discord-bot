@@ -70,19 +70,25 @@ class _Gemini503FallbackResponses:
     async def create(self, **kwargs):
         try:
             return await self.primary.create(**kwargs)
-        except ProviderAPIError as exc:
-            if exc.provider != "gemini" or exc.status_code != 503:
+        except (ProviderAPIError, ProviderTimeoutError) as exc:
+            if isinstance(exc, ProviderAPIError):
+                if exc.provider != "gemini" or exc.status_code != 503:
+                    raise
+                reason = "http_503"
+            elif exc.provider == "gemini":
+                reason = f"{exc.timeout_phase}_timeout"
+            else:
                 raise
             request = dict(kwargs)
             request["model"] = self.fallback_model
             response = await self.fallback.create(**request)
             response._rio_fallback = {"provider": "gemini", "model": self.fallback_model,
-                                      "reason": "http_503"}
+                                      "reason": reason}
             return response
 
 
 class Gemini503FallbackClient:
-    """Use a separately billed Gemini project only after an HTTP 503 from primary."""
+    """Retry a separately billed Gemini project after primary HTTP 503 or timeout."""
     provider_name = "gemini"
 
     def __init__(self, primary, fallback, fallback_model: str):
