@@ -168,9 +168,10 @@ class RioClient(discord.Client):
         self.stopping = True
         self._publish_runtime_status(connected=False)
         try:
-            if self._runtime_config_task is not None:
-                self._runtime_config_task.cancel()
-                await asyncio.gather(self._runtime_config_task, return_exceptions=True)
+            runtime_config_task = getattr(self, "_runtime_config_task", None)
+            if runtime_config_task is not None:
+                runtime_config_task.cancel()
+                await asyncio.gather(runtime_config_task, return_exceptions=True)
             if self.active_tasks:
                 active = list(self.active_tasks)
                 _, pending = await asyncio.wait(
