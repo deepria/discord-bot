@@ -130,6 +130,18 @@ class LoreSearchTests(unittest.TestCase):
         result = index.search("케이 지금 어디 있어?")
         self.assertEqual(result[0]["reference"], "canon.kei")
 
+    def test_current_state_query_prioritizes_explicitly_current_lore(self):
+        index = LoreIndex([
+            record("canon.kei.past", summary="케이는 과거 저장 파일 상태였다.",
+                   keywords=["케이", "저장 파일"], subjects=["케이"], timeline="과거 사건"),
+            record("canon.kei.current", summary="케이는 현재 초현상특무부 구성원이다.",
+                   keywords=["케이", "현재 상태"], subjects=["케이"], timeline="강철대륙 이후"),
+        ])
+
+        result = index.search("케이 지금 어떤 상태야?")
+
+        self.assertEqual(result[0]["reference"], "canon.kei.current")
+
     def test_budget_and_limit_are_enforced(self):
         self.assertEqual(len(self.index.search("마코토 아코", limit=1)), 1)
         self.assertEqual(self.index.search("마코토", chars=1), [])
@@ -147,6 +159,8 @@ class LoreSearchTests(unittest.TestCase):
         self.assertTrue(any("밀레니엄 엑스포" in item["content"] for item in expo))
         steel = packaged.search("강철대륙에서 리오가 고생한 이야기 알아?")
         self.assertTrue(any("강철대륙" in item["content"] for item in steel))
+        kei = packaged.search("케이는 원래 어떤 존재야?")
+        self.assertTrue(any("에리두의 관리 AI가 아니라" in item["content"] for item in kei))
 
 
 class LorePipelineTests(unittest.TestCase):

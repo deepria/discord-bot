@@ -28,6 +28,8 @@ _TOKEN = re.compile(r"[0-9A-Za-z가-힣]{2,}")
 _LEXEME = re.compile(r"[0-9A-Za-z가-힣]+")
 _STOPWORDS = {"리오", "리오야", "츠카츠키", "블루", "아카이브", "뭐야", "알려줘", "어떻게"}
 _WORD_CHAR = r"0-9A-Za-z가-힣"
+_CURRENT_STATE_QUERY = re.compile(r"(?:지금|현재|요즘|최근|최신|현\s*시점)")
+_CURRENT_STATE_MARKERS = ("현재", "최신", "이후", "현 시점")
 
 
 class LoreValidationError(ValueError):
@@ -147,6 +149,7 @@ class LoreIndex:
         folded = query.casefold()
         terms = self._terms(query)
         lexemes = _lexemes(query)
+        current_state_query = bool(_CURRENT_STATE_QUERY.search(query))
         ranked = []
         for order, record in enumerate(self.records):
             if record["lane"] == "community_meme" and not include_community:
@@ -167,6 +170,14 @@ class LoreIndex:
                 else:
                     score += 3 * len(lexemes & _lexemes(value))
             score += 2 * len(terms & self._terms(record["summary"]))
+            if current_state_query:
+                temporal_text = " ".join((
+                    record["summary"], record["timeline"], *record["keywords"],
+                )).casefold()
+                if any(marker in temporal_text for marker in _CURRENT_STATE_MARKERS):
+                    # A current-state question must not let a strongly keyword-matched
+                    # historical transition displace an explicitly current record.
+                    score += 18
             if score:
                 ranked.append((score, -order, record))
         result, used = [], 0
