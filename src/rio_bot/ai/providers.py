@@ -554,11 +554,11 @@ class OllamaClient:
         await self._http.aclose()
 
 
-def create_provider_client(settings, provider: str):
+def create_provider_client(settings, provider: str, *, credential: str | None = None):
     provider = normalize_provider(provider)
     if provider == "ollama":
         return OllamaClient(settings.ollama_base_url)
-    credential = settings.api_key_for(provider)
+    credential = credential or settings.api_key_for(provider)
     if not credential:
         raise ValueError(f"{provider} provider API key가 설정되지 않았습니다.")
     if provider == "gemini":
