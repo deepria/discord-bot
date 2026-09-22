@@ -2,8 +2,11 @@ import sqlite3
 from pathlib import Path
 
 from rio_bot.core.config import Settings
-from rio_bot.core.runtime_config import RuntimeSettings
-from rio_bot.core.runtime_settings_snapshot import runtime_settings_snapshot
+from rio_bot.core.runtime_config import RuntimeConfigAudit, RuntimeSettings
+from rio_bot.core.runtime_settings_snapshot import (
+    runtime_config_audit_snapshot,
+    runtime_settings_snapshot,
+)
 from rio_bot.core.store import Store
 
 
@@ -63,3 +66,31 @@ def test_snapshot_ignores_malformed_overrides(tmp_path: Path):
     value = next(row for row in rows if row["key"] == "chat_web_search")
     assert value["value"] is True
     assert value["source"] == "startup"
+
+
+def test_audit_snapshot_is_read_only_and_excludes_setting_values(tmp_path: Path):
+    database_path = tmp_path / "runtime.sqlite3"
+    store = Store(str(database_path))
+    try:
+        runtime = RuntimeSettings(_base(str(database_path)), store)
+        runtime.set_text(
+            "CHAT_WEB_SEARCH",
+            "off",
+            audit=RuntimeConfigAudit(
+                actor_kind="discord",
+                actor_id="1234",
+                action="runtime_config.set",
+                target="CHAT_WEB_SEARCH",
+                outcome="success",
+            ),
+        )
+    finally:
+        store.close()
+
+    events = runtime_config_audit_snapshot(_base(str(database_path)))
+
+    assert len(events) == 1
+    assert events[0]["target"] == "CHAT_WEB_SEARCH"
+    assert events[0]["outcome"] == "success"
+    assert "value" not in events[0]
+    assert "off" not in events[0].values()

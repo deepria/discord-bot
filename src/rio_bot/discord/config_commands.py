@@ -7,6 +7,7 @@ from discord import app_commands
 
 from rio_bot.core.runtime_config import (
     RUNTIME_SETTING_SPECS,
+    RuntimeConfigAudit,
     RuntimeSettings,
     format_runtime_value,
 )
@@ -51,6 +52,19 @@ class ConfigCommands(app_commands.Group):
         if key == "channel_context_chars":
             self.client.recent.budget = self.client.settings.channel_context_chars
 
+    @staticmethod
+    def _audit(
+        interaction: discord.Interaction, *, key: str, action: str, outcome: str
+    ) -> RuntimeConfigAudit:
+        return RuntimeConfigAudit(
+            actor_kind="discord",
+            actor_id=str(interaction.user.id),
+            action=action,
+            target=RUNTIME_SETTING_SPECS[key].env_name,
+            outcome=outcome,
+            request_id=str(interaction.id),
+        )
+
     @app_commands.command(name="status", description="현재 런타임 설정과 DB override 확인")
     async def status(self, interaction: discord.Interaction):
         lines = [
@@ -74,9 +88,20 @@ class ConfigCommands(app_commands.Group):
     @app_commands.choices(key=_KEY_CHOICES)
     async def set_config(self, interaction: discord.Interaction, key: str, value: str):
         try:
-            parsed = self.client.settings.set_text(key, value)
+            parsed = self.client.settings.set_text(
+                key,
+                value,
+                audit=self._audit(
+                    interaction, key=key, action="runtime_config.set", outcome="success"
+                ),
+            )
             self._apply_side_effects(key)
         except ValueError as exc:
+            self.client.settings.record_audit(
+                self._audit(
+                    interaction, key=key, action="runtime_config.set", outcome="failure"
+                )
+            )
             await interaction.response.send_message(str(exc), ephemeral=True)
             return
         spec = RUNTIME_SETTING_SPECS[key]
@@ -90,7 +115,12 @@ class ConfigCommands(app_commands.Group):
     @app_commands.describe(key="초기화할 설정")
     @app_commands.choices(key=_KEY_CHOICES)
     async def reset(self, interaction: discord.Interaction, key: str):
-        value = self.client.settings.reset(key)
+        value = self.client.settings.reset(
+            key,
+            audit=self._audit(
+                interaction, key=key, action="runtime_config.reset", outcome="success"
+            ),
+        )
         self._apply_side_effects(key)
         spec = RUNTIME_SETTING_SPECS[key]
         await interaction.response.send_message(

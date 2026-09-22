@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from rio_bot.core.config import Settings, parse_external_context_policy
-from rio_bot.core.runtime_config import RuntimeSettings
+from rio_bot.core.runtime_config import RuntimeConfigAudit, RuntimeSettings
 from rio_bot.core.store import Store
 
 
@@ -152,6 +152,59 @@ def test_runtime_location_can_explicitly_override_env_value_with_empty_string():
         assert settings.runtime_default_location == ""
         settings.reset("RUNTIME_DEFAULT_LOCATION")
         assert settings.runtime_default_location == "Seoul"
+    finally:
+        store.close()
+
+
+def test_runtime_config_audit_is_content_free_and_written_with_the_override():
+    store = Store(":memory:")
+    try:
+        settings = RuntimeSettings(_base(), store)
+        settings.set_text(
+            "CHAT_WEB_SEARCH",
+            "off",
+            audit=RuntimeConfigAudit(
+                actor_kind="discord",
+                actor_id="1234",
+                action="runtime_config.set",
+                target="CHAT_WEB_SEARCH",
+                outcome="success",
+                request_id="interaction-1",
+            ),
+        )
+
+        assert settings.chat_web_search is False
+        rows = settings.audit_rows()
+        assert len(rows) == 1
+        assert rows[0]["actor_kind"] == "discord"
+        assert rows[0]["actor_id"] == "1234"
+        assert rows[0]["action"] == "runtime_config.set"
+        assert rows[0]["target"] == "CHAT_WEB_SEARCH"
+        assert rows[0]["outcome"] == "success"
+        assert rows[0]["request_id"] == "interaction-1"
+        assert "off" not in rows[0].values()
+    finally:
+        store.close()
+
+
+def test_runtime_config_audit_rejects_unknown_targets_without_writing_an_override():
+    store = Store(":memory:")
+    try:
+        settings = RuntimeSettings(_base(), store)
+        with pytest.raises(ValueError, match="invalid audit target"):
+            settings.set_text(
+                "CHAT_WEB_SEARCH",
+                "off",
+                audit=RuntimeConfigAudit(
+                    actor_kind="discord",
+                    actor_id="1234",
+                    action="runtime_config.set",
+                    target="NOT_A_RUNTIME_SETTING",
+                    outcome="success",
+                ),
+            )
+        assert settings.chat_web_search is True
+        assert settings.audit_rows() == []
     finally:
         store.close()
 

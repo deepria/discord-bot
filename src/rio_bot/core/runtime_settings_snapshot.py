@@ -66,3 +66,34 @@ def runtime_settings_snapshot(settings: Settings) -> list[dict[str, Any]]:
             }
         )
     return rows
+
+
+def runtime_config_audit_snapshot(
+    settings: Settings, *, limit: int = 50
+) -> list[dict[str, str | None]]:
+    """Return recent content-free runtime configuration audit events read-only."""
+    safe_limit = max(1, min(limit, 100))
+    try:
+        with sqlite3.connect(_database_uri(settings.db_path), uri=True) as connection:
+            rows = connection.execute(
+                """SELECT id,occurred_at,actor_kind,actor_id,action,target,outcome,request_id
+                   FROM runtime_config_audit
+                   ORDER BY occurred_at DESC, rowid DESC
+                   LIMIT ?""",
+                (safe_limit,),
+            ).fetchall()
+    except sqlite3.Error:
+        return []
+    return [
+        {
+            "id": str(row[0]),
+            "occurred_at": str(row[1]),
+            "actor_kind": str(row[2]),
+            "actor_id": str(row[3]),
+            "action": str(row[4]),
+            "target": str(row[5]),
+            "outcome": str(row[6]),
+            "request_id": str(row[7]) if row[7] is not None else None,
+        }
+        for row in rows
+    ]

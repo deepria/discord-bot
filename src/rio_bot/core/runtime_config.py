@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 from dataclasses import dataclass
 from typing import Any
 
@@ -17,6 +18,18 @@ class RuntimeSettingSpec:
     minimum: int | None = None
     maximum: int | None = None
     empty_allowed: bool = False
+
+
+@dataclass(frozen=True)
+class RuntimeConfigAudit:
+    """Content-free audit metadata for a runtime configuration operation."""
+
+    actor_kind: str
+    actor_id: str
+    action: str
+    target: str
+    outcome: str
+    request_id: str | None = None
 
 
 RUNTIME_SETTING_SPECS: dict[str, RuntimeSettingSpec] = {
@@ -169,6 +182,22 @@ class RuntimeSettings:
                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             )"""
         )
+        store.db.execute(
+            """CREATE TABLE IF NOT EXISTS runtime_config_audit (
+                id TEXT PRIMARY KEY,
+                occurred_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                actor_kind TEXT NOT NULL CHECK(actor_kind IN ('console','discord','system')),
+                actor_id TEXT NOT NULL,
+                action TEXT NOT NULL CHECK(action IN ('runtime_config.set','runtime_config.reset')),
+                target TEXT NOT NULL,
+                outcome TEXT NOT NULL CHECK(outcome IN ('success','failure')),
+                request_id TEXT
+            )"""
+        )
+        store.db.execute(
+            """CREATE INDEX IF NOT EXISTS runtime_config_audit_occurred_at
+               ON runtime_config_audit(occurred_at DESC)"""
+        )
         store.db.commit()
         self.reload()
 
@@ -213,7 +242,56 @@ class RuntimeSettings:
         attr = runtime_setting_attr(key)
         return "db" if attr in self._overrides else "startup"
 
-    def _write(self, attr: str, encoded: str | None) -> None:
+    @staticmethod
+    def _validate_audit(audit: RuntimeConfigAudit) -> None:
+        if audit.actor_kind not in {"console", "discord", "system"}:
+            raise ValueError("invalid audit actor kind")
+        if not audit.actor_id or len(audit.actor_id) > 200:
+            raise ValueError("invalid audit actor id")
+        if audit.action not in {"runtime_config.set", "runtime_config.reset"}:
+            raise ValueError("invalid audit action")
+        if audit.outcome not in {"success", "failure"}:
+            raise ValueError("invalid audit outcome")
+        if audit.target not in {spec.env_name for spec in RUNTIME_SETTING_SPECS.values()}:
+            raise ValueError("invalid audit target")
+        if audit.request_id is not None and len(audit.request_id) > 200:
+            raise ValueError("invalid audit request id")
+
+    def _insert_audit(self, audit: RuntimeConfigAudit) -> None:
+        self._validate_audit(audit)
+        self._store.db.execute(
+            """INSERT INTO runtime_config_audit(
+                   id,actor_kind,actor_id,action,target,outcome,request_id
+               ) VALUES (?,?,?,?,?,?,?)""",
+            (
+                str(uuid.uuid4()),
+                audit.actor_kind,
+                audit.actor_id,
+                audit.action,
+                audit.target,
+                audit.outcome,
+                audit.request_id,
+            ),
+        )
+
+    def record_audit(self, audit: RuntimeConfigAudit) -> None:
+        with self._store.db:
+            self._insert_audit(audit)
+
+    def audit_rows(self, *, limit: int = 100) -> list[dict[str, str | None]]:
+        safe_limit = max(1, min(limit, 100))
+        rows = self._store.db.execute(
+            """SELECT id,occurred_at,actor_kind,actor_id,action,target,outcome,request_id
+               FROM runtime_config_audit
+               ORDER BY occurred_at DESC, rowid DESC
+               LIMIT ?""",
+            (safe_limit,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def _write(
+        self, attr: str, encoded: str | None, *, audit: RuntimeConfigAudit | None = None
+    ) -> None:
         with self._store.db:
             if encoded is None:
                 self._store.db.execute("DELETE FROM runtime_config WHERE key=?", (attr,))
@@ -225,18 +303,20 @@ class RuntimeSettings:
                            value=excluded.value, updated_at=CURRENT_TIMESTAMP""",
                     (attr, encoded),
                 )
+            if audit is not None:
+                self._insert_audit(audit)
 
-    def set_text(self, key: str, raw: str):
+    def set_text(self, key: str, raw: str, *, audit: RuntimeConfigAudit | None = None):
         attr = runtime_setting_attr(key)
         spec = RUNTIME_SETTING_SPECS[attr]
         value = parse_runtime_value(spec, raw, settings=self)
-        self._write(attr, encode_runtime_value(value))
+        self._write(attr, encode_runtime_value(value), audit=audit)
         self._overrides[attr] = value
         return value
 
-    def reset(self, key: str):
+    def reset(self, key: str, *, audit: RuntimeConfigAudit | None = None):
         attr = runtime_setting_attr(key)
-        self._write(attr, None)
+        self._write(attr, None, audit=audit)
         self._overrides.pop(attr, None)
         return getattr(self._base, attr)
 
