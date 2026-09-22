@@ -3,13 +3,15 @@ from contextvars import ContextVar
 
 import discord
 
+from rio_bot.core.message_provenance import split_inline_quotes
+
 log = logging.getLogger("rio")
 
 REPLY_CONTEXT = ContextVar("reply_context", default=())
 
 
 def _row(target, bot_id: int) -> dict | None:
-    content = (getattr(target, "content", "") or "").strip()
+    content, _ = split_inline_quotes(getattr(target, "content", "") or "")
     author = getattr(target, "author", None)
     user_id = getattr(author, "id", None)
     if not content or author is None or user_id is None:
