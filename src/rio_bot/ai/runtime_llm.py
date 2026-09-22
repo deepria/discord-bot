@@ -1,5 +1,4 @@
 import json
-from dataclasses import replace
 
 from .information_pipeline import InformationPipeline
 from .llm import SUMMARY_POLICY as BASE_SUMMARY_POLICY
@@ -53,10 +52,11 @@ class LLM(InformationPipeline):
         primary_client = client or create_provider_client(settings, settings.provider)
         if (client is None and settings.provider == "gemini" and settings.gemini_tier1_api_key
                 and settings.gemini_tier1_model):
-            tier1_settings = replace(settings, api_key=settings.gemini_tier1_api_key,
-                                     gemini_api_key=settings.gemini_tier1_api_key)
             primary_client = Gemini503FallbackClient(
-                primary_client, create_provider_client(tier1_settings, "gemini"),
+                primary_client,
+                create_provider_client(
+                    settings, "gemini", credential=settings.gemini_tier1_api_key
+                ),
                 settings.gemini_tier1_model,
             )
         primary_client = wrap_vision_client(primary_client)
