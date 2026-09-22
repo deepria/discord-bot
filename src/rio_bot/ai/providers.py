@@ -46,6 +46,21 @@ class ProviderAPIError(RuntimeError):
         super().__init__(diagnostic)
 
 
+class ProviderTimeoutError(RuntimeError):
+    """Content-free timeout diagnostic with the httpx timeout phase."""
+
+    def __init__(self, provider: str, exc: httpx.TimeoutException):
+        self.provider = provider
+        self.timeout_phase = (
+            "connect" if isinstance(exc, httpx.ConnectTimeout) else
+            "read" if isinstance(exc, httpx.ReadTimeout) else
+            "write" if isinstance(exc, httpx.WriteTimeout) else "pool"
+        )
+        self.error_code = "TIMEOUT"
+        self.error_message = f"{self.timeout_phase}_timeout"
+        super().__init__(f"{provider} {self.timeout_phase} timeout")
+
+
 def _gemini_http_error(response: httpx.Response) -> ProviderAPIError:
     code = ""
     message = ""
@@ -270,6 +285,12 @@ class _GeminiResponses:
         self.thinking_level = thinking_level
         self.total_output_tokens = total_output_tokens
 
+    async def _post(self, payload):
+        try:
+            return await self.http.post(GEMINI_INTERACTIONS_URL, json=payload)
+        except httpx.TimeoutException as exc:
+            raise ProviderTimeoutError("gemini", exc) from exc
+
     async def create(self, **kwargs):
         payload = {
             "model": kwargs["model"],
@@ -313,7 +334,7 @@ class _GeminiResponses:
 
         payload["generation_config"] = generation_config
 
-        response = await self.http.post(GEMINI_INTERACTIONS_URL, json=payload)
+        response = await self._post(payload)
         try:
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
@@ -336,7 +357,7 @@ class _GeminiResponses:
                 retry_payload["system_instruction"] = (
                     (payload.get("system_instruction") or "") + "\n\n" + retry_note
                 ).strip()
-                retry = await self.http.post(GEMINI_INTERACTIONS_URL, json=retry_payload)
+                retry = await self._post(retry_payload)
                 try:
                     retry.raise_for_status()
                 except httpx.HTTPStatusError as retry_exc:

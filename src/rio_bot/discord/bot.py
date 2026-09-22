@@ -513,7 +513,16 @@ class RioClient(discord.Client):
             self.events.emit("turn_failed", error_type=type(exc).__name__, delivery=True)
         except Exception as exc:  # noqa: BLE001 - isolate event/summary failures; redact logs
             log.warning("Conversation failed (%s)", type(exc).__name__)
-            self.events.emit("turn_failed", error_type=type(exc).__name__, delivery=False)
+            self.events.emit(
+                "turn_failed",
+                error_type=type(exc).__name__,
+                provider=getattr(exc, "provider", self.settings.provider),
+                model=self.settings.model,
+                timeout_phase=getattr(exc, "timeout_phase", None),
+                provider_http_status=getattr(exc, "status_code", None),
+                provider_error_code=getattr(exc, "error_code", None),
+                delivery=False,
+            )
             try:
                 await self.send_text(message.channel, "지금은 답변을 이어가기 어렵네요. 잠시 후 다시 불러 주세요.")
             except discord.HTTPException:
