@@ -3,8 +3,9 @@
 import discord
 from discord import app_commands
 
-from .chatlog_capture import capture_mode_chain, set_capture_mode_override
 from rio_bot.core.policy_settings_service import set_policy_override
+
+from .chatlog_capture import capture_mode_chain
 
 _CAPTURE_CHOICES = [
     app_commands.Choice(name="all — 같은 채널의 일반 대화까지 포함", value="all"),

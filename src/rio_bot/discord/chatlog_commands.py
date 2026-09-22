@@ -4,9 +4,10 @@ import logging
 import discord
 from discord import app_commands
 
+from rio_bot.core.policy_settings_service import set_policy_override
+
 from .admin_list import MAX_DISCORD_TEXT, table_row
 from .routing import Scope
-from rio_bot.core.policy_settings_service import set_policy_override
 
 log = logging.getLogger("rio")
 

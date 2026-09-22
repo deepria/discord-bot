@@ -5,11 +5,12 @@ from enum import Enum
 import discord
 from discord import app_commands
 
+from rio_bot.core.policy_settings_service import set_policy_override
+
 from .admin_list import MAX_DISCORD_TEXT, table_row
 from .instruction_commands import InstructionCommands
 from .knowledge_commands import KnowledgeCommands
 from .routing import Scope
-from rio_bot.core.policy_settings_service import set_policy_override
 
 log = logging.getLogger("rio")
 
