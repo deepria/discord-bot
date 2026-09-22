@@ -168,7 +168,8 @@ class MemoryCommands(app_commands.Group):
         async with self.client.channel_lock(scope):
             set_policy_override(
                 self.client.store, policy="memory", scope=key, value=value,
-                actor_kind="discord", actor_id=str(interaction.user.id), request_id=str(interaction.id),
+                actor_kind="discord", actor_id=str(interaction.user.id),
+                request_id=str(getattr(interaction, "id", f"discord-{id(interaction)}")),
             )
         changed = {"channel": "채널", "server": "서버", "global": "전역"}[target]
         state = "상위 설정을 따르도록 변경" if value == "inherit" else f"{value}로 변경"
