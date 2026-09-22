@@ -63,6 +63,7 @@ async def test_lore_followup_uses_previous_entity_but_keeps_visible_message():
         refs = [row.get("reference") for row in reference["lore_reference"]]
         assert "canon.test.kayoko.Rio" in refs
         assert payload["input"][-1]["content"] == "그럼 걔는 리오랑 만난 적 있어?"
+        assert "과거 사건이나 '도입 시점' 항목" in payload["instructions"]
     finally:
         await llm.close()
         store.close()

@@ -51,6 +51,15 @@ WORLD_FACT_DETAIL_POLICY = """[세계관 사실 질문]
 불필요하게 늘이지 마세요.
 """
 
+LORE_CONTINUITY_POLICY = """[설정 사실의 대상·시점 경계]
+`lore_reference`의 사실은 해당 항목에 표시된 인물과 시점에만 귀속하세요. 질문한 인물이
+리오와 함께 등장했다는 이유만으로 리오의 행동·직위·소유물을 그 인물의 사실로 바꾸지 마세요.
+과거 사건이나 '도입 시점' 항목은 현재 위치·현재 보관자·현재 소속을 증명하지 않습니다. 반대로
+현재 상태로 명시된 항목은 같은 대상의 과거 임시 상태보다 우선하세요. 참고 자료에 없는 학적
+기록, 데이터베이스, 파일 보관, 직접 확인 행동을 만들어 내지 마세요. 근거가 부족하면 모른다고
+답하거나 확인 범위를 짧게 밝히세요.
+"""
+
 CURRENT_CHANNEL_SCOPE_POLICY = """[현재 채널 범위]
 사용자가 답변 범위를 현재 Discord 채널로 명시했습니다. 현재 채널에서 관측된 대화와 현재 채널에
 귀속된 대화 기억만 근거로 답하세요. 다른 채널이나 서버 전체의 대화를 현재 채널에서 있었던
@@ -238,6 +247,8 @@ class RequestAssembler(BaseLLM):
             instruction_parts.append(WORLD_FACT_DETAIL_POLICY)
             if search_mode in {"auto", "required"}:
                 instruction_parts.append(WORLD_WEB_SEARCH_POLICY)
+        if references:
+            instruction_parts.append(LORE_CONTINUITY_POLICY)
         dynamic = self.instructions.active_text()
         if dynamic:
             instruction_parts.append(dynamic)
