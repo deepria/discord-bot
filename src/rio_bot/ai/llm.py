@@ -129,7 +129,10 @@ class LLM:
             await self.client.close()
         finally:
             self.usage.close()
-            self.admin_db.close()
+            try:
+                self.admin_db.checkpoint()
+            finally:
+                self.admin_db.close()
 
     @staticmethod
     def authorized_context(scope, context):

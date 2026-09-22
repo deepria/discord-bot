@@ -73,6 +73,7 @@ class RioClient(discord.Client):
         self.pending_count = 0
         self.active_tasks = set()
         self.stopping = False
+        self._close_task = None
 
     def channel_lock(self, scope):
         key = (scope.realm, scope.channel_id)
@@ -130,19 +131,43 @@ class RioClient(discord.Client):
         )
 
     async def close(self):
+        if self._close_task is None:
+            self._close_task = asyncio.create_task(self._close_resources())
+        await asyncio.shield(self._close_task)
+
+    async def _close_resources(self):
         self.stopping = True
         self._publish_runtime_status(connected=False)
         try:
             if self.active_tasks:
-                _, pending = await asyncio.wait(list(self.active_tasks), timeout=50)
+                active = list(self.active_tasks)
+                _, pending = await asyncio.wait(
+                    active, timeout=self.settings.shutdown_grace_seconds)
                 for task in pending:
                     task.cancel()
-                await asyncio.gather(*pending, return_exceptions=True)
+                await asyncio.gather(*active, return_exceptions=True)
         finally:
-            await self.llm.close()
-            self.events.close()
-            self.store.close()
-            await super().close()
+            await self._close_safely("LLM", self.llm.close)
+            self._close_safely_sync("SQLite WAL checkpoint", self.store.checkpoint)
+            self._close_safely_sync("SQLite", self.store.close)
+            self._close_safely_sync("event logger", self.events.close)
+            try:
+                await super().close()
+            except Exception as exc:  # noqa: BLE001 - shutdown must not leave the client running.
+                log.warning("Discord client shutdown failed (%s)", type(exc).__name__)
+
+    async def _close_safely(self, label, operation):
+        try:
+            await operation()
+        except Exception as exc:  # noqa: BLE001 - continue closing remaining resources.
+            log.warning("%s shutdown failed (%s)", label, type(exc).__name__)
+
+    @staticmethod
+    def _close_safely_sync(label, operation):
+        try:
+            operation()
+        except Exception as exc:  # noqa: BLE001 - continue closing remaining resources.
+            log.warning("%s shutdown failed (%s)", label, type(exc).__name__)
 
     async def send_text(self, channel, text):
         for part in chunks(neutralize_mentions(text)):

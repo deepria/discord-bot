@@ -63,6 +63,10 @@ class Store:
                 SELECT scope, text FROM notes;
         """)
 
+    def checkpoint(self):
+        """Flush this connection's WAL changes before the process exits."""
+        self.db.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+
     def close(self):
         self.db.close()
 

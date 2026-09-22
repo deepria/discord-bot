@@ -66,3 +66,7 @@ class AdminDatabase:
 
     def close(self):
         self.db.close()
+
+    def checkpoint(self):
+        """Flush this connection's WAL changes before the process exits."""
+        self.db.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
