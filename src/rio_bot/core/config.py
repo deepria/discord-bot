@@ -79,6 +79,7 @@ class Settings:
     ollama_base_url: str = "http://127.0.0.1:11434"
     gemini_thinking_level: str = "low"
     gemini_total_output_tokens: int = 4096
+    gemini_request_timeout_seconds: float = 8.0
     db_path: str = "data/rio.sqlite3"
     prompt_path: str = ""
     instruction_path: str = ""
@@ -223,6 +224,12 @@ class Settings:
             raise ValueError(f"GEMINI_THINKING_LEVEL은 {allowed} 중 하나여야 합니다.")
         gemini_total_output_tokens = int(os.getenv(
             "GEMINI_TOTAL_OUTPUT_TOKENS", str(max(4096, output_tokens))))
+        try:
+            gemini_request_timeout_seconds = float(
+                os.getenv("GEMINI_REQUEST_TIMEOUT_SECONDS", "8")
+            )
+        except ValueError as exc:
+            raise ValueError("GEMINI_REQUEST_TIMEOUT_SECONDS는 숫자여야 합니다.") from exc
 
         dm = os.getenv("DM_ALWAYS_REPLY", "false").lower()
         if dm not in {"true", "false"}:
@@ -273,6 +280,7 @@ class Settings:
             or "http://127.0.0.1:11434",
             gemini_thinking_level=gemini_thinking_level,
             gemini_total_output_tokens=gemini_total_output_tokens,
+            gemini_request_timeout_seconds=gemini_request_timeout_seconds,
             special_dm_user_id=int(os.environ["SPECIAL_DM_USER_ID"])
             if os.getenv("SPECIAL_DM_USER_ID", "").strip() else None,
             bot_admin_ids=frozenset(int(x.strip()) for x in
@@ -335,6 +343,7 @@ class Settings:
                 and 128 <= s.smart_output_tokens <= 65536
                 and 128 <= s.memory_output_tokens <= 65536
                 and s.output_tokens <= s.gemini_total_output_tokens <= 65536
+                and 3 <= s.gemini_request_timeout_seconds <= 60
                 and 0 <= s.history_max_chars <= 120000
                 and 0 <= s.channel_context_chars <= 12000
                 and 2 <= s.summary_every <= s.history_turns <= 30
@@ -346,6 +355,7 @@ class Settings:
                 and 0 <= s.shutdown_grace_seconds <= 55):
             raise ValueError("설정 범위 오류: cooldown 0~3600, concurrency 1~20, "
                              "output_tokens 128~4096, Gemini total output은 output_tokens~65536, "
+                             "Gemini request timeout은 3~60초, "
                              "2 <= summary_every <= history_turns <= 30, "
                              "lore_max_items 0~20, lore_max_chars 0~12000, "
                              "vision source quota는 각각 0~32이고 합계는 32 이하, "

@@ -47,6 +47,7 @@ def test_settings_load_uses_code_defaults_when_runtime_env_is_absent(monkeypatch
         "LORE_MAX_ITEMS",
         "LORE_MAX_CHARS",
         "RUNTIME_DEFAULT_LOCATION",
+        "GEMINI_REQUEST_TIMEOUT_SECONDS",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -70,6 +71,7 @@ def test_settings_load_uses_code_defaults_when_runtime_env_is_absent(monkeypatch
     assert settings.lore_max_items == 6
     assert settings.lore_max_chars == 3200
     assert settings.runtime_default_location == ""
+    assert settings.gemini_request_timeout_seconds == 8
 
 
 def test_settings_load_accepts_ollama_without_api_key(monkeypatch, tmp_path: Path):

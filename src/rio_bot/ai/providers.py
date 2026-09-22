@@ -407,7 +407,7 @@ class _GeminiResponses:
 class GeminiClient:
     provider_name = "gemini"
 
-    def __init__(self, credential: str, *, timeout: float = 45,
+    def __init__(self, credential: str, *, timeout: float = 8,
                  thinking_level: str = "low", total_output_tokens: int = 4096):
         self._http = httpx.AsyncClient(
             timeout=timeout,
@@ -564,6 +564,7 @@ def create_provider_client(settings, provider: str):
     if provider == "gemini":
         return GeminiClient(
             credential,
+            timeout=settings.gemini_request_timeout_seconds,
             thinking_level=settings.gemini_thinking_level,
             total_output_tokens=settings.gemini_total_output_tokens,
         )
