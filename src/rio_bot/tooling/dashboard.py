@@ -42,7 +42,7 @@ def serve(db_path: str, usage_path: str, host: str, port: int) -> None:
         raise ValueError("dashboard host must be localhost")
 
     class Handler(BaseHTTPRequestHandler):
-        def do_GET(self):  # noqa: N802 - stdlib handler contract
+        def do_GET(self):
             if self.path != "/overview":
                 self.send_error(404)
                 return
