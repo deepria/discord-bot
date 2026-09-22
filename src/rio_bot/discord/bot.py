@@ -10,6 +10,8 @@ from pathlib import Path
 import discord
 
 from rio_bot.core.message_provenance import split_inline_quotes
+from rio_bot.core.runtime_config import RuntimeSettings
+from rio_bot.core.runtime_settings_service import apply_runtime_side_effects
 
 from .config import Settings
 from .emoji_commands import EmojiCommands, EmojiRegistry
@@ -84,6 +86,7 @@ class RioClient(discord.Client):
         self.active_tasks = set()
         self.stopping = False
         self._close_task = None
+        self._runtime_config_task = None
         self.safe_allowed_mentions = safe_allowed_mentions(
             allow_users=settings.allow_user_mentions)
 
@@ -101,6 +104,20 @@ class RioClient(discord.Client):
         self.emoji_admin_ids.add(owner_id)
         await self.emoji_registry.catalog()
         await self.tree.sync()
+        if isinstance(self.settings, RuntimeSettings):
+            self._runtime_config_task = asyncio.create_task(self._watch_runtime_settings())
+
+    async def _watch_runtime_settings(self):
+        """Adopt control-plane DB writes in the live Discord process."""
+        try:
+            while not self.stopping:
+                await asyncio.sleep(1)
+                self.settings.reload()
+                apply_runtime_side_effects(self, "channel_context_chars")
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - keep the bot available if a DB refresh fails.
+            log.warning("Runtime settings refresh stopped (%s)", type(exc).__name__)
 
     async def on_ready(self):
         self._publish_runtime_status(connected=True)
@@ -151,6 +168,9 @@ class RioClient(discord.Client):
         self.stopping = True
         self._publish_runtime_status(connected=False)
         try:
+            if self._runtime_config_task is not None:
+                self._runtime_config_task.cancel()
+                await asyncio.gather(self._runtime_config_task, return_exceptions=True)
             if self.active_tasks:
                 active = list(self.active_tasks)
                 _, pending = await asyncio.wait(

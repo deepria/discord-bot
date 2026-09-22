@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import uuid
 from dataclasses import dataclass
 from typing import Any
@@ -183,6 +184,15 @@ class RuntimeSettings:
             )"""
         )
         store.db.execute(
+            """CREATE TABLE IF NOT EXISTS runtime_config_requests (
+                request_id TEXT PRIMARY KEY,
+                action TEXT NOT NULL,
+                target TEXT NOT NULL,
+                payload_digest TEXT NOT NULL,
+                occurred_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )"""
+        )
+        store.db.execute(
             """CREATE TABLE IF NOT EXISTS runtime_config_audit (
                 id TEXT PRIMARY KEY,
                 occurred_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -290,9 +300,29 @@ class RuntimeSettings:
         return [dict(row) for row in rows]
 
     def _write(
-        self, attr: str, encoded: str | None, *, audit: RuntimeConfigAudit | None = None
-    ) -> None:
+        self,
+        attr: str,
+        encoded: str | None,
+        *,
+        audit: RuntimeConfigAudit | None = None,
+        payload_digest: str | None = None,
+    ) -> bool:
         with self._store.db:
+            if audit is not None and audit.request_id is not None:
+                if payload_digest is None:
+                    raise ValueError("idempotent requests require a payload digest")
+                prior = self._store.db.execute(
+                    "SELECT action,target,payload_digest FROM runtime_config_requests WHERE request_id=?",
+                    (audit.request_id,),
+                ).fetchone()
+                if prior is not None:
+                    if (
+                        prior["action"] != audit.action
+                        or prior["target"] != audit.target
+                        or prior["payload_digest"] != payload_digest
+                    ):
+                        raise ValueError("request_id가 다른 설정 변경에 이미 사용됐어요.")
+                    return False
             if encoded is None:
                 self._store.db.execute("DELETE FROM runtime_config WHERE key=?", (attr,))
             else:
@@ -305,20 +335,64 @@ class RuntimeSettings:
                 )
             if audit is not None:
                 self._insert_audit(audit)
+                if audit.request_id is not None:
+                    self._store.db.execute(
+                        """INSERT INTO runtime_config_requests(request_id,action,target,payload_digest)
+                           VALUES (?,?,?,?)""",
+                        (audit.request_id, audit.action, audit.target, payload_digest),
+                    )
+        return True
 
-    def set_text(self, key: str, raw: str, *, audit: RuntimeConfigAudit | None = None):
+    @staticmethod
+    def request_digest(action: str, key: str, raw: str | None = None) -> str:
+        """Digest idempotency inputs without placing their values in the audit trail."""
+        payload = json.dumps([action, runtime_setting_attr(key), raw], ensure_ascii=False)
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+    def set_text(
+        self,
+        key: str,
+        raw: str,
+        *,
+        audit: RuntimeConfigAudit | None = None,
+        payload_digest: str | None = None,
+    ):
         attr = runtime_setting_attr(key)
         spec = RUNTIME_SETTING_SPECS[attr]
         value = parse_runtime_value(spec, raw, settings=self)
-        self._write(attr, encode_runtime_value(value), audit=audit)
-        self._overrides[attr] = value
-        return value
+        if audit is not None and audit.request_id is not None and payload_digest is None:
+            payload_digest = self.request_digest(audit.action, attr, raw)
+        self._write(
+            attr,
+            encode_runtime_value(value),
+            audit=audit,
+            payload_digest=payload_digest,
+        )
+        # A replay returns the already-effective value rather than reapplying/auditing it.
+        self.reload()
+        return getattr(self, attr)
 
-    def reset(self, key: str, *, audit: RuntimeConfigAudit | None = None):
+    def reset(
+        self,
+        key: str,
+        *,
+        audit: RuntimeConfigAudit | None = None,
+        payload_digest: str | None = None,
+    ):
         attr = runtime_setting_attr(key)
-        self._write(attr, None, audit=audit)
-        self._overrides.pop(attr, None)
+        if audit is not None and audit.request_id is not None and payload_digest is None:
+            payload_digest = self.request_digest(audit.action, attr)
+        self._write(attr, None, audit=audit, payload_digest=payload_digest)
+        self.reload()
         return getattr(self._base, attr)
+
+    def changed_at(self, key: str) -> str | None:
+        """Return the DB override timestamp only; startup values have no runtime change time."""
+        attr = runtime_setting_attr(key)
+        row = self._store.db.execute(
+            "SELECT updated_at FROM runtime_config WHERE key=?", (attr,)
+        ).fetchone()
+        return str(row["updated_at"]) if row is not None else None
 
     def rows(self) -> list[tuple[RuntimeSettingSpec, Any, str]]:
         return [
