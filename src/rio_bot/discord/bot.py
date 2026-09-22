@@ -40,6 +40,14 @@ HELP = """호출: @봇 멘션, 핑을 켠 답장, 또는 메시지 맨 앞의 `�
 일반 대화에서는 첨부파일·이미지·답장 원문을 읽지 못해요.
 봇 관리자는 실제 슬래시 명령 /memory mode, /memory chatlog, /memory status로 설정을 제어할 수 있어요."""
 
+def safe_allowed_mentions(*, allow_users: bool) -> discord.AllowedMentions:
+    return discord.AllowedMentions(
+        everyone=False,
+        users=allow_users,
+        roles=False,
+        replied_user=False,
+    )
+
 
 def _bare_call_reply(scope: Scope, special_dm_user_id: int | None) -> str:
     return "응, 선생 듣고있어."
@@ -76,6 +84,8 @@ class RioClient(discord.Client):
         self.active_tasks = set()
         self.stopping = False
         self._close_task = None
+        self.safe_allowed_mentions = safe_allowed_mentions(
+            allow_users=settings.allow_user_mentions)
 
     def channel_lock(self, scope):
         key = (scope.realm, scope.channel_id)
@@ -173,7 +183,7 @@ class RioClient(discord.Client):
 
     async def send_text(self, channel, text):
         for part in chunks(neutralize_mentions(text)):
-            await channel.send(part, allowed_mentions=discord.AllowedMentions.none())
+            await channel.send(part, allowed_mentions=self.safe_allowed_mentions)
 
     @staticmethod
     def _management_text(text):
@@ -440,9 +450,10 @@ class RioClient(discord.Client):
                             if not answer:
                                 answer = "응, 선생님."
                             sent = await message.channel.send(
-                                next(chunks(answer)), allowed_mentions=discord.AllowedMentions.none())
+                                next(chunks(answer)), allowed_mentions=self.safe_allowed_mentions)
                             for part in list(chunks(answer))[1:]:
-                                await message.channel.send(part, allowed_mentions=discord.AllowedMentions.none())
+                                await message.channel.send(
+                                    part, allowed_mentions=self.safe_allowed_mentions)
                             self.events.emit(
                                 "discord_response_sent",
                                 message_id=str(message.id),

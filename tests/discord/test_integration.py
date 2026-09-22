@@ -217,7 +217,7 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
         kwargs = self.channel.send.call_args.kwargs
         self.assertNotIn("reference", kwargs)
         mentions = kwargs["allowed_mentions"].to_dict()
-        self.assertEqual(mentions["parse"], [])
+        self.assertEqual(mentions["parse"], ["users"])
         self.assertFalse(mentions.get("replied_user", False))
 
     async def test_model_mentions_are_neutralized_before_delivery_and_memory(self):
@@ -225,8 +225,11 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
         await self.bot.on_message(self.message())
         delivered = self.channel.send.call_args.args[0]
         self.assertNotIn("@everyone", delivered)
-        self.assertNotIn("<@", delivered)
+        self.assertIn("<@123>", delivered)
+        self.assertIn("<@!456>", delivered)
+        self.assertNotIn("<@&", delivered)
         self.assertIn("＠everyone", delivered)
+        self.assertIn("＠&789>", delivered)
         self.assertEqual(self.store.history(Scope(1, 10, 100))[0]["reply"], delivered)
 
     async def test_inline_quote_is_not_saved_as_the_current_users_memory(self):
@@ -238,6 +241,18 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(kwargs["quoted_text"], quoted)
         self.assertEqual(self.store.history(Scope(1, 10, 100))[0]["content"], "이 주장 맞아?")
         self.assertNotIn(quoted, str(self.store.history(Scope(1, 10, 100))))
+
+    async def test_user_mentions_can_be_disabled_without_allowing_mass_mentions(self):
+        self.bot.safe_allowed_mentions = self.bot.safe_allowed_mentions.__class__(
+            everyone=False,
+            users=False,
+            roles=False,
+            replied_user=False,
+        )
+        await self.bot.on_message(self.message())
+
+        mentions = self.channel.send.call_args.kwargs["allowed_mentions"].to_dict()
+        self.assertEqual(mentions["parse"], [])
 
     async def test_untriggered_message_is_not_saved(self):
         await self.bot.on_message(self.message("일반 대화"))

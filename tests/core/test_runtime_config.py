@@ -39,6 +39,7 @@ def test_settings_load_uses_code_defaults_when_runtime_env_is_absent(monkeypatch
         "FAST_MAX_OUTPUT_TOKENS",
         "SMART_MAX_OUTPUT_TOKENS",
         "CHAT_WEB_SEARCH",
+        "ALLOW_USER_MENTIONS",
         "COMMUNITY_LORE",
         "MAX_OUTPUT_TOKENS",
         "CHANNEL_CONTEXT_CHARS",
@@ -61,6 +62,7 @@ def test_settings_load_uses_code_defaults_when_runtime_env_is_absent(monkeypatch
     assert settings.fast_output_tokens == settings.output_tokens
     assert settings.smart_output_tokens == 2000
     assert settings.chat_web_search is True
+    assert settings.allow_user_mentions is True
     assert settings.community_lore is True
     assert settings.output_tokens == 1000
     assert settings.channel_context_chars == 6000
