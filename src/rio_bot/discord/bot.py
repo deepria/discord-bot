@@ -12,6 +12,7 @@ import discord
 from rio_bot.core.message_provenance import split_inline_quotes
 from rio_bot.core.runtime_config import RuntimeSettings
 from rio_bot.core.runtime_settings_service import apply_runtime_side_effects
+from rio_bot.core.runtime_settings_snapshot import policy_snapshot
 
 from .config import Settings
 from .emoji_commands import EmojiCommands, EmojiRegistry
@@ -87,6 +88,7 @@ class RioClient(discord.Client):
         self.stopping = False
         self._close_task = None
         self._runtime_config_task = None
+        self._policy_snapshot = None
         self.safe_allowed_mentions = safe_allowed_mentions(
             allow_users=settings.allow_user_mentions)
 
@@ -105,6 +107,7 @@ class RioClient(discord.Client):
         await self.emoji_registry.catalog()
         await self.tree.sync()
         if isinstance(self.settings, RuntimeSettings):
+            self._policy_snapshot = policy_snapshot(self.settings.base)
             self._runtime_config_task = asyncio.create_task(self._watch_runtime_settings())
 
     async def _watch_runtime_settings(self):
@@ -114,6 +117,12 @@ class RioClient(discord.Client):
                 await asyncio.sleep(1)
                 self.settings.reload()
                 apply_runtime_side_effects(self, "channel_context_chars")
+                current_policy_snapshot = policy_snapshot(self.settings.base)
+                if current_policy_snapshot != self._policy_snapshot:
+                    # A control-plane policy write may narrow context outside this event loop.
+                    # Clearing all bounded context fails closed rather than retaining broad rows.
+                    self.recent.clear_all()
+                    self._policy_snapshot = current_policy_snapshot
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # noqa: BLE001 - keep the bot available if a DB refresh fails.

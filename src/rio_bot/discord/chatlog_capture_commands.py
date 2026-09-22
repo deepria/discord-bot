@@ -4,6 +4,7 @@ import discord
 from discord import app_commands
 
 from .chatlog_capture import capture_mode_chain, set_capture_mode_override
+from rio_bot.core.policy_settings_service import set_policy_override
 
 _CAPTURE_CHOICES = [
     app_commands.Choice(name="all — 같은 채널의 일반 대화까지 포함", value="all"),
@@ -64,7 +65,10 @@ def install_chatlog_capture(client) -> None:
 
         await interaction.response.defer(ephemeral=True)
         async with client.channel_lock(scope):
-            set_capture_mode_override(client.store, key, None if value == "inherit" else value)
+            set_policy_override(
+                client.store, policy="capture", scope=key, value=value,
+                actor_kind="discord", actor_id=str(interaction.user.id), request_id=str(interaction.id),
+            )
             # Policy changes invalidate the in-memory buffer so stale broader context cannot linger.
             if target == "global":
                 client.recent.clear_all()
