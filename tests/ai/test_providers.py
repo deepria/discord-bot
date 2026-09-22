@@ -42,6 +42,27 @@ async def test_gemini_503_uses_tier1_once_with_fallback_model():
 
 
 @pytest.mark.asyncio
+async def test_gemini_timeout_uses_tier1_once_with_fallback_model():
+    primary = NS(
+        responses=NS(create=AsyncMock(side_effect=ProviderTimeoutError(
+            "gemini", httpx.ReadTimeout("timed out")
+        ))),
+        close=AsyncMock(),
+    )
+    response = NS(status="completed")
+    fallback = NS(responses=NS(create=AsyncMock(return_value=response)), close=AsyncMock())
+    client = Gemini503FallbackClient(primary, fallback, "gemini-tier1")
+
+    actual = await client.responses.create(model="gemini-free", input="safe")
+
+    assert actual is response
+    assert fallback.responses.create.await_args.kwargs["model"] == "gemini-tier1"
+    assert actual._rio_fallback == {
+        "provider": "gemini", "model": "gemini-tier1", "reason": "read_timeout"
+    }
+
+
+@pytest.mark.asyncio
 async def test_gemini_read_timeout_keeps_safe_phase():
     async def handler(_request: httpx.Request):
         raise httpx.ReadTimeout("timed out")
