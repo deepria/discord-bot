@@ -41,6 +41,20 @@ class Store:
                 scope TEXT PRIMARY KEY, realm TEXT NOT NULL, user_id TEXT NOT NULL,
                 name TEXT NOT NULL, text TEXT NOT NULL, through_id INTEGER NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS structured_memory_cursors (
+                scope TEXT PRIMARY KEY, realm TEXT NOT NULL, user_id TEXT NOT NULL,
+                through_id INTEGER NOT NULL DEFAULT 0,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS structured_memory_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, owner_id TEXT NOT NULL,
+                origin_realm TEXT NOT NULL, origin_channel_id TEXT NOT NULL,
+                origin_public_at_capture INTEGER NOT NULL,
+                kind TEXT NOT NULL CHECK(kind IN ('fact','event','preference','relationship','boundary','task')),
+                content TEXT NOT NULL, disclosure TEXT NOT NULL CHECK(disclosure IN ('channel','owner_private')),
+                source_message_ids TEXT NOT NULL, confidence REAL NOT NULL CHECK(confidence >= 0 AND confidence <= 1),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
             CREATE TABLE IF NOT EXISTS emoji_registry (
                 alias TEXT PRIMARY KEY, emoji_id TEXT NOT NULL UNIQUE, description TEXT NOT NULL,
                 source_guild_id TEXT
@@ -147,6 +161,63 @@ class Store:
         row = self.db.execute("SELECT exportable FROM summaries WHERE scope=?",
                               (scope.conversation,)).fetchone()
         return row is None or bool(row[0])
+
+    def structured_memory_cursor(self, scope: Scope) -> int:
+        row = self.db.execute("SELECT through_id FROM structured_memory_cursors WHERE scope=?",
+                              (scope.conversation,)).fetchone()
+        return int(row[0]) if row else 0
+
+    def pending_structured_memory(self, scope: Scope, *, limit: int = 8):
+        if not 2 <= limit <= 8:
+            raise ValueError("structured memory batch limit must be 2~8")
+        return self.db.execute("SELECT * FROM turns WHERE scope=? AND id>? ORDER BY id LIMIT ?",
+                               (scope.conversation, self.structured_memory_cursor(scope), limit)).fetchall()
+
+    def save_structured_memory(self, scope: Scope, *, through_id: int, items: list[dict]):
+        pending = self.pending_structured_memory(scope)
+        sources = {str(row["message_id"]) for row in pending}
+        if through_id not in {int(row["id"]) for row in pending}:
+            raise ValueError("structured memory cursor must end inside the pending batch")
+        normalized = [self._validate_structured_item(scope, item, sources) for item in items]
+        with self.db:
+            for item in normalized:
+                self.db.execute(
+                    "INSERT INTO structured_memory_items(owner_id,origin_realm,origin_channel_id,"
+                    "origin_public_at_capture,kind,content,disclosure,source_message_ids,confidence) "
+                    "VALUES (?,?,?,?,?,?,?,?,?)",
+                    (str(scope.user_id), scope.realm, str(scope.channel_id), int(scope.public_at_capture),
+                     item["kind"], item["content"], item["disclosure"],
+                     ",".join(item["source_message_ids"]), item["confidence"]),
+                )
+            self.db.execute(
+                "INSERT INTO structured_memory_cursors(scope,realm,user_id,through_id,updated_at) "
+                "VALUES (?,?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(scope) DO UPDATE SET "
+                "through_id=excluded.through_id,updated_at=CURRENT_TIMESTAMP",
+                (scope.conversation, scope.realm, str(scope.user_id), through_id),
+            )
+
+    @staticmethod
+    def _validate_structured_item(scope: Scope, item: dict, sources: set[str]) -> dict:
+        if not isinstance(item, dict):
+            raise TypeError("structured memory item must be an object")
+        kind, content = item.get("kind"), item.get("content")
+        source_ids, confidence, disclosure = item.get("source_message_ids"), item.get("confidence"), item.get("disclosure")
+        if kind not in {"fact", "event", "preference", "relationship", "boundary", "task"}:
+            raise ValueError("invalid structured memory kind")
+        if not isinstance(content, str) or not 1 <= len(content.strip()) <= 600:
+            raise ValueError("structured memory content must be 1~600 chars")
+        if not isinstance(source_ids, list) or not source_ids or len(source_ids) > 8:
+            raise ValueError("structured memory item requires 1~8 source message ids")
+        source_ids = [str(value) for value in source_ids]
+        if len(source_ids) != len(set(source_ids)) or any(value not in sources for value in source_ids):
+            raise ValueError("structured memory sources must belong to the pending scope batch")
+        if not isinstance(confidence, (int, float)) or isinstance(confidence, bool) or not 0 <= confidence <= 1:
+            raise ValueError("structured memory confidence must be 0~1")
+        expected = "channel" if scope.public_at_capture else "owner_private"
+        if disclosure != expected:
+            raise ValueError("structured memory disclosure does not match capture scope")
+        return {"kind": kind, "content": content.strip(), "disclosure": disclosure,
+                "source_message_ids": source_ids, "confidence": float(confidence)}
 
     def forget(self, scope: Scope):
         """Delete this user's history and manual notes across channels in the current realm."""
