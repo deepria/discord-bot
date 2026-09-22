@@ -141,7 +141,8 @@ class ChatLogCommands(app_commands.Group):
         async with self.client.channel_lock(scope):
             set_policy_override(
                 self.client.store, policy="chatlog", scope=key, value=value,
-                actor_kind="discord", actor_id=str(interaction.user.id), request_id=str(interaction.id),
+                actor_kind="discord", actor_id=str(interaction.user.id),
+                request_id=str(getattr(interaction, "id", f"discord-{id(interaction)}")),
             )
             effective_off = not self.client.store.chat_log_enabled(scope)
             if value == "off" or (value == "inherit" and effective_off):
