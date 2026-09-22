@@ -73,6 +73,8 @@ class Settings:
     memory_provider: str = ""
     openai_api_key: str = ""
     gemini_api_key: str = ""
+    gemini_tier1_api_key: str = ""
+    gemini_tier1_model: str = ""
     openrouter_api_key: str = ""
     ollama_base_url: str = "http://127.0.0.1:11434"
     gemini_thinking_level: str = "low"
@@ -195,6 +197,10 @@ class Settings:
             "openrouter": os.getenv("OPENROUTER_API_KEY", "").strip(),
             "ollama": "",
         }
+        gemini_tier1_api_key = os.getenv("GEMINI_TIER1_API_KEY", "").strip()
+        gemini_tier1_model = os.getenv("GEMINI_TIER1_MODEL", "").strip()
+        if bool(gemini_tier1_api_key) != bool(gemini_tier1_model):
+            raise ValueError("GEMINI_TIER1_API_KEY와 GEMINI_TIER1_MODEL은 함께 설정해야 합니다.")
         for selected in {provider, memory_provider}:
             if selected != "ollama" and not keys[selected]:
                 raise ValueError(f"{_env_key(selected)}를 설정해 주세요.")
@@ -261,6 +267,7 @@ class Settings:
             api_key=keys[provider], discord_token=token,
             provider=provider, memory_provider=memory_provider,
             openai_api_key=keys["openai"], gemini_api_key=keys["gemini"],
+            gemini_tier1_api_key=gemini_tier1_api_key, gemini_tier1_model=gemini_tier1_model,
             openrouter_api_key=keys["openrouter"],
             ollama_base_url=os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").strip()
             or "http://127.0.0.1:11434",

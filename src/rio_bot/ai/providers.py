@@ -61,6 +61,40 @@ class ProviderTimeoutError(RuntimeError):
         super().__init__(f"{provider} {self.timeout_phase} timeout")
 
 
+class _Gemini503FallbackResponses:
+    def __init__(self, primary, fallback, fallback_model: str):
+        self.primary = primary
+        self.fallback = fallback
+        self.fallback_model = fallback_model
+
+    async def create(self, **kwargs):
+        try:
+            return await self.primary.create(**kwargs)
+        except ProviderAPIError as exc:
+            if exc.provider != "gemini" or exc.status_code != 503:
+                raise
+            request = dict(kwargs)
+            request["model"] = self.fallback_model
+            response = await self.fallback.create(**request)
+            response._rio_fallback = {"provider": "gemini", "model": self.fallback_model,
+                                      "reason": "http_503"}
+            return response
+
+
+class Gemini503FallbackClient:
+    """Use a separately billed Gemini project only after an HTTP 503 from primary."""
+    provider_name = "gemini"
+
+    def __init__(self, primary, fallback, fallback_model: str):
+        self.primary = primary
+        self.fallback = fallback
+        self.responses = _Gemini503FallbackResponses(primary.responses, fallback.responses, fallback_model)
+
+    async def close(self):
+        await self.primary.close()
+        await self.fallback.close()
+
+
 def _gemini_http_error(response: httpx.Response) -> ProviderAPIError:
     code = ""
     message = ""

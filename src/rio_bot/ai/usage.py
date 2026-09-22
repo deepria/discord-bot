@@ -255,6 +255,9 @@ class UsageLogger:
                 error_codes.append("empty_response_retried")
             if error_codes:
                 row["response_error_codes"] = list(dict.fromkeys(error_codes))
+            fallback = getattr(response, "_rio_fallback", None)
+            if isinstance(fallback, dict):
+                row["provider_fallback"] = fallback
             return response
         except BaseException as exc:
             row.update(status="error", error_type=type(exc).__name__)
