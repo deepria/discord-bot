@@ -68,7 +68,8 @@ def install_chatlog_capture(client) -> None:
         async with client.channel_lock(scope):
             set_policy_override(
                 client.store, policy="capture", scope=key, value=value,
-                actor_kind="discord", actor_id=str(interaction.user.id), request_id=str(interaction.id),
+                actor_kind="discord", actor_id=str(interaction.user.id),
+                request_id=str(getattr(interaction, "id", f"discord-{id(interaction)}")),
             )
             # Policy changes invalidate the in-memory buffer so stale broader context cannot linger.
             if target == "global":
