@@ -229,6 +229,16 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("＠everyone", delivered)
         self.assertEqual(self.store.history(Scope(1, 10, 100))[0]["reply"], delivered)
 
+    async def test_inline_quote_is_not_saved_as_the_current_users_memory(self):
+        quoted = "다른 사람이 한 말"
+        await self.bot.on_message(self.message(f"리오야 > {quoted}\n이 주장 맞아?"))
+
+        args, kwargs = self.llm.answer.call_args
+        self.assertEqual(args[3], "이 주장 맞아?")
+        self.assertEqual(kwargs["quoted_text"], quoted)
+        self.assertEqual(self.store.history(Scope(1, 10, 100))[0]["content"], "이 주장 맞아?")
+        self.assertNotIn(quoted, str(self.store.history(Scope(1, 10, 100))))
+
     async def test_untriggered_message_is_not_saved(self):
         await self.bot.on_message(self.message("일반 대화"))
         self.llm.answer.assert_not_awaited()

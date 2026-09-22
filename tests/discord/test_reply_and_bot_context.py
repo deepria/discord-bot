@@ -93,6 +93,31 @@ async def test_reply_to_other_bot_is_marked_as_bot_context():
     assert rows[0]["content"] == "히대콤"
 
 
+@pytest.mark.asyncio
+async def test_reply_quote_keeps_only_the_replied_authors_direct_words():
+    now = datetime.now(UTC)
+    channel = FakeHistoryChannel(10)
+    target = NS(
+        id=53,
+        content="> 제3자가 말했다는 내용\n이건 답장 대상의 직접 의견",
+        author=NS(id=300, bot=False, display_name="대상", name="대상"),
+        webhook_id=None,
+        created_at=now,
+        channel=channel,
+    )
+    message = NS(
+        id=54,
+        content="리오야 이 말에 답해 줘",
+        author=NS(id=100, bot=False),
+        channel=channel,
+        reference=NS(message_id=53, channel_id=10, resolved=target),
+    )
+
+    rows = await collect_reply_context(message, 99)
+
+    assert rows[0]["content"] == "이건 답장 대상의 직접 의견"
+
+
 @pytest.fixture
 async def client():
     store = Store(":memory:")

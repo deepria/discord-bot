@@ -2,6 +2,8 @@
 import time
 from collections import OrderedDict, deque
 
+from .message_provenance import split_inline_quotes
+
 
 class RecentMessages:
     def __init__(self, limit=30, ttl=900, channels=128, budget=6000):
@@ -30,6 +32,11 @@ class RecentMessages:
         reply_target_user_id=None,
         direct_trigger=False,
     ):
+        # Rolling context can contain passive messages from any channel participant. Keep only
+        # the author's direct words; an inline Markdown quote has no trustworthy author binding.
+        content, _ = split_inline_quotes(content)
+        if not content:
+            return
         now = time.monotonic()
         wall_now = time.time()
         timestamp = wall_now if unix_time is None else min(float(unix_time), wall_now)

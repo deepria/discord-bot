@@ -9,6 +9,8 @@ from pathlib import Path
 
 import discord
 
+from rio_bot.core.message_provenance import split_inline_quotes
+
 from .config import Settings
 from .emoji_commands import EmojiCommands, EmojiRegistry
 from .emojis import render_emojis
@@ -315,6 +317,7 @@ class RioClient(discord.Client):
             return
         text = trigger_text(message, self.user.id, self.settings.dm_always_reply,
                             self.settings.call_prefixes)
+        authored_text, quoted_text = split_inline_quotes(text) if text is not None else ("", "")
         if self.pending_count >= 100:
             return
         public_at_capture = False
@@ -351,7 +354,7 @@ class RioClient(discord.Client):
                 scope,
                 message.id,
                 message.author.display_name,
-                message.content,
+                authored_text if text is not None else message.content,
                 direct_trigger=text is not None,
             )
         if text is None:
@@ -419,12 +422,13 @@ class RioClient(discord.Client):
                                 model=self.settings.model,
                             )
                             answer = await self.llm.answer(
-                                self.store, scope, message.author.display_name, text,
+                                self.store, scope, message.author.display_name, authored_text,
                                 public_context=context,
                                 channel_context=(self.recent.context(scope, message.id)
                                                  if guild_id is not None and use_chat_log else []),
                                 use_memory=use_memory,
-                                emoji_catalog=emoji_catalog)
+                                emoji_catalog=emoji_catalog,
+                                quoted_text=quoted_text)
                             self.events.emit(
                                 "ai_request_completed",
                                 message_id=str(message.id),
@@ -454,9 +458,10 @@ class RioClient(discord.Client):
                                 used_chat_log=bool(use_chat_log),
                             )
                         # Commit only after Discord delivery. Never memorize a failed model request.
-                        if save_memory:
-                            self.store.add(scope, message.id, text, answer)
-                            self.store.add_shared_call(scope, message.id, message.author.display_name, text)
+                        if save_memory and authored_text:
+                            self.store.add(scope, message.id, authored_text, answer)
+                            self.store.add_shared_call(
+                                scope, message.id, message.author.display_name, authored_text)
                             for summarize in (self.llm.summarize, self.llm.summarize_shared):
                                 try:
                                     await summarize(self.store, scope)

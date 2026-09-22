@@ -5,6 +5,8 @@ from datetime import timedelta
 
 import discord
 
+from rio_bot.core.message_provenance import split_inline_quotes
+
 from .routing import trigger_text
 
 log = logging.getLogger("rio")
@@ -94,7 +96,7 @@ async def collect(
             direct_trigger = trigger_text(old, bot_id, False, call_prefixes) is not None
             if visibility_mode == "direct" and not direct_trigger:
                 continue
-            text_value = (getattr(old, "content", "") or "").strip()
+            text_value, _ = split_inline_quotes(getattr(old, "content", "") or "")
             if (not text_value or len(found[uid]) >= limits["messages"]
                     or sizes[uid] >= limits["chars"]):
                 continue

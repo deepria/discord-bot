@@ -123,6 +123,7 @@ class InformationPipeline(RequestAssembler):
         emoji_catalog: list | None = None,
         use_memory: bool = True,
         routing_plan: RoutingPlan | None = None,
+        quoted_text: str = "",
     ) -> str:
         routing = routing_plan or RoutingPlan(content, content)
         information = self.build_information_plan(routing)
@@ -141,6 +142,7 @@ class InformationPipeline(RequestAssembler):
                 emoji_catalog=emoji_catalog,
                 use_memory=use_memory,
                 information_plan=information,
+                quoted_text=quoted_text,
             )
         finally:
             CURRENT_AMBIENT_WEATHER.reset(token)

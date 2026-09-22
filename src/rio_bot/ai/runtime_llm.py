@@ -4,7 +4,7 @@ from .information_pipeline import InformationPipeline
 from .llm import SUMMARY_POLICY as BASE_SUMMARY_POLICY
 from .model_routing import build_memory_model_plan
 from .providers import create_provider_client
-from .routing_plan import build_routing_plan
+from .routing_plan import RoutingPlan, build_routing_plan
 from .vision import VISION_REQUEST_ACTIVE, wrap_vision_client
 
 SUMMARY_POLICY = BASE_SUMMARY_POLICY + """
@@ -71,6 +71,7 @@ class LLM(InformationPipeline):
         channel_context: list | None = None,
         emoji_catalog: list | None = None,
         use_memory: bool = True,
+        quoted_text: str = "",
     ) -> str:
         plan = build_routing_plan(
             store,
@@ -79,6 +80,8 @@ class LLM(InformationPipeline):
             channel_context,
             use_memory=use_memory,
         )
+        if not content.strip() and quoted_text.strip():
+            plan = RoutingPlan(visible_content=content, routing_query=quoted_text.strip())
         vision_token = VISION_REQUEST_ACTIVE.set(True)
         try:
             return await super().answer(
@@ -91,6 +94,7 @@ class LLM(InformationPipeline):
                 emoji_catalog=emoji_catalog,
                 use_memory=use_memory,
                 routing_plan=plan,
+                quoted_text=quoted_text,
             )
         finally:
             VISION_REQUEST_ACTIVE.reset(vision_token)
