@@ -106,6 +106,7 @@ class Settings:
     vision_max_attachments: int = 4
     vision_max_emojis: int = 12
     vision_max_stickers: int = 8
+    shutdown_grace_seconds: float = 50.0
 
     def api_key_for(self, provider: str) -> str:
         provider = _provider(provider, "provider")
@@ -233,6 +234,10 @@ class Settings:
         vision_max_attachments = int(os.getenv("VISION_MAX_ATTACHMENTS", "4"))
         vision_max_emojis = int(os.getenv("VISION_MAX_EMOJIS", "12"))
         vision_max_stickers = int(os.getenv("VISION_MAX_STICKERS", "8"))
+        try:
+            shutdown_grace_seconds = float(os.getenv("SHUTDOWN_GRACE_SECONDS", "50"))
+        except ValueError as exc:
+            raise ValueError("SHUTDOWN_GRACE_SECONDS는 숫자여야 합니다.") from exc
 
         s = cls(
             api_key=keys[provider], discord_token=token,
@@ -290,6 +295,7 @@ class Settings:
             vision_max_attachments=vision_max_attachments,
             vision_max_emojis=vision_max_emojis,
             vision_max_stickers=vision_max_stickers,
+            shutdown_grace_seconds=shutdown_grace_seconds,
         )
         if s.special_dm_user_id is not None and s.special_dm_user_id <= 0:
             raise ValueError("SPECIAL_DM_USER_ID는 양의 Discord 사용자 ID여야 합니다.")
@@ -307,10 +313,12 @@ class Settings:
                 and 0 <= s.vision_max_attachments <= 32
                 and 0 <= s.vision_max_emojis <= 32
                 and 0 <= s.vision_max_stickers <= 32
-                and vision_total <= 32):
+                and vision_total <= 32
+                and 0 <= s.shutdown_grace_seconds <= 55):
             raise ValueError("설정 범위 오류: cooldown 0~3600, concurrency 1~20, "
                              "output_tokens 128~4096, Gemini total output은 output_tokens~65536, "
                              "2 <= summary_every <= history_turns <= 30, "
                              "lore_max_items 0~20, lore_max_chars 0~12000, "
-                             "vision source quota는 각각 0~32이고 합계는 32 이하")
+                             "vision source quota는 각각 0~32이고 합계는 32 이하, "
+                             "shutdown grace는 0~55초")
         return s

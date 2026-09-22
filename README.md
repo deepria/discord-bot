@@ -64,6 +64,10 @@ SQLite와 운영 중 생성되는 데이터는 기본적으로 `data/` 아래에
 Docker Compose에서는 named volume으로 보존합니다. 같은 SQLite를 여러 봇 프로세스가 동시에 사용하는
 구성은 지원하지 않습니다.
 
+컨테이너의 `SIGTERM`은 새 메시지 처리를 중단하고 진행 중인 요청을 최대
+`SHUTDOWN_GRACE_SECONDS`(기본 50초) 동안 정리한 뒤 SQLite WAL checkpoint와 연결 종료를 수행합니다.
+값은 0~55초이며, 0은 진행 중인 요청을 즉시 취소합니다.
+
 ## Discord 설정
 
 Discord Developer Portal에서 Bot을 만들고 **Message Content Intent**를 켭니다. `리오야`처럼 멘션
