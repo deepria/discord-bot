@@ -37,16 +37,46 @@ def overview(db_path: str, usage_path: str) -> dict:
     return result
 
 
+def traces(usage_path: str, *, limit: int = 50) -> list[dict]:
+    """Return a bounded, content-free tail even when rotated rows are malformed."""
+    if not 1 <= limit <= 100:
+        raise ValueError("trace limit must be 1~100")
+    allowed = {"at", "operation", "model", "status", "elapsed_ms", "total_tokens",
+               "web_search_calls", "error_type", "structured_memory_lifecycle"}
+    path = Path(usage_path)
+    if not path.exists():
+        return []
+    rows = []
+    for line in path.read_text(encoding="utf-8").splitlines()[-1000:]:
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(row, dict):
+            rows.append({key: row[key] for key in allowed if key in row})
+    return rows[-limit:]
+
+
 def serve(db_path: str, usage_path: str, host: str, port: int) -> None:
     if host not in {"127.0.0.1", "localhost", "::1"}:
         raise ValueError("dashboard host must be localhost")
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
-            if self.path != "/overview":
+            path, _, query = self.path.partition("?")
+            if path not in {"/overview", "/traces"}:
                 self.send_error(404)
                 return
-            payload = json.dumps(overview(db_path, usage_path)).encode()
+            if path == "/overview":
+                body = overview(db_path, usage_path)
+            else:
+                requested = query.removeprefix("limit=") if query.startswith("limit=") else "50"
+                try:
+                    body = traces(usage_path, limit=int(requested))
+                except ValueError:
+                    self.send_error(400)
+                    return
+            payload = json.dumps(body).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(payload)))
