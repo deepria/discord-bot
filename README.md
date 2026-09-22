@@ -68,6 +68,9 @@ Docker Compose에서는 named volume으로 보존합니다. 같은 SQLite를 여
 `SHUTDOWN_GRACE_SECONDS`(기본 50초) 동안 정리한 뒤 SQLite WAL checkpoint와 연결 종료를 수행합니다.
 값은 0~55초이며, 0은 진행 중인 요청을 즉시 취소합니다.
 
+일반 사용자 멘션은 기본적으로 답변에 보존하지만, `@everyone`, `@here`, 역할 멘션은 항상
+전송되지 않습니다. `ALLOW_USER_MENTIONS=false`로 사용자 멘션도 모두 비활성화할 수 있습니다.
+
 ## Discord 설정
 
 Discord Developer Portal에서 Bot을 만들고 **Message Content Intent**를 켭니다. `리오야`처럼 멘션

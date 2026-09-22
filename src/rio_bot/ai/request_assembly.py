@@ -4,6 +4,7 @@ import json
 import re
 
 from .egress_policy import apply_context_policy
+from .factual_challenge import FACTUAL_CHALLENGE_POLICY, is_factual_challenge
 from .freshness import FreshnessMode
 from .information_plan import InformationPlan
 from .llm import LLM as BaseLLM
@@ -224,6 +225,8 @@ class RequestAssembler(BaseLLM):
         ]
         if current_channel_only:
             instruction_parts.append(CURRENT_CHANNEL_SCOPE_POLICY)
+        if is_factual_challenge(routing_content):
+            instruction_parts.append(FACTUAL_CHALLENGE_POLICY)
         if freshness in {FreshnessMode.AUTO, FreshnessMode.REQUIRED}:
             instruction_parts.append(LIVE_INFORMATION_POLICY)
         if search_mode in {"auto", "required"}:

@@ -21,6 +21,8 @@ def test_base_policy_describes_conditional_vision_capability():
     assert "현재 요청에 실제 입력이나 도구로 제공된 범위" in POLICY
     assert "실제 시각 입력으로 포함된 이미지·커스텀 이모지·스티커" in POLICY
     assert "기본 POLICY의" not in VISION_INPUT_POLICY
+    assert "현재 사용자, 리오, 또는 이미 아는 특정 인물이라고 동일시하지 마세요" in VISION_INPUT_POLICY
+    assert "이미지 속 인물의 신원이 아닙니다" in VISION_INPUT_POLICY
     assert "지원 이미지 첨부·커스텀 이모지·래스터 스티커" in HELP_TEXT
     assert "첨부파일·이미지·답장 원문을 직접 읽지 않습니다" not in HELP_TEXT
 

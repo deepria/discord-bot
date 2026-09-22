@@ -106,6 +106,7 @@ class Settings:
     vision_max_attachments: int = 4
     vision_max_emojis: int = 12
     vision_max_stickers: int = 8
+    allow_user_mentions: bool = True
     shutdown_grace_seconds: float = 50.0
 
     def api_key_for(self, provider: str) -> str:
@@ -218,6 +219,9 @@ class Settings:
         chat_web_search = os.getenv("CHAT_WEB_SEARCH", "true").lower()
         if chat_web_search not in {"true", "false"}:
             raise ValueError("CHAT_WEB_SEARCH는 true 또는 false여야 합니다.")
+        allow_user_mentions = os.getenv("ALLOW_USER_MENTIONS", "true").lower()
+        if allow_user_mentions not in {"true", "false"}:
+            raise ValueError("ALLOW_USER_MENTIONS는 true 또는 false여야 합니다.")
 
         runtime_timezone = os.getenv("RUNTIME_TIMEZONE", "Asia/Seoul").strip() or "Asia/Seoul"
         try:
@@ -289,6 +293,7 @@ class Settings:
             lore_max_chars=int(os.getenv("LORE_MAX_CHARS", "3200")),
             community_lore=community_lore == "true",
             chat_web_search=chat_web_search == "true",
+            allow_user_mentions=allow_user_mentions == "true",
             runtime_timezone=runtime_timezone,
             runtime_locale=runtime_locale,
             runtime_default_location=runtime_default_location,
