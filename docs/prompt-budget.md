@@ -6,7 +6,7 @@
 
 - 고정 신뢰·보안·몰입 경계(`POLICY`)
 - 리오의 핵심 성격, 말투, 반복 연출 방지, 소수의 선택적 장난 규칙(`prompts/rio.md`)
-- 현재 대화의 관계 모드(`ordinary_relationship.md` 또는 `special_dm.md`)
+- 현재 요청자의 `BOT_ADMIN_IDS` 인가 결과에 따른 관계 모드(`ordinary_relationship.md` 또는 `special_dm.md`)
 - 현재 시각과 지역 fallback에 필요한 짧은 runtime context
 
 ## lore로만 두는 내용
@@ -34,4 +34,4 @@
 않지만 tokenizer에 종속되지 않는 간단한 크기 회귀 지표로 사용합니다.
 
 실제 merge 전에는 기존 `evals/character_lore_cases.jsonl`의 캐릭터·관계·몰입 사례를 확인하고,
-특히 일반 서버/DM/특별 DM에서 캐릭터성이나 관계 검색 품질이 떨어지지 않는지 smoke test합니다.
+특히 일반 서버/DM과 `BOT_ADMIN_IDS` 허용 사용자 요청에서 캐릭터성이나 관계 검색 품질이 떨어지지 않는지 smoke test합니다.

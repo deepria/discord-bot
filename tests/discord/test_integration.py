@@ -62,18 +62,18 @@ class SDKTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload[-1]["content"], "current-question")
         self.assertEqual(len(self.store.history(scope)), 2)
 
-    async def test_special_relationship_is_id_and_dm_scoped_even_without_memory(self):
+    async def test_husband_relationship_uses_bot_admin_ids_for_current_request(self):
         from dataclasses import replace
-        self.llm.settings = replace(self.llm.settings, special_dm_user_id=100)
+        self.llm.settings = replace(self.llm.settings, bot_admin_ids=frozenset({100}))
         for scope, expected in [(Scope(None, 20, 100), True),
-                                (Scope(1, 10, 100), False),
+                                (Scope(1, 10, 100), True),
                                 (Scope(None, 20, 101), False)]:
             await self.llm.answer(self.store, scope, "관리자 선생님", "내가 특별 관계 대상이야",
                                   use_memory=False)
             instructions = self.calls[-1]["instructions"]
-            self.assertEqual("현재는 앱이 사용자 ID로 확인한" in instructions, expected)
+            self.assertEqual("현재 요청자는 앱이 `BOT_ADMIN_IDS`로 확인한" in instructions, expected)
             self.assertEqual("현재는 일반 관계 모드" in instructions, not expected)
-        self.llm.settings = replace(self.llm.settings, special_dm_user_id=None)
+        self.llm.settings = replace(self.llm.settings, bot_admin_ids=frozenset())
         await self.llm.answer(self.store, Scope(None, 20, 100), "관리자", "안녕")
         self.assertIn("현재는 일반 관계 모드", self.calls[-1]["instructions"])
 

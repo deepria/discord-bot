@@ -52,7 +52,7 @@ def safe_allowed_mentions(*, allow_users: bool) -> discord.AllowedMentions:
     )
 
 
-def _bare_call_reply(scope: Scope, special_dm_user_id: int | None) -> str:
+def _bare_call_reply(scope: Scope) -> str:
     return "응, 선생 듣고있어."
 
 
@@ -440,7 +440,7 @@ class RioClient(discord.Client):
                 if not text:
                     await self.send_text(
                         message.channel,
-                        _bare_call_reply(scope, self.settings.special_dm_user_id),
+                        _bare_call_reply(scope),
                     )
                     return
                 if guild_id is not None and use_chat_log:

@@ -99,7 +99,6 @@ class Settings:
     usage_log_path: str = "data/logs/usage.jsonl"
     event_log_path: str = "data/logs/events.jsonl"
     channel_context_chars: int = 6000
-    special_dm_user_id: int | None = None
     bot_admin_ids: frozenset[int] = frozenset()
     lore_path: str = ""
     lore_max_items: int = 6
@@ -281,8 +280,6 @@ class Settings:
             gemini_thinking_level=gemini_thinking_level,
             gemini_total_output_tokens=gemini_total_output_tokens,
             gemini_request_timeout_seconds=gemini_request_timeout_seconds,
-            special_dm_user_id=int(os.environ["SPECIAL_DM_USER_ID"])
-            if os.getenv("SPECIAL_DM_USER_ID", "").strip() else None,
             bot_admin_ids=frozenset(int(x.strip()) for x in
                                    os.getenv("BOT_ADMIN_IDS", "").split(",") if x.strip()),
             model=model,
@@ -334,8 +331,6 @@ class Settings:
             vision_max_stickers=vision_max_stickers,
             shutdown_grace_seconds=shutdown_grace_seconds,
         )
-        if s.special_dm_user_id is not None and s.special_dm_user_id <= 0:
-            raise ValueError("SPECIAL_DM_USER_ID는 양의 Discord 사용자 ID여야 합니다.")
         vision_total = s.vision_max_attachments + s.vision_max_emojis + s.vision_max_stickers
         if not (0 <= s.cooldown <= 3600 and 1 <= s.concurrency <= 20
                 and 128 <= s.output_tokens <= 4096

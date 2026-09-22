@@ -150,10 +150,24 @@ class LLM:
         return result
 
     def relationship_instructions(self, scope):
-        special = (scope.guild_id is None and self.settings.special_dm_user_id is not None
-                   and scope.user_id == self.settings.special_dm_user_id)
-        filename = "special_dm.md" if special else "ordinary_relationship.md"
+        # Console/control-agent write authorization and relationship tone share exactly one
+        # source of truth. Display names, guild permissions, roles, and DM status are never
+        # authorization signals.
+        relationship = self.relationship(scope)
+        filename = (
+            "special_dm.md"
+            if relationship == "husband_admin"
+            else "ordinary_relationship.md"
+        )
         return files("rio_bot").joinpath("prompts/" + filename).read_text(encoding="utf-8")
+
+    def relationship(self, scope) -> str:
+        """Return the app-authorized relationship for the current request author only."""
+        return (
+            "husband_admin"
+            if scope.user_id in self.settings.bot_admin_ids
+            else "participant"
+        )
 
     def lore_references(self, content: str) -> list[dict]:
         limit, chars = self.settings.lore_max_items, self.settings.lore_max_chars
