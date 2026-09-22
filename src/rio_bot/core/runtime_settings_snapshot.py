@@ -97,3 +97,52 @@ def runtime_config_audit_snapshot(
         }
         for row in rows
     ]
+
+
+def policy_snapshot(settings: Settings) -> list[dict[str, str]]:
+    """Return content-free policy overrides with their effective inherited values."""
+    try:
+        with sqlite3.connect(_database_uri(settings.db_path), uri=True) as connection:
+            memory = dict(connection.execute("SELECT scope,mode FROM memory_modes").fetchall())
+            chatlog = dict(connection.execute("SELECT scope,mode FROM chat_log_modes").fetchall())
+            notes = dict(connection.execute("SELECT scope,text FROM notes").fetchall())
+            manual = dict(connection.execute("SELECT scope,text FROM manual_notes").fetchall())
+    except sqlite3.Error:
+        return []
+    capture_prefix = "config:chatlog_capture:"
+    capture = {
+        str(key)[len(capture_prefix):]: str(value)
+        for key, value in {**notes, **manual}.items()
+        if str(key).startswith(capture_prefix) and str(value) in {"all", "direct"}
+    }
+    scopes = sorted({"global", *memory, *chatlog, *capture})
+
+    def inherited(values: dict[str, str], scope: str, default: str) -> tuple[str, str]:
+        if scope in values:
+            return values[scope], "override"
+        if ":channel:" in scope:
+            parent = scope.rsplit(":channel:", 1)[0]
+            if parent.startswith("guild:") and parent in values:
+                return values[parent], "server"
+        if "global" in values:
+            return values["global"], "global"
+        return default, "default"
+
+    rows = []
+    for scope in scopes:
+        memory_value, memory_source = inherited(memory, scope, "normal")
+        chatlog_value, chatlog_source = inherited(chatlog, scope, "on")
+        capture_value, capture_source = inherited(capture, scope, "all")
+        rows.append({
+            "scope": scope,
+            "memory_override": str(memory.get(scope, "inherit")),
+            "memory_effective": memory_value,
+            "memory_source": memory_source,
+            "chatlog_override": str(chatlog.get(scope, "inherit")),
+            "chatlog_effective": chatlog_value,
+            "chatlog_source": chatlog_source,
+            "capture_override": str(capture.get(scope, "inherit")),
+            "capture_effective": capture_value,
+            "capture_source": capture_source,
+        })
+    return rows
