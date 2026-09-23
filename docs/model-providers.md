@@ -1,6 +1,6 @@
 # 모델 provider 설정
 
-봇의 일반 답변과 장기 기억 요약 모델을 `openai`, `gemini`, `openrouter`, `ollama` 중에서 선택할 수 있습니다.
+봇의 일반 답변과 장기 기억 요약 모델을 `openai`, `gemini`, `openrouter` 중에서 선택할 수 있습니다.
 Discord, SQLite 기억, lore 검색, 캐릭터 프롬프트 조립은 provider와 독립적으로 유지하고 실제 모델
 호출과 provider별 웹 검색·이미지 입력 형식만 어댑터에서 변환합니다.
 
@@ -69,32 +69,10 @@ MEMORY_MODEL=
 OpenRouter에서는 OpenAI-compatible Responses API를 사용하고, 검색이 필요한 경우 `web` plugin으로
 변환합니다. OpenRouter가 제공하는 다른 모델 slug도 같은 방식으로 지정할 수 있습니다.
 
-### Ollama
-
-```dotenv
-LLM_PROVIDER=ollama
-LLM_MODEL=qwen3.5:9b
-OLLAMA_BASE_URL=http://172.30.1.71:11434
-CHAT_WEB_SEARCH=false
-
-MEMORY_PROVIDER=
-MEMORY_MODEL=
-```
-
-Ollama provider는 native `/api/chat`을 직접 사용하며 요청마다 `think=false`를 고정으로 보냅니다.
-API key는 필요하지 않습니다. `OLLAMA_BASE_URL`에는 봇이 실행되는 서버에서 접근 가능한 LAN 주소를
-지정하세요. 예를 들어 Discord 봇이 Proxmox CT에서 실행되고 Ollama가 Windows 데스크탑에서 실행 중이면
-Windows 데스크탑의 내부 IP와 11434 포트를 사용합니다.
-
-Ollama provider는 현재 provider 웹 검색 도구를 지원하지 않습니다. 운영 환경에서는
-`CHAT_WEB_SEARCH=false`로 두세요. 또한 텍스트 모델을 기준으로 동작하므로 현재 턴 이미지 입력은
-모델에 직접 전달되지 않습니다.
-
 ## 이미지 입력과 모델 capability
 
 `feature/vision-input`의 1차 구현은 OpenAI/Gemini/OpenRouter에 현재 턴 이미지 입력을 전달할 수 있는
-어댑터를 둡니다. Ollama provider는 현재 텍스트 모델 운영을 기준으로 이미지 입력을 직접 전달하지
-않습니다.
+어댑터를 둡니다.
 
 - OpenAI: Responses `input_image` data URL
 - Gemini: Interactions API의 inline `image` block

@@ -12,7 +12,6 @@ from rio_bot.ai.providers import (
     ProviderTimeoutError,
     _gemini_input,
     _GeminiResponses,
-    _OllamaResponses,
     _OpenRouterResponses,
     normalize_provider,
 )
@@ -80,9 +79,10 @@ async def test_gemini_read_timeout_keeps_safe_phase():
 
 def test_normalize_provider():
     assert normalize_provider(" Gemini ") == "gemini"
-    assert normalize_provider(" Ollama ") == "ollama"
-    with pytest.raises(ValueError):
-        normalize_provider("unknown")
+    assert normalize_provider("OPENAI") == "openai"
+    assert normalize_provider("openrouter") == "openrouter"
+    with pytest.raises(ValueError, match="ollama"):
+        normalize_provider("ollama")
 
 
 def test_gemini_input_preserves_conversation_roles():
@@ -272,59 +272,3 @@ async def test_openrouter_translates_search_to_web_plugin():
     assert "tools" not in kwargs
     assert "tool_choice" not in kwargs
     assert kwargs["extra_body"]["plugins"] == [{"id": "web", "max_results": 3}]
-
-
-@pytest.mark.asyncio
-async def test_ollama_chat_request_forces_thinking_off():
-    seen = {}
-
-    async def handler(request: httpx.Request):
-        seen["json"] = __import__("json").loads(request.content)
-        return httpx.Response(200, json={
-            "message": {"role": "assistant", "content": "응."},
-            "done": True,
-            "prompt_eval_count": 10,
-            "eval_count": 2,
-        })
-
-    http = httpx.AsyncClient(
-        base_url="http://ollama.test",
-        transport=httpx.MockTransport(handler),
-    )
-    try:
-        response = await _OllamaResponses(http).create(
-            model="qwen3.5:9b",
-            instructions="system",
-            input=[{"role": "user", "content": "리오야"}],
-            max_output_tokens=200,
-            store=False,
-        )
-    finally:
-        await http.aclose()
-
-    payload = seen["json"]
-    assert payload["model"] == "qwen3.5:9b"
-    assert payload["stream"] is False
-    assert payload["think"] is False
-    assert payload["options"] == {"num_predict": 200}
-    assert payload["messages"] == [
-        {"role": "system", "content": "system"},
-        {"role": "user", "content": "리오야"},
-    ]
-    assert response.status == "completed"
-    assert response.output_text == "응."
-    assert response.usage.total_tokens == 12
-
-
-@pytest.mark.asyncio
-async def test_ollama_rejects_web_search_tools():
-    http = httpx.AsyncClient(base_url="http://ollama.test")
-    try:
-        with pytest.raises(ValueError, match="CHAT_WEB_SEARCH=false"):
-            await _OllamaResponses(http).create(
-                model="qwen3.5:9b",
-                input="질문",
-                tools=[{"type": "web_search"}],
-            )
-    finally:
-        await http.aclose()

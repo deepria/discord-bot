@@ -74,22 +74,18 @@ def test_settings_load_uses_code_defaults_when_runtime_env_is_absent(monkeypatch
     assert settings.gemini_request_timeout_seconds == 8
 
 
-def test_settings_load_accepts_ollama_without_api_key(monkeypatch, tmp_path: Path):
+@pytest.mark.parametrize("variable", ["LLM_PROVIDER", "MEMORY_PROVIDER"])
+def test_settings_load_rejects_removed_provider(monkeypatch, tmp_path: Path, variable: str):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("DISCORD_TOKEN", "token")
-    monkeypatch.setenv("LLM_PROVIDER", "ollama")
+    monkeypatch.setenv(variable, "ollama")
     monkeypatch.setenv("LLM_MODEL", "qwen3.5:9b")
-    monkeypatch.setenv("OLLAMA_BASE_URL", "http://172.30.1.71:11434")
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
 
-    settings = Settings.load()
-
-    assert settings.provider == "ollama"
-    assert settings.model == "qwen3.5:9b"
-    assert settings.ollama_base_url == "http://172.30.1.71:11434"
-    assert settings.api_key == ""
+    with pytest.raises(ValueError, match=variable):
+        Settings.load()
 
 
 def test_runtime_settings_fall_back_to_code_defaults_without_db_override():

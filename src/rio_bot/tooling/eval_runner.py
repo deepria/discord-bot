@@ -60,8 +60,6 @@ def read_cases(path: Path) -> list[dict]:
 
 
 def _provider_key(provider: str) -> str:
-    if provider == "ollama":
-        return ""
     variable = {
         "openai": "OPENAI_API_KEY",
         "gemini": "GEMINI_API_KEY",
@@ -97,8 +95,6 @@ def eval_settings(args) -> Settings:
         openai_api_key=os.getenv("OPENAI_API_KEY", "").strip(),
         gemini_api_key=os.getenv("GEMINI_API_KEY", "").strip(),
         openrouter_api_key=os.getenv("OPENROUTER_API_KEY", "").strip(),
-        ollama_base_url=os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").strip()
-        or "http://127.0.0.1:11434",
         model=model,
         memory_model=model,
         db_path=os.getenv("DATABASE_PATH", "data/rio.sqlite3"),
@@ -236,7 +232,7 @@ def parser() -> argparse.ArgumentParser:
     root.add_argument("--cases", default=str(DEFAULT_CASES))
     root.add_argument("--id", action="append", help="특정 case id만 실행합니다. 반복 지정할 수 있습니다.")
     root.add_argument("--limit", type=int, help="앞에서부터 N개 case만 실행합니다.")
-    root.add_argument("--provider", help="openai, gemini, openrouter, ollama. 기본은 LLM_PROVIDER입니다.")
+    root.add_argument("--provider", help="openai, gemini, openrouter. 기본은 LLM_PROVIDER입니다.")
     root.add_argument("--model", help="평가에 사용할 모델. 기본은 LLM_MODEL입니다.")
     root.add_argument("--output", help="결과 JSONL 경로. 같은 이름의 .md 리포트도 생성합니다.")
     root.add_argument("--usage-log", default="data/logs/eval-usage.jsonl")
