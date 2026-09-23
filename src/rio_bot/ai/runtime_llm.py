@@ -82,6 +82,7 @@ class LLM(InformationPipeline):
         emoji_catalog: list | None = None,
         use_memory: bool = True,
         quoted_text: str = "",
+        message_id: str | int | None = None,
     ) -> str:
         plan = build_routing_plan(
             store,
@@ -105,6 +106,7 @@ class LLM(InformationPipeline):
                 use_memory=use_memory,
                 routing_plan=plan,
                 quoted_text=quoted_text,
+                message_id=message_id,
             )
         finally:
             VISION_REQUEST_ACTIVE.reset(vision_token)
