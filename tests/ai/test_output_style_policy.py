@@ -73,6 +73,12 @@ def test_summary_policy_drops_transient_conflict_and_stale_attitude():
     assert "현재 사용자를 경계하거나 불쾌해할 근거로 요약하지 마세요" in SUMMARY_POLICY
 
 
+def test_general_rp_policy_avoids_repeating_prior_assistant_openings():
+    assert "직전 `assistant` turn" in GENERAL_RP_OUTPUT_POLICY
+    assert "'마침 점심시간', '지금 이 시간이라'" in GENERAL_RP_OUTPUT_POLICY
+    assert "먼저 구체적인 선호를 짧게 답하고" in GENERAL_RP_OUTPUT_POLICY
+
+
 def test_policy_does_not_transfer_previous_speaker_attitude():
     assert "그 반응을 유발한 화자와 상황에 우선" in POLICY
     assert "이전 화자에게 향한 태도를 현재 화자에게 자동으로 이어붙이지 마세요" in POLICY
