@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from dotenv import load_dotenv
 
-SUPPORTED_MODEL_PROVIDERS = frozenset({"openai", "gemini", "openrouter", "ollama"})
+SUPPORTED_MODEL_PROVIDERS = frozenset({"openai", "gemini", "openrouter"})
 GEMINI_THINKING_LEVELS = frozenset({"minimal", "low", "medium", "high"})
 EXTERNAL_CONTEXT_POLICIES = frozenset({"full", "bot_interactions_only"})
 MODEL_ROUTING_MODES = frozenset({"fixed", "adaptive"})
@@ -44,7 +44,6 @@ def _env_key(provider: str) -> str:
         "openai": "OPENAI_API_KEY",
         "gemini": "GEMINI_API_KEY",
         "openrouter": "OPENROUTER_API_KEY",
-        "ollama": "OLLAMA_BASE_URL",
     }[provider]
 
 
@@ -76,7 +75,6 @@ class Settings:
     gemini_tier1_api_key: str = ""
     gemini_tier1_model: str = ""
     openrouter_api_key: str = ""
-    ollama_base_url: str = "http://127.0.0.1:11434"
     gemini_thinking_level: str = "low"
     gemini_total_output_tokens: int = 4096
     gemini_request_timeout_seconds: float = 8.0
@@ -120,7 +118,6 @@ class Settings:
             "openai": self.openai_api_key,
             "gemini": self.gemini_api_key,
             "openrouter": self.openrouter_api_key,
-            "ollama": "",
         }[provider].strip()
         if explicit:
             return explicit
@@ -195,14 +192,13 @@ class Settings:
             "openai": os.getenv("OPENAI_API_KEY", "").strip(),
             "gemini": os.getenv("GEMINI_API_KEY", "").strip(),
             "openrouter": os.getenv("OPENROUTER_API_KEY", "").strip(),
-            "ollama": "",
         }
         gemini_tier1_api_key = os.getenv("GEMINI_TIER1_API_KEY", "").strip()
         gemini_tier1_model = os.getenv("GEMINI_TIER1_MODEL", "").strip()
         if bool(gemini_tier1_api_key) != bool(gemini_tier1_model):
             raise ValueError("GEMINI_TIER1_API_KEY와 GEMINI_TIER1_MODEL은 함께 설정해야 합니다.")
         for selected in {provider, memory_provider}:
-            if selected != "ollama" and not keys[selected]:
+            if not keys[selected]:
                 raise ValueError(f"{_env_key(selected)}를 설정해 주세요.")
 
         output_tokens = int(os.getenv("MAX_OUTPUT_TOKENS", "1000"))
@@ -275,8 +271,6 @@ class Settings:
             openai_api_key=keys["openai"], gemini_api_key=keys["gemini"],
             gemini_tier1_api_key=gemini_tier1_api_key, gemini_tier1_model=gemini_tier1_model,
             openrouter_api_key=keys["openrouter"],
-            ollama_base_url=os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").strip()
-            or "http://127.0.0.1:11434",
             gemini_thinking_level=gemini_thinking_level,
             gemini_total_output_tokens=gemini_total_output_tokens,
             gemini_request_timeout_seconds=gemini_request_timeout_seconds,
