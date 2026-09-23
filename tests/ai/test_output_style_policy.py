@@ -1,6 +1,7 @@
 from importlib.resources import files
 
 from rio_bot.ai.llm import POLICY
+from rio_bot.ai.request_assembly import ADDRESSING_GROUNDING_POLICY
 from rio_bot.ai.runtime_llm import GENERAL_RP_OUTPUT_POLICY, SUMMARY_POLICY
 
 
@@ -77,6 +78,12 @@ def test_general_rp_policy_avoids_repeating_prior_assistant_openings():
     assert "직전 `assistant` turn" in GENERAL_RP_OUTPUT_POLICY
     assert "'마침 점심시간', '지금 이 시간이라'" in GENERAL_RP_OUTPUT_POLICY
     assert "먼저 구체적인 선호를 짧게 답하고" in GENERAL_RP_OUTPUT_POLICY
+
+
+def test_addressing_policy_does_not_invent_names_or_relationship_labels():
+    assert "출력 호칭을 강제하지 않습니다" in ADDRESSING_GROUNDING_POLICY
+    assert "입력 provenance에 없는 이름·별명·애칭·관계 호칭" in ADDRESSING_GROUNDING_POLICY
+    assert "음절을 임의로 나눈 어색한\n호칭" in ADDRESSING_GROUNDING_POLICY
 
 
 def test_policy_does_not_transfer_previous_speaker_attitude():
