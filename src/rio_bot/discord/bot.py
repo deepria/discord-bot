@@ -468,7 +468,8 @@ class RioClient(discord.Client):
                                                  if guild_id is not None and use_chat_log else []),
                                 use_memory=use_memory,
                                 emoji_catalog=emoji_catalog,
-                                quoted_text=quoted_text)
+                                quoted_text=quoted_text,
+                                message_id=str(message.id))
                             self.events.emit(
                                 "ai_request_completed",
                                 message_id=str(message.id),

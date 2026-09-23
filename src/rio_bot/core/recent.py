@@ -61,6 +61,7 @@ class RecentMessages:
             return
         existing.append({
             "message_id": message_id,
+            "channel_id": str(scope.channel_id),
             "user_id": author_id or "",
             "author_user_id": author_id,
             "reply_target_user_id": reply_target_id,

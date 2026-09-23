@@ -124,6 +124,7 @@ class InformationPipeline(RequestAssembler):
         use_memory: bool = True,
         routing_plan: RoutingPlan | None = None,
         quoted_text: str = "",
+        message_id: str | int | None = None,
     ) -> str:
         routing = routing_plan or RoutingPlan(content, content)
         information = self.build_information_plan(routing)
@@ -143,6 +144,7 @@ class InformationPipeline(RequestAssembler):
                 use_memory=use_memory,
                 information_plan=information,
                 quoted_text=quoted_text,
+                message_id=message_id,
             )
         finally:
             CURRENT_AMBIENT_WEATHER.reset(token)

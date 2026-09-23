@@ -51,12 +51,16 @@ async def test_inline_quote_is_labeled_separately_from_the_current_speaker():
 
         payload = calls[-1]
         reference = json.loads(payload["input"][0]["content"].split("\n", 1)[1])
-        assert reference["current_user_message"] == {
-            "author_user_id": "100",
-            "content": "이 주장은 맞아?",
-            "context_kind": "current_message",
-            "relationship": "husband_admin",
-        }
+        current = reference["current_user_message"]
+        assert current["author_user_id"] == "100"
+        assert current["author_id"] == "100"
+        assert current["author_name"] == "사용자"
+        assert current["speaker_type"] == "current_user"
+        assert current["channel_id"] == "10"
+        assert current["content"] == "이 주장은 맞아?"
+        assert current["context_kind"] == "current_message"
+        assert current["is_current_turn"] is True
+        assert current["relationship"] == "husband_admin"
         assert reference["inline_quoted_text"][0]["author_user_id"] is None
         assert reference["inline_quoted_text"][0]["content"] == "다른 사람이 했다는 주장"
         assert payload["input"][-1]["content"] == "이 주장은 맞아?"
