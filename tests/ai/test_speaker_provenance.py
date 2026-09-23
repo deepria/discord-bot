@@ -9,6 +9,7 @@ from rio_bot.routing import Scope
 from rio_bot.store import Store
 
 from rio_bot.ai.factual_challenge import SPEAKER_ATTRIBUTION_CORRECTION_POLICY
+from rio_bot.ai.request_assembly import RequestAssembler
 
 
 def _response():
@@ -97,3 +98,31 @@ async def test_speaker_correction_adds_apology_withdrawal_policy():
     finally:
         await llm.close()
         store.close()
+
+
+def test_context_selection_telemetry_is_content_and_identity_free():
+    input_rows = [
+        {"message_id": "secret-message-id", "author_user_id": "secret-author-id",
+         "name": "secret-name", "content": "secret Discord content", "role": "user"},
+        {"message_id": "another-id", "author_user_id": "another-author",
+         "name": "another-name", "content": "assistant context", "role": "assistant"},
+    ]
+    selected_rows = [
+        {**input_rows[0], "speaker_type": "participant", "context_kind": "channel_ambient"},
+    ]
+
+    telemetry = RequestAssembler._channel_context_telemetry(
+        input_rows, selected_rows, budget_chars=6000, recent_speaker_query=True,
+    )
+
+    assert telemetry == {
+        "channel_context_input_turns": 2,
+        "channel_context_selected_turns": 1,
+        "channel_context_filtered_turns": 1,
+        "channel_context_budget_chars": 6000,
+        "channel_context_selected_chars": len("secret Discord content"),
+        "channel_context_selection_reasons": ["channel_ambient"],
+        "channel_context_speaker_types": {"participant": 1},
+        "recent_speaker_provenance_priority": True,
+    }
+    assert "secret" not in str(telemetry)

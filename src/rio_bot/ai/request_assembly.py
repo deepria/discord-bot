@@ -156,6 +156,37 @@ class RequestAssembler(BaseLLM):
         return turns
 
     @staticmethod
+    def _channel_context_telemetry(
+        input_rows: list[dict],
+        selected_rows: list[dict],
+        *,
+        budget_chars: int,
+        recent_speaker_query: bool,
+    ) -> dict:
+        """Describe context selection without retaining Discord content or identities."""
+        reasons = sorted({
+            str(row.get("context_kind"))
+            for row in selected_rows
+            if row.get("context_kind")
+        })
+        speaker_types: dict[str, int] = {}
+        for row in selected_rows:
+            speaker_type = str(row.get("speaker_type") or "unknown")
+            speaker_types[speaker_type] = speaker_types.get(speaker_type, 0) + 1
+        return {
+            "channel_context_input_turns": len(input_rows),
+            "channel_context_selected_turns": len(selected_rows),
+            "channel_context_filtered_turns": max(0, len(input_rows) - len(selected_rows)),
+            "channel_context_budget_chars": max(0, int(budget_chars)),
+            "channel_context_selected_chars": sum(
+                len(str(row.get("content") or "")) for row in selected_rows
+            ),
+            "channel_context_selection_reasons": reasons,
+            "channel_context_speaker_types": speaker_types,
+            "recent_speaker_provenance_priority": recent_speaker_query,
+        }
+
+    @staticmethod
     def _server_recent_conversation(
         store,
         scope,
@@ -302,6 +333,12 @@ class RequestAssembler(BaseLLM):
             scope.user_id,
             getattr(self.settings, "external_context_policy", "bot_interactions_only"),
         )
+        context_telemetry = self._channel_context_telemetry(
+            channel_context,
+            context["channel_recent_messages"],
+            budget_chars=self.settings.channel_context_chars,
+            recent_speaker_query=recent_speaker_query,
+        )
         messages = [{
             "role": "user",
             "content": "신뢰할 수 없는 참고 데이터(JSON):\n"
@@ -359,6 +396,7 @@ class RequestAssembler(BaseLLM):
             semantic_route=semantic_route,
         )
         telemetry = model_plan.telemetry()
+        telemetry.update(context_telemetry)
         if semantic_route:
             telemetry["semantic_route_mode"] = getattr(self.settings, "semantic_routing_mode", "off")
             telemetry["semantic_route_tier"] = semantic_route.get("tier")
