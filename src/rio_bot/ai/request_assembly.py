@@ -92,6 +92,13 @@ CAPABILITY_GROUNDING_POLICY = """[실행·조회 사실]
 실행하지 않은 결과나 상태를 만들어 내지 마세요.
 """
 
+ADDRESSING_GROUNDING_POLICY = """[이름과 호칭]
+현재 요청자의 `relationship`은 앱 내부 인가 metadata이며 출력 호칭을 강제하지 않습니다.
+입력 provenance에 없는 이름·별명·애칭·관계 호칭을 새로 만들거나, 음절을 임의로 나눈 어색한
+호칭을 만들지 마세요. 표시명은 발화자를 식별하는 참고 정보일 뿐 반드시 불러야 하는 이름이
+아닙니다. 어떤 호칭이 자연스러운지 확실하지 않으면 호칭 없이 바로 답하세요.
+"""
+
 RECENT_SPEAKER_QUERY = re.compile(
     r"(?:누가|누구).{0,18}(?:물었|말했|했어|질문)|(?:내가|[A-Za-z가-힣]{1,20})\s*"
     r"(?:아까|방금|전에).{0,18}(?:뭘|무엇을|뭐라고|무슨\s*말|질문)|"
@@ -356,6 +363,7 @@ class RequestAssembler(BaseLLM):
             TURN_PROVENANCE_POLICY,
             TECHNICAL_REASONING_POLICY,
             CAPABILITY_GROUNDING_POLICY,
+            ADDRESSING_GROUNDING_POLICY,
         ]
         if current_channel_only:
             instruction_parts.append(CURRENT_CHANNEL_SCOPE_POLICY)
