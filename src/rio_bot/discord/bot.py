@@ -6,6 +6,7 @@ import weakref
 from contextlib import nullcontext
 from datetime import timedelta
 from pathlib import Path
+from uuid import uuid4
 
 import discord
 
@@ -17,7 +18,7 @@ from rio_bot.core.runtime_settings_snapshot import policy_snapshot
 from .config import Settings
 from .emoji_commands import EmojiCommands, EmojiRegistry
 from .emojis import render_emojis
-from .events import EventLogger, RuntimeStatusWriter
+from .events import EventLogger, RuntimeStatusWriter, turn_event_fields
 from .llm import LLM
 from .memory_commands import MemoryCommands, MemoryMode
 from .output_safety import neutralize_mentions
@@ -399,6 +400,10 @@ class RioClient(discord.Client):
             )
         if text is None:
             return
+        turn_id = str(uuid4())
+        turn_started = time.monotonic()
+        turn_context = None
+        turn_telemetry = {}
         channel_lock = self.channel_lock(scope)
         # One lock per realm+user, including all channels, so /기억삭제 cannot race a response.
         key = scope.user_note
@@ -417,10 +422,17 @@ class RioClient(discord.Client):
                 use_chat_log = received_chat_log and self.store.chat_log_enabled(scope)
                 self.events.emit(
                     "turn_started",
+                    turn_id=turn_id,
                     scope="guild" if guild_id is not None else "dm",
                     use_memory=bool(use_memory),
                     save_memory=bool(save_memory),
                     use_chat_log=bool(use_chat_log),
+                )
+                self.events.emit(
+                    "turn.started",
+                    turn_id=turn_id,
+                    operation="answer",
+                    scope="guild" if guild_id is not None else "dm",
                 )
                 if self.store.seen(message.id):
                     return
@@ -446,6 +458,12 @@ class RioClient(discord.Client):
                 if guild_id is not None and use_chat_log:
                     await self.hydrate_recent_history(message, scope)
                 usage = getattr(self.llm, "usage", None)
+                turn_context = (
+                    usage.turn(turn_id)
+                    if usage is not None and hasattr(usage, "turn")
+                    else nullcontext({})
+                )
+                turn_telemetry = turn_context.__enter__()
                 exchange = (usage.exchange("guild" if guild_id is not None else "dm")
                             if usage is not None and hasattr(usage, "exchange") else nullcontext())
                 with exchange:
@@ -457,6 +475,7 @@ class RioClient(discord.Client):
                             request_started = time.monotonic()
                             self.events.emit(
                                 "ai_request_started",
+                                turn_id=turn_id,
                                 message_id=str(message.id),
                                 provider=self.settings.provider,
                                 model=self.settings.model,
@@ -472,6 +491,7 @@ class RioClient(discord.Client):
                                 message_id=str(message.id))
                             self.events.emit(
                                 "ai_request_completed",
+                                turn_id=turn_id,
                                 message_id=str(message.id),
                                 duration_ms=round((time.monotonic() - request_started) * 1000),
                             )
@@ -487,6 +507,7 @@ class RioClient(discord.Client):
                                     part, allowed_mentions=self.safe_allowed_mentions)
                             self.events.emit(
                                 "discord_response_sent",
+                                turn_id=turn_id,
                                 message_id=str(message.id),
                                 response_message_id=str(sent.id),
                                 response_chars=len(answer),
@@ -495,6 +516,7 @@ class RioClient(discord.Client):
                                 self.recent.add(scope, sent.id, "리오", answer, role="assistant")
                             self.events.emit(
                                 "turn_completed",
+                                turn_id=turn_id,
                                 scope="guild" if guild_id is not None else "dm",
                                 saved_memory=bool(save_memory),
                                 used_chat_log=bool(use_chat_log),
@@ -509,13 +531,36 @@ class RioClient(discord.Client):
                                     await summarize(self.store, scope)
                                 except Exception as exc:  # noqa: BLE001 - isolate summary failures; redact logs
                                     log.warning("Memory summary deferred (%s)", type(exc).__name__)
+                self.events.emit(
+                    "turn.completed",
+                    **turn_event_fields(
+                        turn_id,
+                        turn_telemetry,
+                        status="ok",
+                        latency_ms=round((time.monotonic() - turn_started) * 1000),
+                        memory_lifecycle="written" if save_memory else "not_requested",
+                        provider=self.settings.provider,
+                        model=self.settings.model,
+                    ),
+                )
         except discord.HTTPException as exc:
             log.warning("Discord delivery failed (%s)", type(exc).__name__)
-            self.events.emit("turn_failed", error_type=type(exc).__name__, delivery=True)
+            self.events.emit("turn_failed", turn_id=turn_id, error_type=type(exc).__name__, delivery=True)
+            self.events.emit(
+                "turn.failed",
+                **turn_event_fields(
+                    turn_id, turn_telemetry, status="error",
+                    latency_ms=round((time.monotonic() - turn_started) * 1000),
+                    memory_lifecycle="not_written", error_type=type(exc).__name__,
+                    provider=self.settings.provider,
+                    model=self.settings.model,
+                ),
+            )
         except Exception as exc:  # noqa: BLE001 - isolate event/summary failures; redact logs
             log.warning("Conversation failed (%s)", type(exc).__name__)
             self.events.emit(
                 "turn_failed",
+                turn_id=turn_id,
                 error_type=type(exc).__name__,
                 provider=getattr(exc, "provider", self.settings.provider),
                 model=self.settings.model,
@@ -524,11 +569,23 @@ class RioClient(discord.Client):
                 provider_error_code=getattr(exc, "error_code", None),
                 delivery=False,
             )
+            self.events.emit(
+                "turn.failed",
+                **turn_event_fields(
+                    turn_id, turn_telemetry, status="error",
+                    latency_ms=round((time.monotonic() - turn_started) * 1000),
+                    memory_lifecycle="not_written", error_type=type(exc).__name__,
+                    provider=self.settings.provider,
+                    model=self.settings.model,
+                ),
+            )
             try:
                 await self.send_text(message.channel, "지금은 답변을 이어가기 어렵네요. 잠시 후 다시 불러 주세요.")
             except discord.HTTPException:
                 pass
         finally:
+            if turn_context is not None:
+                turn_context.__exit__(None, None, None)
             self.active_tasks.discard(task)
             self.pending_count -= 1
 

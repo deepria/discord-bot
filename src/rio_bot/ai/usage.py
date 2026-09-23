@@ -109,6 +109,7 @@ class UsageLogger:
             exchange_path = Path(path).with_name("discord-usage.jsonl")
             self.exchange_handler = self._handler(str(exchange_path))
         self._exchange = ContextVar(f"rio_usage_exchange_{id(self)}", default=None)
+        self._turn = ContextVar(f"rio_usage_turn_{id(self)}", default=None)
 
     @staticmethod
     def _handler(path: str):
@@ -168,13 +169,38 @@ class UsageLogger:
 
     def _accumulate(self, row: dict):
         state = self._exchange.get()
-        if state is None:
-            return
-        self._add_usage(state, row)
-        operation = row["operation"]
-        bucket = state["operations"].setdefault(operation, self._bucket())
-        self._add_usage(bucket, row)
-        state["models"].add(row["model"])
+        if state is not None:
+            self._add_usage(state, row)
+            operation = row["operation"]
+            bucket = state["operations"].setdefault(operation, self._bucket())
+            self._add_usage(bucket, row)
+            state["models"].add(row["model"])
+
+        turn = self._turn.get()
+        if turn is not None:
+            self._add_usage(turn, row)
+            turn["models"].add(row["model"])
+            provider = row.get("provider")
+            if isinstance(provider, str) and provider:
+                turn["providers"].add(provider)
+            if row["operation"] == "answer":
+                turn["answer"] = dict(row)
+
+    @contextmanager
+    def turn(self, turn_id: str):
+        """Collect content-free telemetry for one accepted Discord turn."""
+        state = self._bucket()
+        state.update({
+            "turn_id": turn_id,
+            "models": set(),
+            "providers": set(),
+            "answer": None,
+        })
+        token = self._turn.set(state)
+        try:
+            yield state
+        finally:
+            self._turn.reset(token)
 
     @contextmanager
     def exchange(self, scope: str):
@@ -189,6 +215,9 @@ class UsageLogger:
             "operations": {},
             "models": set(),
         })
+        turn = self._turn.get()
+        if turn is not None:
+            state["turn_id"] = turn["turn_id"]
         started = perf_counter()
         token = self._exchange.set(state)
         error_type = None
@@ -218,6 +247,9 @@ class UsageLogger:
         telemetry = kwargs.pop("_rio_telemetry", None)
         row = {"at": datetime.now(UTC).isoformat(), "operation": operation,
                "model": kwargs["model"]}
+        turn = self._turn.get()
+        if turn is not None:
+            row["turn_id"] = turn["turn_id"]
         if isinstance(telemetry, dict):
             row.update({
                 key: value for key, value in telemetry.items()

@@ -154,7 +154,10 @@ class LLM(InformationPipeline):
             input=payload_text,
             max_output_tokens=model_plan.max_output_tokens,
             store=False,
-            _rio_telemetry=model_plan.telemetry(),
+            _rio_telemetry={
+                **model_plan.telemetry(),
+                "provider": self.settings.memory_provider or self.settings.provider,
+            },
         )
         if response.status == "completed" and response.output_text.strip():
             store.save_summary(scope, response.output_text.strip()[:1500], pending[-1]["id"])
@@ -176,7 +179,10 @@ class LLM(InformationPipeline):
                 instructions=STRUCTURED_MEMORY_POLICY,
                 input=json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
                 max_output_tokens=min(self.settings.memory_output_tokens, 900), store=False,
-                _rio_telemetry={"structured_memory_lifecycle": "extract"},
+                _rio_telemetry={
+                    "provider": self.settings.memory_provider or self.settings.provider,
+                    "structured_memory_lifecycle": "extract",
+                },
             )
             if response.status == "completed":
                 store.save_structured_memory(scope, through_id=pending[-1]["id"],
@@ -216,7 +222,10 @@ class LLM(InformationPipeline):
             input=payload_text,
             max_output_tokens=model_plan.max_output_tokens,
             store=False,
-            _rio_telemetry=model_plan.telemetry(),
+            _rio_telemetry={
+                **model_plan.telemetry(),
+                "provider": self.settings.memory_provider or self.settings.provider,
+            },
         )
         if response.status == "completed" and response.output_text.strip():
             store.save_shared_summary(

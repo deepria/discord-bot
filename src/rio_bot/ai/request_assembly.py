@@ -404,6 +404,7 @@ class RequestAssembler(BaseLLM):
             semantic_route=semantic_route,
         )
         telemetry = model_plan.telemetry()
+        telemetry["provider"] = self.settings.provider
         telemetry.update(context_telemetry)
         if semantic_route:
             telemetry["semantic_route_mode"] = getattr(self.settings, "semantic_routing_mode", "off")

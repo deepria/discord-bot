@@ -183,3 +183,54 @@ async def test_discord_exchange_records_failed_api_call_without_content(tmp_path
     assert row['failed_calls'] == 1
     assert row['usage_complete'] is False
     assert 'secret' not in json.dumps(row)
+
+
+@pytest.mark.asyncio
+async def test_turn_context_tags_all_usage_rows_and_keeps_content_out(tmp_path):
+    path = tmp_path / "usage.jsonl"
+    logger = UsageLogger(str(path))
+    client = NS(responses=NS(create=AsyncMock(return_value=response(10, 5))))
+
+    with logger.turn("9f5f7fad-70d1-4e69-8b2b-5d7b5ebf6978") as turn:
+        await logger.request(
+            client,
+            "answer",
+            model="test",
+            input="secret user message",
+            _rio_telemetry={"provider": "openai"},
+        )
+        await logger.request(
+            client,
+            "summarize",
+            model="test",
+            input="secret memory",
+            _rio_telemetry={"provider": "openai"},
+        )
+    logger.close()
+
+    rows = [json.loads(line) for line in path.read_text().splitlines()]
+    assert {row["turn_id"] for row in rows} == {"9f5f7fad-70d1-4e69-8b2b-5d7b5ebf6978"}
+    assert turn["calls"] == 2
+    assert turn["total_tokens"] == 30
+    assert turn["answer"]["operation"] == "answer"
+    assert turn["providers"] == {"openai"}
+    assert "secret" not in path.read_text()
+
+
+@pytest.mark.asyncio
+async def test_turn_context_tags_provider_errors_with_the_same_turn_id(tmp_path):
+    path = tmp_path / "usage.jsonl"
+    logger = UsageLogger(str(path))
+    client = NS(responses=NS(create=AsyncMock(side_effect=ProviderAPIError(
+        "gemini", 503, code="UNAVAILABLE", message="retry later"
+    ))))
+
+    with pytest.raises(ProviderAPIError), logger.turn("9f5f7fad-70d1-4e69-8b2b-5d7b5ebf6978") as turn:
+        await logger.request(client, "answer", model="gemini-test", input="secret")
+    logger.close()
+
+    row = json.loads(path.read_text())
+    assert row["turn_id"] == turn["turn_id"]
+    assert row["provider"] == "gemini"
+    assert row["error_type"] == "ProviderAPIError"
+    assert "secret" not in path.read_text()
