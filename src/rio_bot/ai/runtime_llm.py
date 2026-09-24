@@ -6,6 +6,7 @@ from .model_routing import build_memory_model_plan
 from .providers import Gemini503FallbackClient, create_provider_client
 from .routing_plan import RoutingPlan, build_routing_plan
 from .structured_memory import POLICY as STRUCTURED_MEMORY_POLICY
+from .structured_memory import RESPONSE_FORMAT as STRUCTURED_MEMORY_RESPONSE_FORMAT
 from .structured_memory import parse_items
 from .vision import VISION_REQUEST_ACTIVE, wrap_vision_client
 
@@ -179,6 +180,7 @@ class LLM(InformationPipeline):
                 instructions=STRUCTURED_MEMORY_POLICY,
                 input=json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
                 max_output_tokens=min(self.settings.memory_output_tokens, 900), store=False,
+                text={"format": STRUCTURED_MEMORY_RESPONSE_FORMAT},
                 _rio_telemetry={
                     "provider": self.settings.memory_provider or self.settings.provider,
                     "structured_memory_lifecycle": "extract",

@@ -279,6 +279,16 @@ class _GeminiResponses:
         if instructions:
             payload["system_instruction"] = instructions
 
+        text_format = (kwargs.get("text") or {}).get("format")
+        if text_format:
+            if text_format.get("type") != "json_schema" or not isinstance(text_format.get("schema"), dict):
+                raise ValueError("Gemini provider는 json_schema text format만 변환합니다.")
+            payload["response_format"] = {
+                "type": "text",
+                "mime_type": "application/json",
+                "schema": text_format["schema"],
+            }
+
         generation_config = {"thinking_level": self.thinking_level}
         max_output_tokens = kwargs.get("max_output_tokens")
         if isinstance(max_output_tokens, int):
