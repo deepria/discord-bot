@@ -152,6 +152,34 @@ async def test_gemini_translates_search_and_normalizes_response():
 
 
 @pytest.mark.asyncio
+async def test_gemini_translates_json_schema_text_format():
+    seen = {}
+
+    async def handler(request: httpx.Request):
+        seen["json"] = __import__("json").loads(request.content)
+        return httpx.Response(200, json={
+            "status": "completed",
+            "steps": [{"type": "model_output", "content": [{"type": "text", "text": "{\"items\":[]}"}]}],
+            "usage": {},
+        })
+
+    http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    try:
+        await _GeminiResponses(http).create(
+            model="gemini-test", input="input", store=False,
+            text={"format": {"type": "json_schema", "name": "test", "strict": True,
+                             "schema": {"type": "object", "properties": {}}}},
+        )
+    finally:
+        await http.aclose()
+
+    assert seen["json"]["response_format"] == {
+        "type": "text", "mime_type": "application/json",
+        "schema": {"type": "object", "properties": {}},
+    }
+
+
+@pytest.mark.asyncio
 async def test_gemini_retries_tool_call_overflow_once():
     payloads = []
 
