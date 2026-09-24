@@ -20,7 +20,7 @@ class Store:
             CREATE TABLE IF NOT EXISTS turns (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 scope TEXT NOT NULL, realm TEXT NOT NULL, user_id TEXT NOT NULL,
-                message_id TEXT NOT NULL UNIQUE,
+                message_id TEXT NOT NULL UNIQUE, turn_id TEXT,
                 content TEXT NOT NULL, reply TEXT NOT NULL, exportable INTEGER NOT NULL,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
@@ -53,7 +53,10 @@ class Store:
                 kind TEXT NOT NULL CHECK(kind IN ('fact','event','preference','relationship','boundary','task')),
                 content TEXT NOT NULL, disclosure TEXT NOT NULL CHECK(disclosure IN ('channel','owner_private')),
                 source_message_ids TEXT NOT NULL, confidence REAL NOT NULL CHECK(confidence >= 0 AND confidence <= 1),
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                source_turn_ids TEXT NOT NULL DEFAULT '', owner_type TEXT NOT NULL DEFAULT 'user',
+                status TEXT NOT NULL DEFAULT 'active', superseded_by INTEGER,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
             CREATE TABLE IF NOT EXISTS emoji_registry (
                 alias TEXT PRIMARY KEY, emoji_id TEXT NOT NULL UNIQUE, description TEXT NOT NULL,
@@ -92,6 +95,25 @@ class Store:
             INSERT OR IGNORE INTO manual_notes(scope, text)
                 SELECT scope, text FROM notes;
         """)
+        self._ensure_column("turns", "turn_id", "TEXT")
+        self._ensure_column("structured_memory_items", "source_turn_ids", "TEXT NOT NULL DEFAULT ''")
+        self._ensure_column("structured_memory_items", "owner_type", "TEXT NOT NULL DEFAULT 'user'")
+        self._ensure_column("structured_memory_items", "status", "TEXT NOT NULL DEFAULT 'active'")
+        self._ensure_column("structured_memory_items", "superseded_by", "INTEGER")
+        # SQLite only permits constant defaults in ALTER TABLE ADD COLUMN. New databases
+        # receive the timestamp default from the CREATE statement; migrated rows are seeded here.
+        self._ensure_column("structured_memory_items", "updated_at", "TEXT")
+        self.db.execute(
+            "UPDATE structured_memory_items SET updated_at=created_at "
+            "WHERE updated_at IS NULL")
+        self.db.execute(
+            "CREATE INDEX IF NOT EXISTS structured_memory_active_owner "
+            "ON structured_memory_items(owner_id, origin_realm, status, id)")
+
+    def _ensure_column(self, table: str, column: str, definition: str) -> None:
+        columns = {row["name"] for row in self.db.execute(f"PRAGMA table_info({table})")}
+        if column not in columns:
+            self.db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
     def checkpoint(self):
         """Flush this connection's WAL changes before the process exits."""
@@ -137,13 +159,17 @@ class Store:
         return self.db.execute("SELECT 1 FROM turns WHERE message_id=?",
                                (str(message_id),)).fetchone() is not None
 
-    def add(self, scope: Scope, message_id: int, content: str, reply: str):
+    def add(self, scope: Scope, message_id: int, content: str, reply: str,
+            *, turn_id: str | None = None):
         exportable = scope.public_at_capture and self.summary_exportable(scope)
         exportable = exportable and all(row["exportable"] for row in self.history(scope))
         with self.db:
-            self.db.execute("INSERT INTO turns(scope,realm,user_id,message_id,content,reply,exportable) "
-                            "VALUES (?,?,?,?,?,?,?)", (scope.conversation, scope.realm,
-                            str(scope.user_id), str(message_id), content, reply, int(exportable)))
+            self.db.execute(
+                "INSERT INTO turns(scope,realm,user_id,message_id,turn_id,content,reply,exportable) "
+                "VALUES (?,?,?,?,?,?,?,?)",
+                (scope.conversation, scope.realm, str(scope.user_id), str(message_id), turn_id,
+                 content, reply, int(exportable)),
+            )
             # Bound raw retention even if the summary API keeps failing.
             self.db.execute("DELETE FROM turns WHERE scope=? AND id NOT IN "
                             "(SELECT id FROM turns WHERE scope=? ORDER BY id DESC LIMIT ?)",
@@ -179,15 +205,28 @@ class Store:
         if through_id not in {int(row["id"]) for row in pending}:
             raise ValueError("structured memory cursor must end inside the pending batch")
         normalized = [self._validate_structured_item(scope, item, sources) for item in items]
+        accepted, rejected = [], {}
+        for item in normalized:
+            reason = self._structured_memory_rejection_reason(item["content"])
+            if reason:
+                rejected[reason] = rejected.get(reason, 0) + 1
+            else:
+                accepted.append(item)
+        turn_ids = {
+            str(row["message_id"]): row["turn_id"]
+            for row in pending if row["turn_id"]
+        }
         with self.db:
-            for item in normalized:
+            for item in accepted:
                 self.db.execute(
                     "INSERT INTO structured_memory_items(owner_id,origin_realm,origin_channel_id,"
-                    "origin_public_at_capture,kind,content,disclosure,source_message_ids,confidence) "
-                    "VALUES (?,?,?,?,?,?,?,?,?)",
+                    "origin_public_at_capture,kind,content,disclosure,source_message_ids,confidence,"
+                    "source_turn_ids,owner_type,status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                     (str(scope.user_id), scope.realm, str(scope.channel_id), int(scope.public_at_capture),
                      item["kind"], item["content"], item["disclosure"],
-                     ",".join(item["source_message_ids"]), item["confidence"]),
+                     ",".join(item["source_message_ids"]), item["confidence"],
+                     ",".join(turn_ids.get(message_id, "") for message_id in item["source_message_ids"]),
+                     "user", "active"),
                 )
             self.db.execute(
                 "INSERT INTO structured_memory_cursors(scope,realm,user_id,through_id,updated_at) "
@@ -195,6 +234,26 @@ class Store:
                 "through_id=excluded.through_id,updated_at=CURRENT_TIMESTAMP",
                 (scope.conversation, scope.realm, str(scope.user_id), through_id),
             )
+        return {"candidates": len(normalized), "written": len(accepted), "rejected": rejected}
+
+    @staticmethod
+    def _structured_memory_rejection_reason(content: str) -> str | None:
+        """Block obvious high-risk values before durable storage.
+
+        This is a deliberately conservative backstop for the extractor policy, not a classifier.
+        Rejected items are never written and only their category is suitable for telemetry.
+        """
+        value = content.casefold()
+        restricted = {
+            "credential": ("password", "passwd", "api key", "access token", "인증 토큰", "비밀번호", "비밀키"),
+            "financial": ("card number", "credit card", "계좌번호", "카드번호", "주민등록번호"),
+            "health": ("diagnosis", "medical record", "정신과", "병력", "진단"),
+            "precise_location": ("home address", "street address", "집 주소", "자택 주소", "상세 주소"),
+        }
+        for reason, terms in restricted.items():
+            if any(term in value for term in terms):
+                return reason
+        return None
 
     @staticmethod
     def _validate_structured_item(scope: Scope, item: dict, sources: set[str]) -> dict:
@@ -219,12 +278,50 @@ class Store:
         return {"kind": kind, "content": content.strip(), "disclosure": disclosure,
                 "source_message_ids": source_ids, "confidence": float(confidence)}
 
+    def active_structured_memory(self, scope: Scope):
+        """Read-only Phase 5 retrieval candidate helper; Phase 4 never calls it for answers."""
+        return self.db.execute(
+            "SELECT * FROM structured_memory_items WHERE owner_id=? AND origin_realm=? "
+            "AND status='active' ORDER BY id DESC",
+            (str(scope.user_id), scope.realm),
+        ).fetchall()
+
+    def supersede_structured_memory(self, scope: Scope, item_id: int, replacement_id: int) -> bool:
+        with self.db:
+            replacement = self.db.execute(
+                "SELECT 1 FROM structured_memory_items WHERE id=? AND owner_id=? "
+                "AND origin_realm=? AND status='active'",
+                (replacement_id, str(scope.user_id), scope.realm),
+            ).fetchone()
+            if replacement is None:
+                return False
+            cursor = self.db.execute(
+                "UPDATE structured_memory_items SET status='superseded', superseded_by=?, "
+                "updated_at=CURRENT_TIMESTAMP WHERE id=? AND owner_id=? AND origin_realm=? "
+                "AND status='active'",
+                (replacement_id, item_id, str(scope.user_id), scope.realm),
+            )
+        return self._rowcount(cursor) == 1
+
+    def delete_structured_memory(self, scope: Scope, item_id: int) -> bool:
+        with self.db:
+            cursor = self.db.execute(
+                "UPDATE structured_memory_items SET status='deleted', updated_at=CURRENT_TIMESTAMP "
+                "WHERE id=? AND owner_id=? AND origin_realm=? AND status!='deleted'",
+                (item_id, str(scope.user_id), scope.realm),
+            )
+        return self._rowcount(cursor) == 1
+
     def forget(self, scope: Scope):
         """Delete this user's history and manual notes across channels in the current realm."""
         with self.db:
             for table in ("turns", "summaries", "shared_calls", "shared_summaries"):
                 self.db.execute(f"DELETE FROM {table} WHERE realm=? AND user_id=?",
                                 (scope.realm, str(scope.user_id)))
+            self.db.execute("DELETE FROM structured_memory_items WHERE origin_realm=? AND owner_id=?",
+                            (scope.realm, str(scope.user_id)))
+            self.db.execute("DELETE FROM structured_memory_cursors WHERE realm=? AND user_id=?",
+                            (scope.realm, str(scope.user_id)))
             self.db.execute("DELETE FROM manual_notes WHERE scope=?", (scope.user_note,))
             self.db.execute("DELETE FROM notes WHERE scope=?", (scope.user_note,))
 
@@ -240,6 +337,10 @@ class Store:
             for table in ("turns", "summaries", "shared_calls", "shared_summaries"):
                 cursor = self.db.execute(f"DELETE FROM {table} WHERE scope LIKE ?", (prefix,))
                 deleted += self._rowcount(cursor)
+            cursor = self.db.execute(
+                "DELETE FROM structured_memory_items WHERE origin_realm=? AND origin_channel_id=?",
+                (scope.realm, str(scope.channel_id)))
+            deleted += self._rowcount(cursor)
         return deleted
 
     def purge_realm_memory(self, scope: Scope) -> int:
@@ -249,6 +350,11 @@ class Store:
             for table in ("turns", "summaries", "shared_calls", "shared_summaries"):
                 cursor = self.db.execute(f"DELETE FROM {table} WHERE realm=?", (scope.realm,))
                 deleted += self._rowcount(cursor)
+            cursor = self.db.execute("DELETE FROM structured_memory_items WHERE origin_realm=?",
+                                     (scope.realm,))
+            deleted += self._rowcount(cursor)
+            cursor = self.db.execute("DELETE FROM structured_memory_cursors WHERE realm=?", (scope.realm,))
+            deleted += self._rowcount(cursor)
             cursor = self.db.execute(
                 "DELETE FROM manual_notes WHERE scope LIKE ?", (scope.realm + ":user:%",))
             deleted += self._rowcount(cursor)
@@ -264,6 +370,10 @@ class Store:
             for table in ("turns", "summaries", "shared_calls", "shared_summaries"):
                 cursor = self.db.execute(f"DELETE FROM {table}")
                 deleted += self._rowcount(cursor)
+            cursor = self.db.execute("DELETE FROM structured_memory_items")
+            deleted += self._rowcount(cursor)
+            cursor = self.db.execute("DELETE FROM structured_memory_cursors")
+            deleted += self._rowcount(cursor)
             cursor = self.db.execute("DELETE FROM manual_notes WHERE instr(scope, ':user:') > 0")
             deleted += self._rowcount(cursor)
             cursor = self.db.execute("DELETE FROM notes WHERE instr(scope, ':user:') > 0")

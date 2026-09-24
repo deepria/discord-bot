@@ -185,11 +185,12 @@ class LLM(InformationPipeline):
                 },
             )
             if response.status == "completed":
-                store.save_structured_memory(scope, through_id=pending[-1]["id"],
-                                             items=parse_items(response.output_text))
+                return store.save_structured_memory(
+                    scope, through_id=pending[-1]["id"], items=parse_items(response.output_text))
         except (ValueError, TypeError):
             # A malformed extraction must leave the independent cursor untouched for retry.
-            return
+            return {"candidates": 0, "written": 0, "rejected": {"invalid_output": 1}}
+        return {"candidates": 0, "written": 0, "rejected": {}}
 
     async def summarize_shared(self, store, scope):
         pending = store.pending_shared(scope)

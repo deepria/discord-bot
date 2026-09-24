@@ -43,6 +43,8 @@ DISCORD_TOKEN=...
 
 Gemini/OpenRouter 설정과 답변 모델·기억 모델 분리는
 [`docs/model-providers.md`](docs/model-providers.md)를 참고하세요.
+구조화 memory의 shadow 저장 범위와 배포 절차는
+[`docs/structured-memory-shadow.md`](docs/structured-memory-shadow.md)를 참고하세요.
 
 테스트:
 

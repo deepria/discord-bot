@@ -523,7 +523,7 @@ class RioClient(discord.Client):
                             )
                         # Commit only after Discord delivery. Never memorize a failed model request.
                         if save_memory and authored_text:
-                            self.store.add(scope, message.id, authored_text, answer)
+                            self.store.add(scope, message.id, authored_text, answer, turn_id=turn_id)
                             self.store.add_shared_call(
                                 scope, message.id, message.author.display_name, authored_text)
                             for summarize in (self.llm.summarize, self.llm.summarize_shared):
@@ -531,6 +531,20 @@ class RioClient(discord.Client):
                                     await summarize(self.store, scope)
                                 except Exception as exc:  # noqa: BLE001 - isolate summary failures; redact logs
                                     log.warning("Memory summary deferred (%s)", type(exc).__name__)
+                            extract = getattr(self.llm, "extract_structured_memory", None)
+                            if extract is not None:
+                                try:
+                                    result = await extract(self.store, scope)
+                                    if result:
+                                        self.events.emit(
+                                            "structured_memory_shadow",
+                                            turn_id=turn_id,
+                                            candidate_count=result["candidates"],
+                                            written_count=result["written"],
+                                            rejected=result["rejected"],
+                                        )
+                                except Exception as exc:  # noqa: BLE001 - retain the reply path on shadow failure
+                                    log.warning("Structured memory extraction deferred (%s)", type(exc).__name__)
                 self.events.emit(
                     "turn.completed",
                     **turn_event_fields(
