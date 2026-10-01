@@ -322,3 +322,25 @@ Discord CDN URL을 usage 로그에 남기는 용도로 사용하지 않습니다
 gh repo clone sendoru/rio-discord-bot
 cd rio-discord-bot
 ```
+
+
+## Console Presence control
+
+The existing Discord client now consumes a Bot-owned SQLite Presence mailbox on its
+event loop. Manual status/activity/text persist in the existing DB and restore on
+ready/resume and restart. Auto initially uses Online / Playing 대기 중; workload-specific
+rules and Streaming are deferred. No extra service, port or runtime dependency is used.
+
+The Control Agent invokes `rio_bot.core.presence.control_main` through the existing
+Bot Python subprocess boundary; it never creates a second Discord client. Presence
+requests are validated, serialized, idempotent and expire after 30 seconds. Gateway
+send/commit failures keep the last committed configuration and trigger restoration,
+with an explicit uncertain outcome. Presence faults are isolated from the conversation
+path. Sends have a five-second minimum interval and a three-second timeout.
+
+`bot_presence`, `bot_presence_requests`, and `bot_presence_audit` are initialized in the
+existing SQLite database during client setup. Audit contains actor/request/outcome
+metadata only, and terminal requests clear their activity payload. There are no new
+environment variables. Deploy Bot support before Agent/Console support. Verify actual
+Discord rendering and ready/resume behavior after deployment; mocked tests do not
+prove remote display.

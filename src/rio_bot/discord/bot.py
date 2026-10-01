@@ -22,6 +22,7 @@ from .events import EventLogger, RuntimeStatusWriter, turn_event_fields
 from .llm import LLM
 from .memory_commands import MemoryCommands, MemoryMode
 from .output_safety import neutralize_mentions
+from .presence import PresenceController
 from .recent import RecentMessages
 from .routing import Scope, chunks, trigger_text
 from .store import Store
@@ -89,6 +90,8 @@ class RioClient(discord.Client):
         self.stopping = False
         self._close_task = None
         self._runtime_config_task = None
+        self._presence = None
+        self._presence_task = None
         self._policy_snapshot = None
         self.safe_allowed_mentions = safe_allowed_mentions(
             allow_users=settings.allow_user_mentions)
@@ -107,6 +110,11 @@ class RioClient(discord.Client):
         self.emoji_admin_ids.add(owner_id)
         await self.emoji_registry.catalog()
         await self.tree.sync()
+        try:
+            self._presence = PresenceController(self)
+            self._presence_task = asyncio.create_task(self._presence.run())
+        except Exception as exc:  # noqa: BLE001 - optional console control must not prevent Discord login.
+            log.warning("Presence initialization failed (%s)", type(exc).__name__)
         if isinstance(self.settings, RuntimeSettings):
             self._policy_snapshot = policy_snapshot(self.settings.base)
             self._runtime_config_task = asyncio.create_task(self._watch_runtime_settings())
@@ -130,6 +138,8 @@ class RioClient(discord.Client):
             log.warning("Runtime settings refresh stopped (%s)", type(exc).__name__)
 
     async def on_ready(self):
+        if self._presence is not None:
+            self._presence.connection_changed(True)
         self._publish_runtime_status(connected=True)
         log.info(
             "Discord connected (id=%s provider=%s model=%s guilds=%s latency_ms=%s)",
@@ -141,8 +151,15 @@ class RioClient(discord.Client):
         )
 
     async def on_disconnect(self):
+        if self._presence is not None:
+            self._presence.connection_changed(False)
         self._publish_runtime_status(connected=False)
         log.warning("Discord disconnected")
+
+    async def on_resumed(self):
+        if self._presence is not None:
+            self._presence.connection_changed(True)
+        self._publish_runtime_status(connected=True)
 
     def _latency_ms(self):
         latency = getattr(self, "latency", float("nan"))
@@ -176,8 +193,15 @@ class RioClient(discord.Client):
 
     async def _close_resources(self):
         self.stopping = True
+        presence = getattr(self, "_presence", None)
+        if presence is not None:
+            presence.connection_changed(False)
         self._publish_runtime_status(connected=False)
         try:
+            presence_task = getattr(self, "_presence_task", None)
+            if presence_task is not None:
+                presence_task.cancel()
+                await asyncio.gather(presence_task, return_exceptions=True)
             runtime_config_task = getattr(self, "_runtime_config_task", None)
             if runtime_config_task is not None:
                 runtime_config_task.cancel()
