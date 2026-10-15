@@ -206,6 +206,10 @@ async def run(args) -> None:
     if not cases:
         raise ValueError("실행할 eval case가 없습니다.")
 
+    if args.validate_only:
+        print(f"validated: {len(cases)} cases; no provider requests")
+        return
+
     settings = eval_settings(args)
     llm = LLM(settings)
     try:
@@ -236,6 +240,8 @@ def parser() -> argparse.ArgumentParser:
     root.add_argument("--model", help="평가에 사용할 모델. 기본은 LLM_MODEL입니다.")
     root.add_argument("--output", help="결과 JSONL 경로. 같은 이름의 .md 리포트도 생성합니다.")
     root.add_argument("--usage-log", default="data/logs/eval-usage.jsonl")
+    root.add_argument("--validate-only", action="store_true",
+                      help="사례 형식만 검사합니다. API key·모델 호출·결과 파일이 필요 없습니다.")
     return root
 
 
