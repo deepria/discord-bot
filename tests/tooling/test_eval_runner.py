@@ -3,8 +3,11 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from rio_bot.eval_runner import case_turns, read_cases, run_case, scope_for
+
+from rio_bot.tooling.eval_runner import parser, run
 
 
 class EvalRunnerTests(unittest.TestCase):
@@ -61,6 +64,17 @@ class EvalRunnerTests(unittest.TestCase):
 
 
 class EvalRunnerAsyncTests(unittest.IsolatedAsyncioTestCase):
+    async def test_validate_only_skips_provider_settings_and_output(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "must-not-exist.jsonl"
+            args = parser().parse_args([
+                "--cases", "evals/conversation_quality_cases.jsonl", "--validate-only",
+                "--output", str(output),
+            ])
+            with patch("rio_bot.tooling.eval_runner.eval_settings", side_effect=AssertionError):
+                await run(args)
+            self.assertFalse(output.exists())
+
     async def test_run_case_passes_channel_context_to_llm(self):
         class FakeLLM:
             settings = SimpleNamespace(history_turns=12, provider="test", model="fake")

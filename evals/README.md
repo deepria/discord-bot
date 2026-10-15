@@ -22,6 +22,24 @@ python scripts/run_prompt_injection_eval.py --repeat 2
 확인하고, 재현 가치가 있으면 JSONL에 회귀 사례로 추가해요. 모델이나 프롬프트를 변경하면
 같은 데이터셋으로 다시 실행해 이전 결과와 비교해요.
 
+## 대화 품질 회귀 평가
+
+`conversation_quality_cases.jsonl`의 Q1~Q9는 모두 합성 사례입니다. 다중 화자 귀속,
+오귀속 정정, assistant 발화 구분, 표시 이름에 의한 권한 오인, 말투 연속성, 기술적
+과도한 동조, 실제 도구 없는 완료 주장, 최근 자기 발화 조회를 검토합니다.
+
+형식 검사는 API key 없이 실행하며 provider·운영 DB·Discord를 사용하지 않습니다.
+
+```bash
+rio-eval --cases evals/conversation_quality_cases.jsonl --validate-only
+```
+
+실제 모델 응답 평가는 별도 provider key가 필요하고 과금될 수 있습니다. 실행 시 기존
+in-memory Store를 사용하며 결과는 `data/evals/`에 기록됩니다. 먼저 한 사례를 실행하고
+확대하려면 `--limit 1`을 사용하세요. `--validate-only` 성공이나 모의 응답 테스트는
+자연어 응답 품질 합격을 뜻하지 않습니다. 실제 출력은 각 `expected` 기준으로 사람이
+검토하고, 다른 사용자의 기억과 충돌하는 경우는 기존 provenance 자동 테스트와 함께 평가합니다.
+
 ## Routing shadow 회귀 평가
 
 `routing_shadow_cases.jsonl`은 일반 대화, 로어, 최신 정보, 이미지 문맥, 긴 문맥,
