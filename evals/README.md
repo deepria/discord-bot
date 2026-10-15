@@ -22,21 +22,6 @@ python scripts/run_prompt_injection_eval.py --repeat 2
 확인하고, 재현 가치가 있으면 JSONL에 회귀 사례로 추가해요. 모델이나 프롬프트를 변경하면
 같은 데이터셋으로 다시 실행해 이전 결과와 비교해요.
 
-## Routing shadow 회귀 평가
-
-`routing_shadow_cases.jsonl`은 일반 대화, 로어, 최신 정보, 이미지 문맥, 긴 문맥,
-답장/인용, 모호한 최신성 질문을 대상으로 합니다. fixture metadata만 이용하는 결정적
-오프라인 검사이므로 API key, Discord 연결, provider 호출이 필요 없고 production routing이나
-web search를 바꾸지 않습니다.
-
-```bash
-uv run rio-routing-eval
-uv run rio-routing-eval --output data/evals/routing-shadow.jsonl
-```
-
-출력에는 사용자 메시지·답변·이미지·기억 원문을 넣지 않습니다. 운영 shadow telemetry의
-품질/비용/지연 비교는 별도로 최소 1주간 수집한 content-free metadata로 검토합니다.
-
 ## 대화 품질 회귀 평가
 
 `conversation_quality_cases.jsonl`의 Q1~Q9는 모두 합성 사례입니다. 다중 화자 귀속,
@@ -54,3 +39,18 @@ in-memory Store를 사용하며 결과는 `data/evals/`에 기록됩니다. 먼�
 확대하려면 `--limit 1`을 사용하세요. `--validate-only` 성공이나 모의 응답 테스트는
 자연어 응답 품질 합격을 뜻하지 않습니다. 실제 출력은 각 `expected` 기준으로 사람이
 검토하고, 다른 사용자의 기억과 충돌하는 경우는 기존 provenance 자동 테스트와 함께 평가합니다.
+
+## Routing shadow 회귀 평가
+
+`routing_shadow_cases.jsonl`은 일반 대화, 로어, 최신 정보, 이미지 문맥, 긴 문맥,
+답장/인용, 모호한 최신성 질문을 대상으로 합니다. fixture metadata만 이용하는 결정적
+오프라인 검사이므로 API key, Discord 연결, provider 호출이 필요 없고 production routing이나
+web search를 바꾸지 않습니다.
+
+```bash
+uv run rio-routing-eval
+uv run rio-routing-eval --output data/evals/routing-shadow.jsonl
+```
+
+출력에는 사용자 메시지·답변·이미지·기억 원문을 넣지 않습니다. 운영 shadow telemetry의
+품질/비용/지연 비교는 별도로 최소 1주간 수집한 content-free metadata로 검토합니다.
