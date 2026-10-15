@@ -34,3 +34,22 @@ the operating procedure. Startup adds nullable/additive columns to an existing d
 rewrite or delete existing rows. Keep the flag `false` until the migration backup and a normal turn
 check are complete. Setting the flag back to `false` immediately stops new shadow writes; it does
 not change answer behavior in either direction.
+
+## Metadata evaluation readiness
+
+`rio-memory-eval --db /path/to/rio.sqlite3` opens an existing database with SQLite
+`mode=ro` and `query_only`. It never creates tables, imports runtime settings, calls
+a provider, reads memory content, or enables retrieval. Its JSON report contains
+lifecycle counts, active-item provenance completeness, and observation timestamps.
+Source IDs and owners are not returned.
+
+The default screening thresholds are 50 **active** items and at least 7 elapsed days
+since the first valid active item. Deleted/superseded rows do not satisfy the sample
+threshold. Blank, partial, or mismatched source links and invalid/future timestamps
+block readiness. Thresholds can be set explicitly with `--min-items` and `--min-days`.
+
+`ready_for_metadata_review` only permits further metadata assessment: elapsed time
+does not prove continuous collection or representative samples. Quality, attribution,
+privacy, deletion/correction behavior, extraction errors, and token/latency costs still
+need separate evaluation. Content review requires its own authorization; retrieval
+must remain off until that evaluation passes.
