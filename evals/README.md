@@ -36,3 +36,10 @@ uv run rio-routing-eval --output data/evals/routing-shadow.jsonl
 
 출력에는 사용자 메시지·답변·이미지·기억 원문을 넣지 않습니다. 운영 shadow telemetry의
 품질/비용/지연 비교는 별도로 최소 1주간 수집한 content-free metadata로 검토합니다.
+
+## 구조화 기억 평가 준비
+
+`rio-memory-eval --db /path/to/rio.sqlite3`는 기존 DB를 읽기 전용으로 열어 활성 표본 수,
+출처 연결 완결성, 관찰 기간만 집계합니다. 기본 기준은 활성 50건과 7일이며, 본문·사용자 ID·
+출처 ID를 출력하지 않습니다. metadata 검토 준비 여부와 실제 retrieval 승인 여부는 별개입니다.
+세부 한계와 평가 조건은 `docs/structured-memory-shadow.md`를 참조하세요.
