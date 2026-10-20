@@ -83,3 +83,15 @@ def test_forget_removes_structured_items_and_cursors():
     store.forget(scope)
     assert store.db.execute("SELECT COUNT(*) FROM structured_memory_items").fetchone()[0] == 0
     assert store.db.execute("SELECT COUNT(*) FROM structured_memory_cursors").fetchone()[0] == 0
+
+
+
+def test_normal_hangul_normalization_does_not_invent_or_discard_meaning():
+    import unicodedata
+    scope = Scope(1, 10, 20, public_at_capture=True)
+    store = make_store(scope)
+    text = "간결한 답변을 선호한다."
+    store.save_structured_memory(scope, through_id=2,
+                                 items=[make_item(101, content=unicodedata.normalize("NFD", text))])
+    assert store.active_structured_memory(scope)[0]["content"] == text
+    store.close()

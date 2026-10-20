@@ -563,6 +563,7 @@ class RioClient(discord.Client):
                                         self.events.emit(
                                             "structured_memory_shadow",
                                             turn_id=turn_id,
+                                            memory_policy_version=result.get("policy_version"),
                                             candidate_count=result["candidates"],
                                             written_count=result["written"],
                                             rejected=result["rejected"],

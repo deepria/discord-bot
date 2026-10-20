@@ -38,3 +38,9 @@
 이 event stream과 usage JSONL에는 Discord 발화·답변, prompt, provider 원문 요청·응답, 이미지 bytes/URL,
 첨부 파일명, API key/token/Bearer header/webhook URL, memory 본문을 기록하지 않는다. telemetry 쓰기 실패는
 Discord 응답 경로를 실패시키지 않는다.
+
+
+Structured shadow extraction usage rows additionally carry the fixed `memory_policy_version`
+and numeric `memory_input_chars`. Runtime shadow events can include `memory_policy_version`
+alongside existing counts and rejection categories (`context_budget` for omitted evidence).
+These fields contain no user names, source IDs, memory contents, prompts, or provider bodies.

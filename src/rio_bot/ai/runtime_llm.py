@@ -6,8 +6,8 @@ from .model_routing import build_memory_model_plan
 from .providers import Gemini503FallbackClient, create_provider_client
 from .routing_plan import RoutingPlan, build_routing_plan
 from .structured_memory import POLICY as STRUCTURED_MEMORY_POLICY
+from .structured_memory import POLICY_VERSION, build_extraction_input, parse_items
 from .structured_memory import RESPONSE_FORMAT as STRUCTURED_MEMORY_RESPONSE_FORMAT
-from .structured_memory import parse_items
 from .vision import VISION_REQUEST_ACTIVE, wrap_vision_client
 
 SUMMARY_POLICY = BASE_SUMMARY_POLICY + """
@@ -171,9 +171,22 @@ class LLM(InformationPipeline):
         pending = store.pending_structured_memory(scope)
         if len(pending) < 2:
             return
-        payload = {"capture": "channel" if scope.public_at_capture else "owner_private", "turns": [
-            {"message_id": row["message_id"], "user": row["content"]} for row in pending
-        ]}
+        payload = build_extraction_input(
+            pending, store.structured_memory_context(scope, before_id=pending[0]["id"]),
+            capture="channel" if scope.public_at_capture else "owner_private",
+            max_chars=self.settings.history_max_chars,
+        )
+        eligible = set(payload["eligible_source_message_ids"])
+        omitted = {}
+        for row in payload["turns"]:
+            if not row["complete"]:
+                reason = row["omitted_reason"]
+                omitted[reason] = omitted.get(reason, 0) + 1
+        if not eligible:
+            result = store.save_structured_memory(scope, through_id=pending[-1]["id"], items=[])
+            result["rejected"] = omitted
+            result["policy_version"] = POLICY_VERSION
+            return result
         try:
             response = await self.usage.request(
                 self.memory_client, "structured_memory_shadow", model=self.settings.memory_model,
@@ -184,11 +197,22 @@ class LLM(InformationPipeline):
                 _rio_telemetry={
                     "provider": self.settings.memory_provider or self.settings.provider,
                     "structured_memory_lifecycle": "extract",
+                    "memory_policy_version": POLICY_VERSION,
+                    "memory_input_chars": len(json.dumps(payload, ensure_ascii=False)),
                 },
             )
             if response.status == "completed":
-                return store.save_structured_memory(
-                    scope, through_id=pending[-1]["id"], items=parse_items(response.output_text))
+                items = parse_items(response.output_text)
+                for item in items:
+                    if not isinstance(item, dict) or any(
+                        str(source) not in eligible for source in item.get("source_message_ids", [])
+                    ):
+                        raise ValueError("structured memory cited ineligible context")
+                result = store.save_structured_memory(
+                    scope, through_id=pending[-1]["id"], items=items)
+                result["policy_version"] = POLICY_VERSION
+                result["rejected"].update(omitted)
+                return result
         except (ValueError, TypeError):
             # A malformed extraction must leave the independent cursor untouched for retry.
             return {"candidates": 0, "written": 0, "rejected": {"invalid_output": 1}}

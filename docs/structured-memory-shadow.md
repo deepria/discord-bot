@@ -53,3 +53,52 @@ does not prove continuous collection or representative samples. Quality, attribu
 privacy, deletion/correction behavior, extraction errors, and token/latency costs still
 need separate evaluation. Content review requires its own authorization; retrieval
 must remain off until that evaluation passes.
+
+
+## Context and purpose policy v2
+
+The `context-purpose-v2` extractor reads chronological user/Rio exchanges in the current
+conversation, with one retained preceding exchange for interpretation only. Only complete new
+user turns are eligible sources; the server rejects citations to context-only or omitted turns.
+Input is bounded to 3,000–12,000 characters (using the configured history budget within these
+bounds). Oversized exchanges are omitted as a whole, never cut into misleading evidence; a
+batch with no usable evidence advances its shadow cursor without a provider request.
+
+Message creation time (derived with discord.py) and database write time are distinct. No user
+local timezone is inferred. The policy must abstain when relative dates or a statement's meaning
+cannot be established. Normal Hangul is normalized to NFC at validation; this is not a semantic
+repair or a guarantee that garbled model prose is detected deterministically.
+
+The policy separates usefulness and durability from accuracy. One-off menu acceptance, criticism
+of Rio's proposals, temporary work decisions and vague evaluations do not establish lasting
+preferences. Assistant replies are untrusted context, never independent user evidence.
+Existing summary memory and the answer path are unchanged. Version/input-size telemetry contains
+no conversation text or source IDs. Existing candidates are not re-extracted or rewritten.
+
+## Synthetic extraction evaluation
+
+`rio-memory-extraction-eval --validate-only` checks fixtures without credentials, provider calls,
+DB creation, or output artifacts. This is distinct from the metadata-only `rio-memory-eval` and
+from `rio-eval`, which evaluates conversational answers.
+
+For real extraction comparisons, run from the Bot checkout with the existing memory provider
+credentials and explicit `MEMORY_MODEL` (or `--provider`/`--model` overrides):
+
+```bash
+python -m rio_bot.tooling.memory_extraction_eval --policy baseline --output data/evals/memory-baseline.jsonl
+python -m rio_bot.tooling.memory_extraction_eval --policy current --output data/evals/memory-current.jsonl
+```
+
+These commands make paid provider calls using synthetic fixtures only. They use isolated in-memory
+stores and do not log in to Discord, read production memory, or change production settings. Output
+contains synthetic candidate summaries for manual review. Count checks (including positive controls)
+are automatic, but matching counts never establish semantic correctness: every result is marked
+`manual_review_required`. Missing memory model configuration fails rather than silently evaluating
+the answer model. Provider failures are recorded by exception type only and do not abort other cases.
+Policy v2 and the frozen v1 baseline are selected only in this evaluation tool; production always
+uses the current policy. Add `--usage-log` for content-free token and latency comparison.
+
+Legacy turns without an existing processing turn ID are ineligible new evidence and are counted
+as `missing_turn_provenance`. They are not backfilled or silently converted into linked facts.
+Their completed shadow batch advances without manufacturing IDs; historical candidate rows are
+not changed.
