@@ -1,4 +1,5 @@
 import sqlite3
+import unicodedata
 from pathlib import Path
 
 from .routing import Scope
@@ -199,9 +200,15 @@ class Store:
         return self.db.execute("SELECT * FROM turns WHERE scope=? AND id>? ORDER BY id LIMIT ?",
                                (scope.conversation, self.structured_memory_cursor(scope), limit)).fetchall()
 
+    def structured_memory_context(self, scope: Scope, *, before_id: int):
+        """One retained preceding exchange, for interpretation only, never new evidence."""
+        return self.db.execute(
+            "SELECT * FROM turns WHERE scope=? AND id<? ORDER BY id DESC LIMIT 1",
+            (scope.conversation, before_id)).fetchall()
+
     def save_structured_memory(self, scope: Scope, *, through_id: int, items: list[dict]):
         pending = self.pending_structured_memory(scope)
-        sources = {str(row["message_id"]) for row in pending}
+        sources = {str(row["message_id"]) for row in pending if row["id"] <= through_id}
         if through_id not in {int(row["id"]) for row in pending}:
             raise ValueError("structured memory cursor must end inside the pending batch")
         normalized = [self._validate_structured_item(scope, item, sources) for item in items]
@@ -263,6 +270,8 @@ class Store:
         source_ids, confidence, disclosure = item.get("source_message_ids"), item.get("confidence"), item.get("disclosure")
         if kind not in {"fact", "event", "preference", "relationship", "boundary", "task"}:
             raise ValueError("invalid structured memory kind")
+        if isinstance(content, str):
+            content = unicodedata.normalize("NFC", content)
         if not isinstance(content, str) or not 1 <= len(content.strip()) <= 600:
             raise ValueError("structured memory content must be 1~600 chars")
         if not isinstance(source_ids, list) or not source_ids or len(source_ids) > 8:
@@ -275,7 +284,7 @@ class Store:
         expected = "channel" if scope.public_at_capture else "owner_private"
         if disclosure != expected:
             raise ValueError("structured memory disclosure does not match capture scope")
-        return {"kind": kind, "content": content.strip(), "disclosure": disclosure,
+        return {"kind": kind, "content": unicodedata.normalize("NFC", content.strip()), "disclosure": disclosure,
                 "source_message_ids": source_ids, "confidence": float(confidence)}
 
     def active_structured_memory(self, scope: Scope):
