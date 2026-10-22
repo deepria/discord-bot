@@ -96,6 +96,7 @@ class Settings:
     history_max_chars: int = 12000
     usage_log_path: str = "data/logs/usage.jsonl"
     event_log_path: str = "data/logs/events.jsonl"
+    telemetry_db_path: str = ""
     channel_context_chars: int = 6000
     bot_admin_ids: frozenset[int] = frozenset()
     lore_path: str = ""
@@ -311,6 +312,8 @@ class Settings:
             history_max_chars=int(os.getenv("HISTORY_MAX_CHARS", "12000")),
             usage_log_path=os.getenv("USAGE_LOG_PATH", "data/logs/usage.jsonl"),
             event_log_path=os.getenv("EVENT_LOG_PATH", "data/logs/events.jsonl"),
+            telemetry_db_path=os.getenv("TELEMETRY_DB_PATH", str(
+                Path(os.getenv("DATABASE_PATH", "data/rio.sqlite3")).parent / "telemetry.sqlite3")),
             lore_path=os.getenv("LORE_PATH", ""),
             lore_max_items=int(os.getenv("LORE_MAX_ITEMS", "6")),
             lore_max_chars=int(os.getenv("LORE_MAX_CHARS", "3200")),

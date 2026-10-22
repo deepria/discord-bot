@@ -1,0 +1,9 @@
+[Unit]
+Description=Expire Rio retained telemetry (30-day trace / 90-day usage)
+ConditionPathExists=/opt/rio-discord-bot/data/telemetry.sqlite3
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/rio-discord-bot
+ExecStart=/opt/rio-discord-bot/.venv/bin/python -m rio_bot.tooling.telemetry_retention --db /opt/rio-discord-bot/data/telemetry.sqlite3 --apply
+Nice=10

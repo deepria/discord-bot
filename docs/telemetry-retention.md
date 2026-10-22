@@ -46,6 +46,12 @@ journald는 JSONL 파일과 별도 저장소이며 전체 journal 설정을 Bot 
 추가 logrotate/backup/timer가 있으면 실제 대상·주기·삭제 조건을 확인하고,
 압축·외부 아카이브는 이 도구의 검색 범위 밖이라고 기록한다.
 
-현재 runtime에는 일별 90일 집계 저장소와 기간 기반 삭제가 없다.
+기존 JSONL runtime에는 일별 90일 집계 저장소와 기간 기반 삭제가 없다.
 최대 보관 기간인지 최소 조회 가능 기간인지, 원시 usage와 일별 집계의 필드·용량·삭제 기준을
 확정한 뒤 별도 변경으로 구현한다. 이 점검 도구는 파일 삭제·보존 설정 변경을 하지 않는다.
+
+## Period storage implementation
+
+The new [retained telemetry store](retained-telemetry.md) separates trace/Usage period queries
+from these operational JSONL files. Its expiry timer requires explicit host installation;
+this inventory still describes the legacy JSONL files, not the new database's coverage.

@@ -68,7 +68,7 @@ class RioClient(discord.Client):
         self.settings = settings
         self.store = store or Store(settings.db_path, settings.history_turns)
         self.llm = llm or LLM(settings)
-        self.events = EventLogger(settings.event_log_path)
+        self.events = EventLogger(settings.event_log_path, telemetry_path=settings.telemetry_db_path)
         status_path = (
             Path(settings.event_log_path).with_name("status.json")
             if settings.event_log_path

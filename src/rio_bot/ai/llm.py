@@ -122,7 +122,7 @@ class LLM:
         self.runtime_lore = RuntimeKnowledgeRegistry(self.admin_db, kind="world_fact")
         self.story_context = RuntimeKnowledgeRegistry(self.admin_db, kind="interpretation")
         self.lore = LoreIndex.load(settings.lore_path)
-        self.usage = UsageLogger(settings.usage_log_path)
+        self.usage = UsageLogger(settings.usage_log_path, telemetry_path=settings.telemetry_db_path)
 
     async def close(self):
         try:

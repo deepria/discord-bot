@@ -6,6 +6,8 @@ from datetime import UTC, datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+from rio_bot.core.retained_telemetry import RetainedTelemetry
+
 EVENT_SCHEMA_VERSION = 1
 
 
@@ -40,8 +42,9 @@ def turn_event_fields(turn_id: str, telemetry: dict, *, status: str, latency_ms:
 
 
 class EventLogger:
-    def __init__(self, path: str):
+    def __init__(self, path: str, *, telemetry_path: str = ""):
         self.handler = self._handler(path)
+        self.retained = RetainedTelemetry(telemetry_path)
 
     @staticmethod
     def _handler(path: str):
@@ -73,7 +76,7 @@ class EventLogger:
         return safe
 
     def emit(self, event: str, **fields):
-        if not self.handler:
+        if not self.handler and self.retained.path is None:
             return
         row = {
             "at": datetime.now(UTC).isoformat(),
@@ -82,17 +85,14 @@ class EventLogger:
             **self._safe_fields(fields),
         }
         try:
-            self.handler.handle(logging.LogRecord(
-                "rio.events",
-                logging.INFO,
-                "",
-                0,
-                json.dumps(row, ensure_ascii=False),
-                (),
-                None,
-            ))
+            if self.handler:
+                self.handler.handle(logging.LogRecord(
+                    "rio.events", logging.INFO, "", 0,
+                    json.dumps(row, ensure_ascii=False), (), None,
+                ))
         except OSError:
             logging.getLogger("rio").warning("Event log write failed")
+        self.retained.event(row)
 
     def close(self):
         if self.handler:
