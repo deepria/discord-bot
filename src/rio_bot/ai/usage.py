@@ -10,6 +10,8 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from time import perf_counter
 
+from rio_bot.core.retained_telemetry import RetainedTelemetry
+
 _TOKEN_FIELDS = ("input_tokens", "output_tokens", "total_tokens", "cached_tokens", "reasoning_tokens")
 
 # Kept temporarily for backwards-compatible imports; runtime search policy now lives in LLM.
@@ -101,7 +103,8 @@ class EmptyProviderResponseError(RuntimeError):
 
 
 class UsageLogger:
-    def __init__(self, path: str):
+    def __init__(self, path: str, *, telemetry_path: str = ""):
+        self.retained = RetainedTelemetry(telemetry_path)
         self.handler = self._handler(path)
         self.exchange_handler = None
         if path:
@@ -305,3 +308,4 @@ class UsageLogger:
             row["elapsed_ms"] = round((perf_counter() - started) * 1000)
             self._accumulate(row)
             self._emit(self.handler, row)
+            self.retained.usage(row)

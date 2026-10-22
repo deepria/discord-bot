@@ -344,3 +344,7 @@ metadata only, and terminal requests clear their activity payload. There are no 
 environment variables. Deploy Bot support before Agent/Console support. Verify actual
 Discord rendering and ready/resume behavior after deployment; mocked tests do not
 prove remote display.
+
+기간 보존: [Retained telemetry](docs/retained-telemetry.md)는 별도 content-free 저장소에
+trace 30일·Usage 집계용 수치 90일을 보관한다. 기존 JSONL은 유지하며, 만료 정리 timer는
+호스트에서 preview 확인 후 설치해야 한다. 설치 전 과거 기간의 보존 완료를 뜻하지 않는다.
