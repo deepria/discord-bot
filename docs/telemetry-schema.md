@@ -44,3 +44,6 @@ Structured shadow extraction usage rows additionally carry the fixed `memory_pol
 and numeric `memory_input_chars`. Runtime shadow events can include `memory_policy_version`
 alongside existing counts and rejection categories (`context_budget` for omitted evidence).
 These fields contain no user names, source IDs, memory contents, prompts, or provider bodies.
+
+실제 JSONL 보관 기간과 호스트 설정의 읽기 전용 확인은
+[Telemetry retention audit](telemetry-retention.md)를 참고한다.
