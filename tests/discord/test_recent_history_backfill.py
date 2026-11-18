@@ -101,3 +101,16 @@ class HistoryBackfillTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(channel.kwargs["before"], current)
         self.assertEqual(channel.kwargs["limit"], self.bot.recent.limit)
         self.assertGreater(channel.kwargs["after"], now - timedelta(minutes=16))
+
+
+    async def test_backfill_preserves_narration_only_message_and_author(self):
+        now = datetime.now(UTC)
+        channel = FakeHistoryChannel([
+            self.old_message(1, "> 선생은 조용히 웃었다.", now - timedelta(minutes=1)),
+        ])
+        current = NS(id=10, created_at=now, channel=channel)
+        scope = Scope(1, 10, 200, True)
+        await self.bot.hydrate_recent_history(current, scope)
+        row, = self.bot.recent.context(scope, current.id)
+        self.assertEqual(row["content"], "> 선생은 조용히 웃었다.")
+        self.assertEqual(row["author_user_id"], "100")

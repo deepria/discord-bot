@@ -238,9 +238,26 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
 
         args, kwargs = self.llm.answer.call_args
         self.assertEqual(args[3], "이 주장 맞아?")
-        self.assertEqual(kwargs["quoted_text"], quoted)
+        self.assertEqual(kwargs["message_segments"], [
+            {"kind": "narration", "content": quoted},
+            {"kind": "dialogue", "content": "이 주장 맞아?"},
+        ])
         self.assertEqual(self.store.history(Scope(1, 10, 100))[0]["content"], "이 주장 맞아?")
         self.assertNotIn(quoted, str(self.store.history(Scope(1, 10, 100))))
+
+    async def test_narration_only_call_reaches_model_without_persistent_memory(self):
+        await self.bot.on_message(self.message("리오야 > 선생은 조용히 웃었다."))
+        args, kwargs = self.llm.answer.call_args
+        self.assertEqual(args[3], "")
+        self.assertEqual(kwargs["message_segments"], [
+            {"kind": "narration", "content": "선생은 조용히 웃었다."},
+        ])
+        self.assertEqual(self.store.history(Scope(1, 10, 100)), [])
+        self.channel.send.assert_awaited()
+
+    async def test_passive_narration_does_not_trigger_a_response(self):
+        await self.bot.on_message(self.message("> 선생은 조용히 웃었다."))
+        self.llm.answer.assert_not_awaited()
 
     async def test_user_mentions_can_be_disabled_without_allowing_mass_mentions(self):
         self.bot.safe_allowed_mentions = self.bot.safe_allowed_mentions.__class__(
