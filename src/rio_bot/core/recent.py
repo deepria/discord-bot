@@ -2,8 +2,6 @@
 import time
 from collections import OrderedDict, deque
 
-from .message_provenance import split_inline_quotes
-
 
 class RecentMessages:
     def __init__(self, limit=30, ttl=900, channels=128, budget=6000):
@@ -32,9 +30,9 @@ class RecentMessages:
         reply_target_user_id=None,
         direct_trigger=False,
     ):
-        # Rolling context can contain passive messages from any channel participant. Keep only
-        # the author's direct words; an inline Markdown quote has no trustworthy author binding.
-        content, _ = split_inline_quotes(content)
+        # Preserve scene markup in ephemeral context, including narration-only messages.
+        # Request assembly separates narration from spoken dialogue before model delivery.
+        content = str(content or "")
         if not content:
             return
         now = time.monotonic()

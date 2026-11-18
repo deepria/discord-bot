@@ -95,3 +95,49 @@ async def test_relationship_uses_current_author_id_not_name_or_guild_permissions
     finally:
         await llm.close()
         store.close()
+
+
+@pytest.mark.asyncio
+async def test_narration_is_delivered_in_order_with_dialogue_only_output_policy():
+    from rio_bot.core.message_provenance import message_segments
+
+    calls = []
+
+    def handler(request):
+        calls.append(json.loads(request.content))
+        return httpx.Response(200, json=_response())
+
+    client = AsyncOpenAI(
+        api_key="test-not-a-real-key",
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+    llm = LLM(Settings("test", "test", external_context_policy="full"), client=client)
+    store = Store(":memory:")
+    scene = message_segments("> 선생은 리오를 내려다보며 웃었다.\n> 리오는 웃기로 했다.")
+    try:
+        await llm.answer(
+            store, Scope(1, 10, 100), "사용자", "", message_segments=scene,
+            channel_context=[{
+                "role": "user", "user_id": "200", "name": "다른 사람",
+                "message_id": "1", "content": "> 문을 열었다.\n안녕",
+            }],
+        )
+        payload = calls[-1]
+        reference = json.loads(payload["input"][0]["content"].split("\n", 1)[1])
+        current = reference["current_user_message"]
+        assert current["content"] == ""
+        assert current["message_segments"] == scene
+        assert current["author_id"] == "100"
+        assert reference["inline_quoted_text"] == []
+        prior, = reference["channel_recent_messages"]
+        assert prior["author_id"] == "200"
+        assert prior["message_segments"] == [
+            {"kind": "narration", "content": "문을 열었다."},
+            {"kind": "dialogue", "content": "안녕"},
+        ]
+        assert payload["input"][-1]["content"]
+        assert "리오는 대사로만 답하세요" in payload["instructions"]
+        assert "속마음은 들은 말처럼 다루지" in payload["instructions"]
+    finally:
+        await llm.close()
+        store.close()

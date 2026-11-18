@@ -124,6 +124,7 @@ class InformationPipeline(RequestAssembler):
         use_memory: bool = True,
         routing_plan: RoutingPlan | None = None,
         quoted_text: str = "",
+        message_segments: list[dict[str, str]] | None = None,
         message_id: str | int | None = None,
     ) -> str:
         routing = routing_plan or RoutingPlan(content, content)
@@ -144,6 +145,7 @@ class InformationPipeline(RequestAssembler):
                 use_memory=use_memory,
                 information_plan=information,
                 quoted_text=quoted_text,
+                message_segments=message_segments,
                 message_id=message_id,
             )
         finally:

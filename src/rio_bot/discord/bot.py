@@ -10,7 +10,7 @@ from uuid import uuid4
 
 import discord
 
-from rio_bot.core.message_provenance import split_inline_quotes
+from rio_bot.core.message_provenance import message_segments, split_inline_quotes
 from rio_bot.core.runtime_config import RuntimeSettings
 from rio_bot.core.runtime_settings_service import apply_runtime_side_effects
 from rio_bot.core.runtime_settings_snapshot import policy_snapshot
@@ -382,7 +382,7 @@ class RioClient(discord.Client):
             return
         text = trigger_text(message, self.user.id, self.settings.dm_always_reply,
                             self.settings.call_prefixes)
-        authored_text, quoted_text = split_inline_quotes(text) if text is not None else ("", "")
+        authored_text, _ = split_inline_quotes(text) if text is not None else ("", "")
         if self.pending_count >= 100:
             return
         public_at_capture = False
@@ -419,7 +419,7 @@ class RioClient(discord.Client):
                 scope,
                 message.id,
                 message.author.display_name,
-                authored_text if text is not None else message.content,
+                text if text is not None else message.content,
                 direct_trigger=text is not None,
             )
         if text is None:
@@ -511,7 +511,7 @@ class RioClient(discord.Client):
                                                  if guild_id is not None and use_chat_log else []),
                                 use_memory=use_memory,
                                 emoji_catalog=emoji_catalog,
-                                quoted_text=quoted_text,
+                                message_segments=message_segments(text),
                                 message_id=str(message.id))
                             self.events.emit(
                                 "ai_request_completed",
