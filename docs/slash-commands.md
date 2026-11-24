@@ -52,7 +52,8 @@ memory/chatlog 설정 자체는 유지합니다.
 | `/config set key:<설정> value:<값>` | DB override 저장 후 즉시 적용 |
 | `/config reset key:<설정>` | DB override 삭제 후 시작 시 값으로 복귀 |
 
-대상 설정은 `CALL_PREFIXES`, `DM_ALWAYS_REPLY`, `PUBLIC_SERVER_MEMORY_IN_DM`, `CHAT_WEB_SEARCH`,
+대상 설정은 `CALL_PREFIXES`, `DM_ALWAYS_REPLY`, `ALWAYS_REPLY_CHANNEL_IDS`,
+`PUBLIC_SERVER_MEMORY_IN_DM`, `CHAT_WEB_SEARCH`,
 `COMMUNITY_LORE`, `MAX_OUTPUT_TOKENS`, `CHANNEL_CONTEXT_CHARS`, `HISTORY_MAX_CHARS`,
 `LORE_MAX_ITEMS`, `LORE_MAX_CHARS`, `RUNTIME_DEFAULT_LOCATION`입니다.
 
@@ -60,6 +61,20 @@ memory/chatlog 설정 자체는 유지합니다.
 값은 여전히 배포 기본값으로 사용할 수 있고, `/config reset`은 해당 DB override만 지웁니다.
 `RUNTIME_DEFAULT_LOCATION`을 명시적으로 비우려면 `/config set`의 value에 `none`을 사용합니다.
 `CALL_PREFIXES`는 쉼표 구분 문자열, 불리언 값은 `on/off` 또는 `true/false`를 받습니다.
+
+### 서버 채널 자동응답
+
+| 명령 | 기능 |
+| --- | --- |
+| `/config always-reply enable [channel]` | 채널에서 사람의 일반 메시지에 자동으로 답하기 |
+| `/config always-reply status [channel]` | 채널의 자동응답 상태와 설정 출처 확인 |
+| `/config always-reply disable [channel]` | 채널에서 일반 메시지에 답하려면 호출어 또는 멘션이 필요하도록 복귀 |
+
+`channel`을 생략하면 현재 채널을 사용합니다. 같은 서버의 텍스트 채널이나 스레드를 선택할
+수 있습니다. 채널과 스레드는 각각 설정합니다. 기본값은 전체 꺼짐이며, 시작 설정으로 지정하려면
+`ALWAYS_REPLY_CHANNEL_IDS`에 채널 ID를 쉼표로 구분해 넣습니다.
+
+자동응답으로 처리한 메시지에도 일반 호출과 같은 기억·채팅 로그 설정이 적용됩니다.
 
 ## 최근 채널 대화 문맥
 

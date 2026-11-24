@@ -27,7 +27,8 @@ class Scope:
 
 
 def trigger_text(message, bot_id: int, dm_always_reply: bool = False,
-                 prefixes: tuple[str, ...] = ("리오야",)) -> str | None:
+                 prefixes: tuple[str, ...] = ("리오야",), *,
+                 always_reply_channel_ids: tuple[int, ...] = ()) -> str | None:
     if message.author.bot or message.webhook_id is not None:
         return None
     raw = message.content.lstrip()
@@ -37,6 +38,10 @@ def trigger_text(message, bot_id: int, dm_always_reply: bool = False,
     matched = max((prefix for prefix in prefixes if raw.startswith(prefix)),
                   key=len, default=None)
     keyword = matched is not None
+    if message.guild is not None and always_reply_channel_ids:
+        channel_id = getattr(getattr(message, "channel", None), "id", None)
+        if channel_id in always_reply_channel_ids and not (ping or keyword):
+            return raw.strip()
     if not (ping or keyword or (message.guild is None and dm_always_reply)):
         return None
     raw = re.sub(rf"<@!?{bot_id}>", "", raw).lstrip()

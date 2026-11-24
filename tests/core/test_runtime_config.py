@@ -30,6 +30,7 @@ def test_settings_load_uses_code_defaults_when_runtime_env_is_absent(monkeypatch
     for name in (
         "CALL_PREFIXES",
         "DM_ALWAYS_REPLY",
+        "ALWAYS_REPLY_CHANNEL_IDS",
         "PUBLIC_SERVER_MEMORY_IN_DM",
         "EXTERNAL_CONTEXT_POLICY",
         "MODEL_ROUTING_MODE",
@@ -54,6 +55,7 @@ def test_settings_load_uses_code_defaults_when_runtime_env_is_absent(monkeypatch
     settings = Settings.load()
     assert settings.call_prefixes == ("리오야",)
     assert settings.dm_always_reply is False
+    assert settings.always_reply_channel_ids == ()
     assert settings.public_memory_in_dm is True
     assert settings.external_context_policy == "bot_interactions_only"
     assert settings.model_routing_mode == "fixed"
@@ -116,6 +118,9 @@ def test_runtime_override_is_immediate_and_survives_reload(tmp_path: Path):
     assert settings.set_text("CHANNEL_CONTEXT_CHARS", "8000") == 8000
     assert settings.set_text("chat_web_search", "off") is False
     assert settings.set_text("CALL_PREFIXES", "리오야, 리오") == ("리오야", "리오")
+    assert settings.set_text("ALWAYS_REPLY_CHANNEL_IDS", "20, 10, 20") == (10, 20)
+    with pytest.raises(ValueError, match="채널 ID"):
+        settings.set_text("ALWAYS_REPLY_CHANNEL_IDS", "10, -20")
     store.close()
 
     store = Store(str(db))
@@ -124,6 +129,8 @@ def test_runtime_override_is_immediate_and_survives_reload(tmp_path: Path):
         assert reloaded.channel_context_chars == 8000
         assert reloaded.chat_web_search is False
         assert reloaded.call_prefixes == ("리오야", "리오")
+        assert reloaded.always_reply_channel_ids == (10, 20)
+        assert reloaded.set_text("ALWAYS_REPLY_CHANNEL_IDS", "none") == ()
         assert reloaded.source("CHANNEL_CONTEXT_CHARS") == "db"
     finally:
         store.close()

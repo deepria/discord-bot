@@ -196,12 +196,7 @@ class RioClient(BaseRioClient):
     async def on_message(self, message):
         if self.user is None:
             return await super().on_message(message)
-        text = trigger_text(
-            message,
-            self.user.id,
-            self.settings.dm_always_reply,
-            self.settings.call_prefixes,
-        )
+        text = self.message_trigger(message)
         scope = Scope(
             message.guild.id if message.guild else None,
             message.channel.id,
