@@ -1,16 +1,82 @@
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace as NS
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
+import discord
 import pytest
 from rio_bot.config import Settings
 from rio_bot.routing import Scope
 from rio_bot.store import Store
 from rio_bot.web_bot import RioClient
 
+from rio_bot.core.runtime_config import RuntimeSettings
 from rio_bot.discord.chatlog_capture import set_capture_mode_override
+from rio_bot.discord.config_commands import ConfigCommands
 from rio_bot.discord.reply_context import REPLY_CONTEXT, collect_reply_context
 from rio_bot.discord.target_recent import TargetAwareRecentMessages
+
+
+@pytest.mark.asyncio
+async def test_always_reply_command_only_changes_the_selected_channel():
+    store = Store(":memory:")
+    settings = RuntimeSettings(
+        Settings("test", "test", cooldown=0, bot_admin_ids=frozenset({100}),
+                 always_reply_channel_ids=(30,), event_log_path=""),
+        store,
+    )
+    llm = NS(
+        answer=AsyncMock(return_value="응"), summarize=AsyncMock(),
+        summarize_shared=AsyncMock(), close=AsyncMock(),
+    )
+    bot = RioClient(settings, store=store, llm=llm)
+    bot._connection.user = NS(id=99)
+    guild = NS(id=1, emojis=[], me=NS(), default_role=NS())
+    channel = MagicMock(spec=discord.TextChannel, id=10, guild=guild)
+    channel.send = AsyncMock(return_value=NS(id=1000))
+    channel.typing.return_value.__aenter__ = AsyncMock()
+    channel.typing.return_value.__aexit__ = AsyncMock()
+    channel.permissions_for.return_value = NS(view_channel=False, read_message_history=True)
+    admin = NS(id=100, bot=False, display_name="사용자")
+    interaction = NS(
+        id=201, user=NS(id=200), channel=channel, guild_id=1,
+        response=NS(send_message=AsyncMock()),
+    )
+    commands = ConfigCommands(bot).get_command("always-reply")
+    enable = commands.get_command("enable")
+    disable = commands.get_command("disable")
+    message = NS(
+        id=1, content="호출어 없이 안녕", author=admin, guild=guild, channel=channel,
+        mentions=[], webhook_id=None,
+    )
+
+    try:
+        assert not await enable._check_can_run(interaction)
+        await bot.on_message(message)
+        llm.answer.assert_not_awaited()
+
+        interaction.user = admin
+        assert await enable._check_can_run(interaction)
+        await enable.callback(enable.binding, interaction)
+        assert settings.always_reply_channel_ids == (10, 30)
+
+        await bot.on_message(message)
+        channel.send.assert_awaited_once()
+        assert llm.answer.call_args.args[3] == message.content
+        for other in (
+            {"channel": NS(id=20)},
+            {"author": NS(id=101, bot=True, display_name="다른 봇")},
+            {"webhook_id": 300},
+        ):
+            await bot.on_message(NS(**(vars(message) | {"id": 2} | other)))
+        llm.answer.assert_awaited_once()
+
+        interaction.id = 202
+        await disable.callback(disable.binding, interaction)
+        assert settings.always_reply_channel_ids == (30,)
+        await bot.on_message(NS(**(vars(message) | {"id": 3})))
+        llm.answer.assert_awaited_once()
+    finally:
+        await bot.close()
 
 
 class FakeHistoryChannel:

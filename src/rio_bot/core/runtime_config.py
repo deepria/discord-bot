@@ -8,7 +8,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Any
 
-from .config import Settings, parse_call_prefixes
+from .config import Settings, parse_always_reply_channel_ids, parse_call_prefixes
 
 
 @dataclass(frozen=True)
@@ -36,6 +36,9 @@ class RuntimeConfigAudit:
 RUNTIME_SETTING_SPECS: dict[str, RuntimeSettingSpec] = {
     "call_prefixes": RuntimeSettingSpec("call_prefixes", "CALL_PREFIXES", "prefixes"),
     "dm_always_reply": RuntimeSettingSpec("dm_always_reply", "DM_ALWAYS_REPLY", "bool"),
+    "always_reply_channel_ids": RuntimeSettingSpec(
+        "always_reply_channel_ids", "ALWAYS_REPLY_CHANNEL_IDS", "channel_ids", empty_allowed=True
+    ),
     "public_memory_in_dm": RuntimeSettingSpec(
         "public_memory_in_dm", "PUBLIC_SERVER_MEMORY_IN_DM", "bool"
     ),
@@ -114,6 +117,9 @@ def parse_runtime_value(spec: RuntimeSettingSpec, raw: str, *, settings=None) ->
     if spec.kind == "prefixes":
         return parse_call_prefixes(text)
 
+    if spec.kind == "channel_ids":
+        return parse_always_reply_channel_ids("" if text.lower() == "none" else text)
+
     if spec.kind == "string":
         if spec.empty_allowed and text.lower() in {"none", "null", "off", "-"}:
             text = ""
@@ -148,6 +154,10 @@ def decode_runtime_value(spec: RuntimeSettingSpec, encoded: str, *, settings=Non
         if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
             raise ValueError("stored value is not a prefix list")
         return parse_call_prefixes(",".join(value))
+    if spec.kind == "channel_ids":
+        if not isinstance(value, list) or any(type(item) is not int for item in value):
+            raise ValueError("stored value is not a channel ID list")
+        return parse_always_reply_channel_ids(",".join(map(str, value)))
     if spec.kind == "string":
         if not isinstance(value, str):
             raise ValueError("stored value is not string")
@@ -157,7 +167,7 @@ def decode_runtime_value(spec: RuntimeSettingSpec, encoded: str, *, settings=Non
 
 def format_runtime_value(value: Any) -> str:
     if isinstance(value, tuple):
-        return ", ".join(value)
+        return ", ".join(map(str, value)) if value else "(비움)"
     if isinstance(value, bool):
         return "on" if value else "off"
     if value == "":

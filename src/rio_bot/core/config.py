@@ -23,6 +23,16 @@ def parse_call_prefixes(value: str) -> tuple[str, ...]:
     return prefixes
 
 
+def parse_always_reply_channel_ids(value: str) -> tuple[int, ...]:
+    parts = [part.strip() for part in value.split(",")] if value.strip() else []
+    if any(not part.isascii() or not part.isdigit() or len(part) > 20 for part in parts):
+        raise ValueError("ALWAYS_REPLY_CHANNEL_IDS에는 채널 ID를 쉼표로 구분해 입력해 주세요.")
+    ids = tuple(sorted({int(part) for part in parts}))
+    if len(ids) > 100 or any(not 0 < channel_id < 2**64 for channel_id in ids):
+        raise ValueError("ALWAYS_REPLY_CHANNEL_IDS에는 유효한 채널 ID를 최대 100개 넣을 수 있어요.")
+    return ids
+
+
 def _provider(value: str, variable: str) -> str:
     provider = value.strip().lower()
     if provider not in SUPPORTED_MODEL_PROVIDERS:
@@ -112,6 +122,7 @@ class Settings:
     vision_max_stickers: int = 8
     allow_user_mentions: bool = True
     shutdown_grace_seconds: float = 50.0
+    always_reply_channel_ids: tuple[int, ...] = ()
 
     def api_key_for(self, provider: str) -> str:
         provider = _provider(provider, "provider")
@@ -299,6 +310,9 @@ class Settings:
             context_path=os.getenv("CONTEXT_PATH", "data/contexts.json"),
             call_prefixes=parse_call_prefixes(os.getenv("CALL_PREFIXES", "리오야")),
             dm_always_reply=dm == "true",
+            always_reply_channel_ids=parse_always_reply_channel_ids(
+                os.getenv("ALWAYS_REPLY_CHANNEL_IDS", "")
+            ),
             public_memory_in_dm=public_memory == "true",
             external_context_policy=external_context_policy,
             allowed_guild_ids=frozenset(int(x.strip()) for x in

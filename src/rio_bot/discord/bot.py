@@ -373,6 +373,12 @@ class RioClient(discord.Client):
                 break
         return allowed
 
+    def message_trigger(self, message):
+        return trigger_text(
+            message, self.user.id, self.settings.dm_always_reply, self.settings.call_prefixes,
+            always_reply_channel_ids=self.settings.always_reply_channel_ids,
+        )
+
     async def on_message(self, message):
         if self.stopping or not self.user:
             return
@@ -380,8 +386,7 @@ class RioClient(discord.Client):
         if (guild_id is not None and self.settings.allowed_guild_ids
                 and guild_id not in self.settings.allowed_guild_ids):
             return
-        text = trigger_text(message, self.user.id, self.settings.dm_always_reply,
-                            self.settings.call_prefixes)
+        text = self.message_trigger(message)
         authored_text, _ = split_inline_quotes(text) if text is not None else ("", "")
         if self.pending_count >= 100:
             return
