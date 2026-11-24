@@ -10,6 +10,7 @@ from uuid import uuid4
 
 import discord
 
+from rio_bot.ai.egress_policy import filter_channel_context
 from rio_bot.core.message_provenance import message_segments, split_inline_quotes
 from rio_bot.core.runtime_config import RuntimeSettings
 from rio_bot.core.runtime_settings_service import apply_runtime_side_effects
@@ -379,7 +380,46 @@ class RioClient(discord.Client):
             always_reply_channel_ids=self.settings.always_reply_channel_ids,
         )
 
-    async def on_message(self, message):
+    def record_recent_message(self, scope, message, text, *, direct_trigger):
+        self.recent.add(
+            scope, message.id, message.author.display_name, text, direct_trigger=direct_trigger,
+        )
+
+    async def auto_reply_is_for_other(self, message, scope, text, reply_author_id, use_chat_log):
+        if reply_author_id is not None and reply_author_id != scope.user_id:
+            return reply_author_id != self.user.id
+
+        classify = getattr(self.llm, "auto_reply_is_for_other", None)
+        if classify is None or not text or len(text) > 4000:
+            return False
+
+        recent = []
+        if use_chat_log:
+            await self.hydrate_recent_history(message, scope)
+            recent = filter_channel_context(
+                self.recent.candidates(
+                    scope,
+                    message.id,
+                    include=lambda row: (
+                        row["role"] != "assistant"
+                        or row["reply_target_user_id"] == str(scope.user_id)
+                    ),
+                ),
+                scope.user_id,
+                self.settings.external_context_policy,
+            )
+        async with self.slots:
+            return await classify(
+                current={
+                    "speaker_id": str(scope.user_id),
+                    "speaker_name": message.author.display_name[:100],
+                    "mentioned_user_ids": [str(user.id) for user in message.mentions[:10]],
+                    "content": text,
+                },
+                recent=recent,
+            )
+
+    async def on_message(self, message, *, reply_author_id=None):
         if self.stopping or not self.user:
             return
         guild_id = message.guild.id if message.guild else None
@@ -408,6 +448,10 @@ class RioClient(discord.Client):
         received_mode = MemoryMode(self.store.memory_mode(scope))
         received_chat_log = self.store.chat_log_enabled(scope)
         management = self._management_text(text)
+        auto_reply = (
+            guild_id is not None and text is not None
+            and trigger_text(message, self.user.id, prefixes=self.settings.call_prefixes) is None
+        )
         if text is not None:
             self.events.emit(
                 "message_received",
@@ -419,12 +463,9 @@ class RioClient(discord.Client):
                 has_stickers=bool(getattr(message, "stickers", None)),
             )
         # Recent chat context is independent from persistent memory and has its own switch.
-        if guild_id is not None and received_chat_log and not management:
-            self.recent.add(
-                scope,
-                message.id,
-                message.author.display_name,
-                text if text is not None else message.content,
+        if guild_id is not None and received_chat_log and not management and not auto_reply:
+            self.record_recent_message(
+                scope, message, text if text is not None else message.content,
                 direct_trigger=text is not None,
             )
         if text is None:
@@ -449,6 +490,16 @@ class RioClient(discord.Client):
                 use_memory = received_mode.reads and mode.reads
                 save_memory = received_mode.writes and mode.writes
                 use_chat_log = received_chat_log and self.store.chat_log_enabled(scope)
+                if self.store.seen(message.id):
+                    return
+                if auto_reply:
+                    skip = await self.auto_reply_is_for_other(
+                        message, scope, authored_text, reply_author_id, use_chat_log,
+                    )
+                    if use_chat_log and not management:
+                        self.record_recent_message(scope, message, text, direct_trigger=not skip)
+                    if skip:
+                        return
                 self.events.emit(
                     "turn_started",
                     turn_id=turn_id,
@@ -463,8 +514,6 @@ class RioClient(discord.Client):
                     operation="answer",
                     scope="guild" if guild_id is not None else "dm",
                 )
-                if self.store.seen(message.id):
-                    return
                 if len(text) > 4000:
                     await self.send_text(message.channel, "한 번에 4000자 이내로 이야기해 주세요.")
                     return

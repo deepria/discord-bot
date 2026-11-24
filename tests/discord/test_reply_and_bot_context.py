@@ -197,6 +197,62 @@ async def client():
 
 
 @pytest.mark.asyncio
+async def test_auto_reply_routes_explicit_calls_and_conservative_addressee_decisions(client):
+    bot, store = client
+    bot.settings = Settings("test", "test", cooldown=0, always_reply_channel_ids=(10,))
+    bot.llm.answer = AsyncMock(return_value="응")
+    bot.llm.summarize = AsyncMock()
+    bot.llm.summarize_shared = AsyncMock()
+    bot.llm.auto_reply_is_for_other = AsyncMock(side_effect=[True, False])
+    guild = NS(id=1, emojis=[], me=NS(), default_role=NS())
+    channel = MagicMock(spec=discord.TextChannel, id=10, guild=guild)
+    channel.permissions_for.return_value = NS(view_channel=False, read_message_history=True)
+    channel.typing.return_value.__aenter__ = AsyncMock()
+    channel.typing.return_value.__aexit__ = AsyncMock()
+    channel.send = AsyncMock(return_value=NS(id=1000))
+    author = NS(id=100, bot=False, display_name="사용자")
+    scope = Scope(1, 10, author.id)
+    other = Scope(1, 10, 200)
+    bot.recent.add(other, 1, "민수", "몇 시에 만날까?", direct_trigger=True)
+    bot.recent.add(other, 2, "민수", "외부 전송이 허용되지 않은 일반 메시지")
+    bot.recent.mark_hydrated(scope)
+    now = datetime.now(UTC)
+
+    def message(message_id, content, *, reply_to=None):
+        reference = None
+        if reply_to is not None:
+            reference = NS(
+                channel_id=10,
+                resolved=NS(author=NS(id=reply_to), content="", channel=channel),
+            )
+        return NS(
+            id=message_id, content=content, author=author, channel=channel, guild=guild,
+            webhook_id=None, mentions=[], reference=reference, created_at=now,
+        )
+
+    await bot.on_message(message(3, "저녁에 보자", reply_to=200))
+    await bot.on_message(message(4, "민수야 다섯 시에 보자"))
+    classifier = bot.llm.auto_reply_is_for_other
+    classifier.assert_awaited_once()
+    assert [row["content"] for row in classifier.call_args.kwargs["recent"]] == [
+        "몇 시에 만날까?",
+    ]
+    channel.send.assert_not_awaited()
+    assert store.history(scope) == []
+    assert not bot.cooldowns
+    assert all(not row["direct_trigger"] for row in bot.recent.candidates(scope, 5)[-2:])
+
+    await bot.on_message(message(5, "리오야 오늘 어땠어?", reply_to=200))
+    await bot.on_message(message(6, "그래, 고마워", reply_to=99))
+    classifier.assert_awaited_once()
+    assert channel.send.await_count == 2
+
+    await bot.on_message(message(7, "그냥 좀 피곤했어"))
+    assert classifier.await_count == 2
+    assert channel.send.await_count == 3
+
+
+@pytest.mark.asyncio
 async def test_other_bot_live_message_is_captured_in_all_mode(client):
     bot, _ = client
     channel = FakeHistoryChannel(10)

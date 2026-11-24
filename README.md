@@ -103,6 +103,8 @@ Discord Developer Portal에서 Bot을 만들고 **Message Content Intent**를 �
 봇 관리자는 자동응답을 원하는 서버 채널에서 `/config always-reply enable`을 실행하세요.
 `status`로 현재 상태를 보고 `disable`로 끌 수 있습니다. 별도 채널을 지정하려면
 `channel` 옵션을 사용하세요. 설정은 즉시 적용되고 재시작 후에도 유지됩니다.
+자동응답 채널에서 리오를 직접 부르거나 리오에게 답장하면 바로 대화를 이어갑니다. 그 외에는
+같은 채널의 최근 대화를 보고 다른 사람에게 하는 말이 분명한 경우에만 응답을 생략합니다.
 [자동응답 설정](docs/slash-commands.md#서버-채널-자동응답)을 참고하세요.
 
 ## 현재 턴 이미지 입력
