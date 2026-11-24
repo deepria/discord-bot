@@ -1,5 +1,6 @@
 import json
 
+from .auto_reply import clearly_addressed_to_other
 from .information_pipeline import InformationPipeline
 from .llm import SUMMARY_POLICY as BASE_SUMMARY_POLICY
 from .model_routing import build_memory_model_plan
@@ -77,6 +78,11 @@ class LLM(InformationPipeline):
         else:
             self.memory_client = create_provider_client(settings, memory_provider)
         self.character = self.character.rstrip() + "\n\n" + GENERAL_RP_OUTPUT_POLICY
+
+    async def auto_reply_is_for_other(self, *, current, recent):
+        return await clearly_addressed_to_other(
+            self.usage, self.client, self.settings.fast_model, current=current, recent=recent,
+        )
 
     async def answer(
         self,

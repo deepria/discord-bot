@@ -12,7 +12,7 @@ from .chat_llm import LLM
 from .chatlog_capture import capture_mode
 from .chatlog_capture_commands import install_chatlog_capture
 from .config import Settings
-from .reply_context import REPLY_CONTEXT, collect_reply_context
+from .reply_context import REPLY_CONTEXT, reply_context_rows, resolve_reply_target
 from .routing import Scope, trigger_text
 from .slash_commands import install_slash_commands
 from .target_context import TARGET_CONTEXT, collect
@@ -229,9 +229,14 @@ class RioClient(BaseRioClient):
         direct_only = scope.guild_id is not None and capture_mode(self.store, scope) == "direct"
         sampled = []
         replied = []
+        reply_author_id = None
         visuals = []
         if text is not None:
             try:
+                reply_target = await resolve_reply_target(message)
+                if getattr(message, "type", discord.MessageType.reply) == discord.MessageType.reply:
+                    reply_author_id = getattr(getattr(reply_target, "author", None), "id", None)
+                replied = reply_context_rows(reply_target, self.user.id)
                 sampled = await collect(
                     message,
                     self.user.id,
@@ -239,7 +244,6 @@ class RioClient(BaseRioClient):
                     direct_only=direct_only,
                     call_prefixes=self.settings.call_prefixes,
                 )
-                replied = await collect_reply_context(message, self.user.id)
                 visuals = await collect_visual_inputs(
                     message,
                     limits=self.vision_limits,
@@ -268,7 +272,6 @@ class RioClient(BaseRioClient):
         reply_token = REPLY_CONTEXT.set(tuple(replied))
         visual_token = CURRENT_VISUAL_INPUTS.set(tuple(visuals))
         public_token = CURRENT_PUBLIC_CONTEXT_REQUEST.set(public_request)
-        direct_token = CURRENT_DIRECT_TRIGGER.set(text is not None)
 
         # A text-only bare call stays a bare call and uses the base client's relationship-aware
         # fixed reply. Only a visual-only call gets an explicit visual request so vision reaches
@@ -279,11 +282,10 @@ class RioClient(BaseRioClient):
             original_content = message.content
             message.content = augmented_content
         try:
-            return await super().on_message(message)
+            return await super().on_message(message, reply_author_id=reply_author_id)
         finally:
             if original_content is not None:
                 message.content = original_content
-            CURRENT_DIRECT_TRIGGER.reset(direct_token)
             CURRENT_PUBLIC_CONTEXT_REQUEST.reset(public_token)
             CURRENT_VISUAL_INPUTS.reset(visual_token)
             REPLY_CONTEXT.reset(reply_token)

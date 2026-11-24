@@ -33,16 +33,11 @@ def _row(target, bot_id: int) -> dict | None:
     }
 
 
-async def collect_reply_context(message, bot_id: int) -> list[dict]:
-    """Return the message explicitly replied to by the current invocation, if readable.
-
-    This is request-scoped context rather than passive chat-log capture. In particular, a reply
-    remains available even when `/chatlog capture direct` would normally omit the replied-to
-    message from the rolling channel buffer.
-    """
+async def resolve_reply_target(message):
+    """Resolve a readable Discord reply target in the current channel."""
     reference = getattr(message, "reference", None)
     if reference is None:
-        return []
+        return None
 
     channel = getattr(message, "channel", None)
     current_channel_id = getattr(channel, "id", None)
@@ -52,7 +47,7 @@ async def collect_reply_context(message, bot_id: int) -> list[dict]:
         and reference_channel_id is not None
         and current_channel_id != reference_channel_id
     ):
-        return []
+        return None
 
     target = getattr(reference, "resolved", None)
     if target is not None and getattr(target, "author", None) is None:
@@ -62,12 +57,12 @@ async def collect_reply_context(message, bot_id: int) -> list[dict]:
         message_id = getattr(reference, "message_id", None)
         fetch_message = getattr(channel, "fetch_message", None)
         if message_id is None or fetch_message is None:
-            return []
+            return None
         try:
             target = await fetch_message(message_id)
         except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
             log.warning("Reply context lookup failed (%s)", type(exc).__name__)
-            return []
+            return None
 
     target_channel = getattr(target, "channel", None)
     target_channel_id = getattr(target_channel, "id", current_channel_id)
@@ -76,7 +71,16 @@ async def collect_reply_context(message, bot_id: int) -> list[dict]:
         and target_channel_id is not None
         and current_channel_id != target_channel_id
     ):
-        return []
+        return None
 
+    return target
+
+
+def reply_context_rows(target, bot_id: int) -> list[dict]:
     row = _row(target, bot_id)
     return [row] if row is not None else []
+
+
+async def collect_reply_context(message, bot_id: int) -> list[dict]:
+    """Return request-scoped context for an explicit reply, independent of passive capture."""
+    return reply_context_rows(await resolve_reply_target(message), bot_id)
