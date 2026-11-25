@@ -2,7 +2,7 @@
 
 import asyncio
 import re
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from time import monotonic
 from uuid import uuid4
 
@@ -51,6 +51,14 @@ def _timestamp(value):
     if result.utcoffset() is None or not 2015 <= result.year < 2100:
         raise ValueError
     return result
+
+
+def _first_snowflake_at(value):
+    value = value.astimezone(UTC)
+    remainder = value.microsecond % 1000
+    if remainder:
+        value += timedelta(microseconds=1000 - remainder)
+    return discord.utils.time_snowflake(value)
 
 
 def _filters(arguments):
@@ -125,6 +133,8 @@ class ChatHistory:
 
     def _eligible(self, old, bounds, *, direct_only):
         if old.author.bot or old.webhook_id is not None or not old.content.strip():
+            return False
+        if self.scope.guild_id is None and old.author.id != self.scope.user_id:
             return False
         floor, installed = bounds
         at = old.created_at.timestamp()
@@ -208,8 +218,8 @@ class ChatHistory:
 
         query, authors, start, end = filters
         if end is not None:
-            upper = min(upper, discord.utils.time_snowflake(end))
-        after = discord.Object(id=discord.utils.time_snowflake(start) - 1) if start else None
+            upper = min(upper, _first_snowflake_at(end))
+        after = discord.Object(id=_first_snowflake_at(start) - 1) if start else None
         if after is not None and after.id >= upper - 1:
             return {"status": "empty", "has_more": False}, 0, []
 

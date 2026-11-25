@@ -26,9 +26,10 @@ def fixture_history(*, dm=True, store=None):
     )
 
     def message(text, *, who=author, seconds=-1):
-        at = now + timedelta(seconds=seconds)
+        message_id = discord.utils.time_snowflake(now + timedelta(seconds=seconds))
+        at = discord.utils.snowflake_time(message_id)
         return NS(
-            id=discord.utils.time_snowflake(at), channel=channel, guild=guild,
+            id=message_id, channel=channel, guild=guild,
             author=who, created_at=at, content=text, mentions=[], webhook_id=None,
         )
 
@@ -104,7 +105,10 @@ async def test_post_install_messages_remain_excluded_after_reset(purge, monkeypa
 
 @pytest.mark.asyncio
 async def test_dm_recipient_and_guild_private_thread_access():
-    lookup, _, _, _, other = fixture_history()
+    lookup, message, rows, _, other = fixture_history()
+    rows.append(message("wrong author", who=other))
+    assert (await lookup.run({}))["status"] == "empty"
+    lookup.message.channel.history.reset_mock()
     lookup.message.channel.recipient = other
     assert (await lookup.run({}))["status"] == "permission_denied"
     lookup.message.channel.history.assert_not_called()
