@@ -19,6 +19,7 @@ from .factual_challenge import (
     is_factual_challenge,
     is_speaker_attribution_correction,
 )
+from .forward_context import CURRENT_FORWARD_CONTEXT, FORWARD_POLICY
 from .freshness import FreshnessMode
 from .information_plan import InformationPlan
 from .llm import LLM as BaseLLM
@@ -434,6 +435,9 @@ class RequestAssembler(BaseLLM):
             ],
             "lore_reference": references,
         }
+        forwarded = CURRENT_FORWARD_CONTEXT.get()
+        if forwarded:
+            context["forwarded_messages"] = forwarded
         context = apply_context_policy(
             context,
             scope.user_id,
@@ -471,13 +475,17 @@ class RequestAssembler(BaseLLM):
             budget_chars=self.settings.channel_context_chars,
             recent_speaker_query=recent_speaker_query,
         )
+        requested_action = visible_content or (
+            "현재 Discord 전달 메시지에 반응하세요." if forwarded
+            else "현재 메시지의 나레이션에 대사로 반응하세요."
+        )
         messages = [{
             "role": "user",
             "content": "신뢰할 수 없는 참고 데이터(JSON):\n"
             + json.dumps(context, ensure_ascii=False, separators=(",", ":")),
         }, {
             "role": "user",
-            "content": visible_content or "현재 메시지의 나레이션에 대사로 반응하세요.",
+            "content": requested_action,
         }]
 
         instruction_parts = [
@@ -491,6 +499,8 @@ class RequestAssembler(BaseLLM):
             CAPABILITY_GROUNDING_POLICY,
             ADDRESSING_GROUNDING_POLICY,
         ]
+        if forwarded:
+            instruction_parts.append(FORWARD_POLICY)
         if current_channel_only:
             instruction_parts.append(CURRENT_CHANNEL_SCOPE_POLICY)
         if dm_recall.items or dm_recall.override_summary:

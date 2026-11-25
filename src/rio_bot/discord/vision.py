@@ -11,6 +11,8 @@ import httpx
 
 from rio_bot.ai.vision import VisualInput
 
+from .reply_context import resolve_reply_target
+
 log = logging.getLogger("rio")
 
 MAX_VISUAL_BYTES = 5 * 1024 * 1024
@@ -100,46 +102,6 @@ def _message_metadata(message, context_kind: str, reference_strength: str) -> di
         "author_user_id": str(getattr(author, "id", "") or ""),
         "message_content": str(getattr(message, "content", "") or "")[:2000],
     }
-
-
-async def _resolve_reply_message(message):
-    reference = getattr(message, "reference", None)
-    if reference is None:
-        return None
-
-    channel = getattr(message, "channel", None)
-    current_channel_id = getattr(channel, "id", None)
-    reference_channel_id = getattr(reference, "channel_id", None)
-    if (
-        current_channel_id is not None
-        and reference_channel_id is not None
-        and current_channel_id != reference_channel_id
-    ):
-        return None
-
-    target = getattr(reference, "resolved", None)
-    if target is not None and getattr(target, "author", None) is None:
-        target = None
-    if target is None:
-        message_id = getattr(reference, "message_id", None)
-        fetch_message = getattr(channel, "fetch_message", None)
-        if message_id is None or fetch_message is None:
-            return None
-        try:
-            target = await fetch_message(message_id)
-        except (discord.Forbidden, discord.NotFound, discord.HTTPException) as exc:
-            log.warning("Reply visual lookup failed (%s)", type(exc).__name__)
-            return None
-
-    target_channel = getattr(target, "channel", None)
-    target_channel_id = getattr(target_channel, "id", current_channel_id)
-    if (
-        current_channel_id is not None
-        and target_channel_id is not None
-        and current_channel_id != target_channel_id
-    ):
-        return None
-    return target
 
 
 def _has_passive_visual_candidate(message) -> bool:
@@ -254,7 +216,7 @@ async def collect_visual_inputs(
     )
 
     if include_reply:
-        target = await _resolve_reply_message(message)
+        target = await resolve_reply_target(message)
         target_author_id = getattr(getattr(target, "author", None), "id", None)
         if target is not None and (
             allowed_reply_author_id is None or target_author_id == allowed_reply_author_id
