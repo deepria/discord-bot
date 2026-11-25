@@ -5,6 +5,8 @@ import discord
 
 from rio_bot.core.message_provenance import split_inline_quotes
 
+from .forward_context import is_forward
+
 log = logging.getLogger("rio")
 
 REPLY_CONTEXT = ContextVar("reply_context", default=())
@@ -36,7 +38,7 @@ def _row(target, bot_id: int) -> dict | None:
 async def resolve_reply_target(message):
     """Resolve a readable Discord reply target in the current channel."""
     reference = getattr(message, "reference", None)
-    if reference is None:
+    if reference is None or is_forward(message):
         return None
 
     channel = getattr(message, "channel", None)

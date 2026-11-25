@@ -9,6 +9,8 @@ import discord
 
 from rio_bot.ai.chat_history_context import CURRENT_CHAT_HISTORY
 from rio_bot.ai.dm_memory_recall import CURRENT_PRIVATE_DM
+from rio_bot.ai.egress_policy import strict_policy
+from rio_bot.ai.forward_context import CURRENT_FORWARD_CONTEXT
 from rio_bot.ai.public_dm_context import CURRENT_PUBLIC_DM_LOOKUP, PublicDMContext
 from rio_bot.ai.vision import CURRENT_VISUAL_INPUTS
 from rio_bot.core.message_provenance import split_inline_quotes
@@ -19,6 +21,7 @@ from .chat_llm import LLM
 from .chatlog_capture import capture_mode
 from .chatlog_capture_commands import install_chatlog_capture
 from .config import Settings
+from .forward_context import forward_context_rows, is_forward
 from .reply_context import REPLY_CONTEXT, reply_context_rows, resolve_reply_target
 from .routing import Scope, trigger_text
 from .slash_commands import install_slash_commands
@@ -381,12 +384,27 @@ class RioClient(BaseRioClient):
         replied = []
         reply_author_id = None
         visuals = []
+        forwarded = []
         if text is not None:
             try:
                 reply_target = await resolve_reply_target(message)
                 if getattr(message, "type", discord.MessageType.reply) == discord.MessageType.reply:
                     reply_author_id = getattr(getattr(reply_target, "author", None), "id", None)
                 replied = reply_context_rows(reply_target, self.user.id)
+                forwarded = await forward_context_rows(message, message, "current_forward")
+                if is_forward(reply_target) and (
+                    reply_author_id == scope.user_id
+                    or (
+                        not direct_only and not strict_policy(self.settings.external_context_policy)
+                    )
+                    or trigger_text(
+                        reply_target, self.user.id, self.settings.dm_always_reply,
+                        self.settings.call_prefixes,
+                    ) is not None
+                ):
+                    forwarded.extend(await forward_context_rows(
+                        reply_target, message, "explicit_reply", limit=2 - len(forwarded),
+                    ))
                 sampled = await collect(
                     message,
                     self.user.id,
@@ -420,6 +438,7 @@ class RioClient(BaseRioClient):
         )
         target_token = TARGET_CONTEXT.set(tuple(sampled))
         reply_token = REPLY_CONTEXT.set(tuple(replied))
+        forward_token = CURRENT_FORWARD_CONTEXT.set(tuple(forwarded))
         visual_token = CURRENT_VISUAL_INPUTS.set(tuple(visuals))
         public_token = CURRENT_PUBLIC_CONTEXT_REQUEST.set(public_request)
         dm_lookup = None
@@ -443,11 +462,10 @@ class RioClient(BaseRioClient):
         history = ChatHistory(message, self.user.id, self.store, self.settings, self.events)
         history_token = CURRENT_CHAT_HISTORY.set(history)
 
-        # A text-only bare call stays a bare call and uses the base client's relationship-aware
-        # fixed reply. Only a visual-only call gets an explicit visual request so vision reaches
-        # the LLM without inventing an unrelated user intent such as "look at something".
+        # Forward evidence already reaches the model separately from the user's own words.
+        # A bare call with only visuals uses the existing visual prompt.
         original_content = None
-        augmented_content = _augment_empty_call(message.content, text, bool(visuals))
+        augmented_content = _augment_empty_call(message.content, text, bool(visuals) and not forwarded)
         if augmented_content is not None:
             original_content = message.content
             message.content = augmented_content
@@ -461,6 +479,7 @@ class RioClient(BaseRioClient):
             CURRENT_PUBLIC_DM_LOOKUP.reset(dm_token)
             CURRENT_PUBLIC_CONTEXT_REQUEST.reset(public_token)
             CURRENT_VISUAL_INPUTS.reset(visual_token)
+            CURRENT_FORWARD_CONTEXT.reset(forward_token)
             REPLY_CONTEXT.reset(reply_token)
             TARGET_CONTEXT.reset(target_token)
 
