@@ -66,6 +66,9 @@ class Store:
                 turn_floor INTEGER NOT NULL, shared_floor INTEGER NOT NULL,
                 replacement_id INTEGER, revised_at REAL NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS dm_memory_recall (
+                scope TEXT PRIMARY KEY, realm TEXT NOT NULL, user_id TEXT NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS structured_memory_items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, owner_id TEXT NOT NULL,
                 origin_realm TEXT NOT NULL, origin_channel_id TEXT NOT NULL,
@@ -452,15 +455,24 @@ class Store:
             verified.append(row)
         return [] if self._evidence_rejection(item["kind"], verified) else verified
 
-    def verified_structured_memory(self, scope: Scope, *, limit: int = 12):
+    def verified_structured_memory(self, scope: Scope, *, limit: int = 12,
+                                   scan_limit: int | None = None):
         """Disclose candidates only in the owning conversation with retained source pairs."""
         if limit < 1:
             return []
-        rows = self.db.execute(
+        query = (
             "SELECT * FROM structured_memory_items WHERE owner_id=? AND origin_realm=? "
-            "AND origin_channel_id=? AND owner_type='user' AND status='active' ORDER BY id DESC",
-            (str(scope.user_id), scope.realm, str(scope.channel_id)),
+            "AND origin_channel_id=? AND owner_type='user' AND status='active'"
         )
+        params = (str(scope.user_id), scope.realm, str(scope.channel_id))
+        if scan_limit is None:
+            rows = self.db.execute(query + " ORDER BY id DESC", params)
+        else:
+            replacement = self.confirmed_memory_replacement(scope)
+            rows = self.db.execute(
+                query + " ORDER BY (id=?) DESC, id DESC LIMIT ?",
+                (*params, replacement, max(0, scan_limit)),
+            )
         verified = []
         for row in rows:
             if self._verified_sources(scope, row):
@@ -468,6 +480,29 @@ class Store:
                 if len(verified) >= limit:
                     break
         return verified
+
+    def dm_structured_recall_enabled(self, scope: Scope) -> bool:
+        if scope.guild_id is not None:
+            return False
+        return self.db.execute(
+            "SELECT 1 FROM dm_memory_recall WHERE scope=? AND user_id=?",
+            (scope.conversation, str(scope.user_id)),
+        ).fetchone() is not None
+
+    def set_dm_structured_recall(self, scope: Scope, enabled: bool) -> None:
+        if scope.guild_id is not None:
+            raise ValueError("Structured recall can only be configured in a DM")
+        with self.db:
+            if enabled:
+                self.db.execute(
+                    "INSERT OR IGNORE INTO dm_memory_recall VALUES (?,?,?)",
+                    (scope.conversation, scope.realm, str(scope.user_id)),
+                )
+            else:
+                self.db.execute("DELETE FROM dm_memory_recall WHERE scope=?", (scope.conversation,))
+
+    def confirmed_memory_replacement(self, scope: Scope) -> int | None:
+        return self._memory_revision(scope)[2]
 
     def _revise_memory(self, scope, replacement_id=None, *, correction=""):
         turn_floor = self.db.execute(
@@ -568,6 +603,8 @@ class Store:
                             (scope.realm, str(scope.user_id)))
             self.db.execute("DELETE FROM memory_revisions WHERE realm=? AND user_id=?",
                             (scope.realm, str(scope.user_id)))
+            self.db.execute("DELETE FROM dm_memory_recall WHERE realm=? AND user_id=?",
+                            (scope.realm, str(scope.user_id)))
             self.db.execute("DELETE FROM manual_notes WHERE scope=?", (scope.user_note,))
             self.db.execute("DELETE FROM notes WHERE scope=?", (scope.user_note,))
         self._invalidate_memory_turns(lambda active: active.user_note == scope.user_note)
@@ -582,7 +619,7 @@ class Store:
         deleted = 0
         with self.db:
             for table in ("turns", "summaries", "shared_calls", "shared_summaries",
-                          "structured_memory_cursors", "memory_revisions"):
+                          "structured_memory_cursors", "memory_revisions", "dm_memory_recall"):
                 cursor = self.db.execute(f"DELETE FROM {table} WHERE scope LIKE ?", (prefix,))
                 deleted += self._rowcount(cursor)
             cursor = self.db.execute(
@@ -606,6 +643,8 @@ class Store:
             deleted += self._rowcount(cursor)
             cursor = self.db.execute("DELETE FROM memory_revisions WHERE realm=?", (scope.realm,))
             deleted += self._rowcount(cursor)
+            cursor = self.db.execute("DELETE FROM dm_memory_recall WHERE realm=?", (scope.realm,))
+            deleted += self._rowcount(cursor)
             cursor = self.db.execute(
                 "DELETE FROM manual_notes WHERE scope LIKE ?", (scope.realm + ":user:%",))
             deleted += self._rowcount(cursor)
@@ -627,6 +666,8 @@ class Store:
             cursor = self.db.execute("DELETE FROM structured_memory_cursors")
             deleted += self._rowcount(cursor)
             cursor = self.db.execute("DELETE FROM memory_revisions")
+            deleted += self._rowcount(cursor)
+            cursor = self.db.execute("DELETE FROM dm_memory_recall")
             deleted += self._rowcount(cursor)
             cursor = self.db.execute("DELETE FROM manual_notes WHERE instr(scope, ':user:') > 0")
             deleted += self._rowcount(cursor)

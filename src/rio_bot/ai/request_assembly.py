@@ -10,6 +10,7 @@ from openai import APIError
 
 from ..core.conversation_boundaries import conversation_boundaries
 from ..core.message_provenance import message_segments as parse_message_segments
+from .dm_memory_recall import DM_MEMORY_POLICY, DMRecall, recall_for_answer
 from .egress_policy import apply_context_policy
 from .factual_challenge import (
     FACTUAL_CHALLENGE_POLICY,
@@ -341,11 +342,18 @@ class RequestAssembler(BaseLLM):
         saved_turns = store.history(scope) if use_memory else []
         current_channel_only = self._current_channel_scope_only(scope, routing_content)
         recent_speaker_query = self._recent_speaker_query(routing_content)
+        dm_recall = DMRecall()
+        if use_memory and not recent_speaker_query and information_plan.search_mode == "none":
+            dm_recall = recall_for_answer(store, scope, visible_content, saved_turns)
+            if dm_recall.override_summary:
+                summary = ""
         history = []
         if use_memory and scope.guild_id is None:
             turns = []
             used = 0
             for turn in reversed(saved_turns):
+                if turn["id"] <= dm_recall.history_floor:
+                    break
                 size = len(turn["content"]) + len(turn["reply"])
                 if used + size > self.settings.history_max_chars:
                     break
@@ -434,6 +442,10 @@ class RequestAssembler(BaseLLM):
         )
         if boundaries:
             context["current_conversation_boundaries"] = boundaries
+        if dm_recall.items:
+            context["verified_dm_memory"] = dm_recall.items
+        if dm_recall.correction:
+            context["latest_dm_correction"] = dm_recall.correction
         public_dm_telemetry = dict(public_dm.telemetry)
         if public_dm.recent:
             context["public_dm_recent_conversation"] = public_dm.recent
@@ -479,6 +491,8 @@ class RequestAssembler(BaseLLM):
         ]
         if current_channel_only:
             instruction_parts.append(CURRENT_CHANNEL_SCOPE_POLICY)
+        if dm_recall.items or dm_recall.override_summary:
+            instruction_parts.append(DM_MEMORY_POLICY)
         if public_dm.recent:
             instruction_parts.append(PUBLIC_DM_POLICY)
         if is_factual_challenge(routing_content):
@@ -516,6 +530,8 @@ class RequestAssembler(BaseLLM):
         telemetry["provider"] = self.settings.provider
         telemetry.update(context_telemetry)
         telemetry.update(public_dm_telemetry)
+        if dm_recall.telemetry:
+            telemetry.update(dm_recall.telemetry)
         if semantic_route:
             telemetry["semantic_route_mode"] = getattr(self.settings, "semantic_routing_mode", "off")
             telemetry["semantic_route_tier"] = semantic_route.get("tier")

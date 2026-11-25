@@ -19,6 +19,7 @@ production entrypoint에서 더 이상 해석하지 않습니다. 일반 대화 
 | `/memory note-clear` | 개인 메모 삭제 |
 | `/memory clear confirm:true` | 해당 서버 또는 DM에서의 내 대화 기록·자동 요약·개인 메모 삭제 |
 | `/memory items` | 1:1 DM에서 출처가 확인된 내 구조화 기억과 근거 메시지 ID 보기 |
+| `/memory recall [enabled:<true 또는 false>]` | 본인 1:1 DM에서 관련 기억을 답변에 사용할지 확인하거나 변경 |
 | `/memory correct item_id:<번호> source_message_id:<ID> confirm:true` | 같은 DM의 최신 본인 발화로 항목 정정 |
 | `/memory withdraw item_id:<번호> confirm:true` | 같은 DM의 내 항목 철회 |
 | `/memory server-show` | 현재 서버 공통 메모 확인 |
@@ -26,7 +27,12 @@ production entrypoint에서 더 이상 해석하지 않습니다. 일반 대화 
 | `/memory server-clear` | 서버 공통 메모 삭제. Discord `Manage Server` 권한 필요 |
 
 `/memory clear`는 해당 사용자의 구조화 기억과 정정·철회 기록을 포함한 지속 장기 기억을
-삭제합니다. 최근 채널 대화 문맥은 별도로 유지합니다.
+삭제하고 해당 범위의 구조화 기억 읽기를 초기화합니다. 최근 채널 대화 문맥은 별도로 유지합니다.
+
+구조화 기억 읽기는 기본적으로 꺼져 있습니다. 리오와의 1:1 DM에서 `/memory recall enabled:true`로
+켜면 관련 있는 질문에만 자신이 남긴 사실과 선호를 참고합니다. 장기 기억 모드가 읽기를 허용할
+때 적용됩니다. `enabled:false`로 구조화 읽기만 끌 수 있습니다. 구조화 기억 추출, 기존 요약,
+메모 및 공개 서버에서 DM으로 이어가기 설정은 각각의 기존 설정을 따릅니다.
 
 정정할 때는 먼저 같은 DM에서 새 내용을 리오에게 말한 다음 저장된 그 메시지의 ID와 항목 번호를
 넣습니다. 정정과 철회는 출처를 나눌 수 없는 예전 요약 전체를 폐기합니다. 이후 요약은 정정할 때

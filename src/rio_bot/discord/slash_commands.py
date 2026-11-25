@@ -28,6 +28,7 @@ HELP_TEXT = """일반 대화는 @멘션, 답장 핑, 또는 메시지 맨 앞의
 `/memory note` / `/memory note-clear` — 개인 메모 설정/삭제
 `/memory clear` — 현재 서버 또는 DM에서 내 장기 기억 삭제
 `/memory items` / `correct` / `withdraw` — 1:1 DM에서 내 기억 항목 확인·정정·철회
+`/memory recall` — 이 1:1 DM에서 검증된 내 기억을 답변에 사용하는 기능 관리
 `/memory server-show` / `server-note` / `server-clear` — 서버 공통 메모
 `/memory mode` / `status` / `overview` — 봇 관리자용 장기 기억 설정
 `/memory purge` — 봇 관리자용 범위별 사용자 장기 기억 초기화
@@ -230,6 +231,27 @@ def upgrade_memory_group(client):
         ]
         await _send_ephemeral_pages(interaction, pages or ["이 DM에 출처가 확인된 기억이 없어요."])
 
+    @app_commands.command(name="recall", description="이 1:1 DM에서 검증된 내 기억 사용 여부 확인·변경")
+    @app_commands.describe(enabled="true로 켜고 false로 끕니다. 생략하면 현재 설정을 보여줘요.")
+    async def recall(interaction: discord.Interaction, enabled: bool | None = None):
+        try:
+            scope = _personal_dm_scope(interaction)
+        except ValueError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+            return
+        if enabled is not None:
+            await interaction.response.defer(ephemeral=True)
+            async with client.channel_lock(scope), _user_lock(client, scope):
+                client.store.set_dm_structured_recall(scope, enabled)
+        active = client.store.dm_structured_recall_enabled(scope)
+        mode = MemoryMode(client.store.memory_mode(scope))
+        text = "이 DM의 구조화 기억 읽기는 " + ("켜져 있어요." if active else "꺼져 있어요.")
+        if active and not mode.reads:
+            text += " 현재 장기 기억 모드에서 읽기가 꺼져 있어 답변에는 적용되지 않아요."
+        elif active:
+            text += " 이 DM에서 나눈 내용과 관련 있는 질문에만 참고해요."
+        await _send_ephemeral_pages(interaction, [text])
+
     @app_commands.command(name="correct", description="이 DM의 최신 본인 메시지로 내 기억 항목 정정")
     @app_commands.describe(
         item_id="items에 표시된 기억 항목 번호",
@@ -345,7 +367,7 @@ def upgrade_memory_group(client):
             client.store.set_note(scope.realm, "")
         await interaction.response.send_message("서버 공통 메모를 삭제했어요.", ephemeral=True)
 
-    for command in (show, note, note_clear, clear, items, correct, withdraw,
+    for command in (show, note, note_clear, clear, items, recall, correct, withdraw,
                     server_show, server_note, server_clear):
         group.add_command(command)
 

@@ -76,12 +76,12 @@ repair or a guarantee that garbled model prose is detected deterministically.
 The policy separates usefulness and durability from accuracy. One-off menu acceptance, criticism
 of Rio's proposals, temporary work decisions and vague evaluations do not establish lasting
 preferences. Assistant replies are untrusted context, never independent user evidence.
-Shadow extraction remains independent of summary memory and the answer path. Version/input-size telemetry contains
+Shadow extraction operates independently of summary generation and the recall opt-in. Version/input-size telemetry contains
 no conversation text or source IDs. Existing candidates are not re-extracted or rewritten.
 
 ## Provenance and revision contract
 
-`verified_structured_memory(scope)` is the disclosure contract for the next reading phase.
+`verified_structured_memory(scope)` is the disclosure contract used by structured recall.
 It requires an active user-owned item in the exact owner, realm, and origin channel. Each source
 requires a retained user turn with matching Discord message and processing turn IDs. For public
 capture, a linked shared call or an exportable turn must also attest to its visibility. Legacy
@@ -99,7 +99,26 @@ operation to follow. Notes and Discord messages have their own deletion controls
 The database adds a revision table on startup without backfilling existing memories.
 `/memory clear` and admin purge remove the revision record, stored items and extraction cursor
 within the selected scope. A summary committing after a revision or purge must still have the
-same eligible source batch. Automatic structured recall remains a separate deployment step.
+same eligible source batch.
+
+## Owner opt-in for one-to-one DM recall
+
+The existing answer call can receive up to three verified facts or preferences with a combined
+600-character content budget. Selection checks at most 32 active candidates and uses the
+current question's authored first-person cues and matching terms or topics. A relevant recent
+correction takes precedence over the structured candidates and the older summary. This feature
+is available only in the exact one-to-one DM and only while the effective mode permits memory
+reads. Turns with web search skip this recall path.
+
+Each DM starts with recall disabled. The owner can check or change it with `/memory recall`.
+Disabling recall returns the answer path to its existing summary and history. Clearing memory
+and administrative purge also reset recall for the affected scopes. The setting is stored as a
+personal preference in the bot database and managed from Discord.
+
+The answer usage log records selected item count, selection time, and estimated input tokens
+for the extra reference fields. It also records whether a recent correction replaced older context.
+Actual provider token counts still come from the existing usage fields. Text, source identifiers,
+and the contents of corrections are excluded from telemetry.
 
 ## Synthetic extraction evaluation
 
