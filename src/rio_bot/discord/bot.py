@@ -10,6 +10,7 @@ from uuid import uuid4
 
 import discord
 
+from rio_bot.ai.chat_history_context import CURRENT_CHAT_HISTORY
 from rio_bot.ai.egress_policy import filter_channel_context
 from rio_bot.core.message_provenance import message_segments, split_inline_quotes
 from rio_bot.core.runtime_config import RuntimeSettings
@@ -574,6 +575,8 @@ class RioClient(discord.Client):
                                 message_id=str(message.id),
                                 duration_ms=round((time.monotonic() - request_started) * 1000),
                             )
+                            history = CURRENT_CHAT_HISTORY.get()
+                            history_derived = history is not None and history.used
                             current = {e["id"] for e in await self.emoji_registry.catalog(message.channel)}
                             if not memory_turn.valid:
                                 answer = "기억이 갱신됐어요. 다시 말해 주세요."
@@ -596,7 +599,8 @@ class RioClient(discord.Client):
                                 response_message_id=str(sent.id),
                                 response_chars=len(answer),
                             )
-                            if guild_id is not None and use_chat_log and memory_turn.valid:
+                            if (guild_id is not None and use_chat_log and memory_turn.valid
+                                    and not history_derived):
                                 self.recent.add(scope, sent.id, "리오", answer, role="assistant")
                             self.events.emit(
                                 "turn_completed",
@@ -608,7 +612,8 @@ class RioClient(discord.Client):
                         # Commit only after Discord delivery. Never memorize a failed model request.
                         if save_memory and authored_text:
                             self.store.add(
-                                scope, message.id, authored_text, answer, turn_id=turn_id,
+                                scope, message.id, authored_text, "" if history_derived else answer,
+                                turn_id=turn_id,
                                 search_outcome=turn_telemetry.get("search_outcome"),
                             )
                             self.store.add_shared_call(

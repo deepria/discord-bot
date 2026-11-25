@@ -10,6 +10,7 @@ from openai import APIError
 
 from ..core.conversation_boundaries import conversation_boundaries
 from ..core.message_provenance import message_segments as parse_message_segments
+from .chat_history_context import CURRENT_CHAT_HISTORY, HISTORY_POLICY
 from .dm_memory_recall import DM_MEMORY_POLICY, DMRecall, recall_for_answer
 from .egress_policy import apply_context_policy
 from .factual_challenge import (
@@ -23,6 +24,7 @@ from .information_plan import InformationPlan
 from .llm import LLM as BaseLLM
 from .llm import POLICY
 from .local_places import LOCAL_PLACE_POLICY, verified_places
+from .local_tools import LocalToolAccessChanged, request_with_local_tools
 from .model_routing import build_model_plan
 from .providers import ProviderAPIError, ProviderTimeoutError
 from .public_dm_context import (
@@ -560,8 +562,23 @@ class RequestAssembler(BaseLLM):
             if search_mode == "required" and not native_openrouter:
                 request["tool_choice"] = "required"
 
+        history = CURRENT_CHAT_HISTORY.get()
+        local_tools = ()
+        if (not tools and not information_plan.local_recommendation and use_memory
+                and history is not None and history.scope.conversation == scope.conversation
+                and str(history.message.id) == str(message_id) and history.enabled()):
+            local_tools = (history.tool,)
+            request["instructions"] += "\n\n" + HISTORY_POLICY
+            if self.settings.provider == "openai":
+                request["include"] = ["reasoning.encrypted_content"]
+
+        async def send(**kwargs):
+            return await self.usage.request(self.client, "answer", **kwargs)
+
         try:
-            response = await self.usage.request(self.client, "answer", **request)
+            response = await request_with_local_tools(send, request, local_tools)
+        except LocalToolAccessChanged:
+            return "기록에 접근할 수 있는 범위가 바뀌었어. 다시 물어봐 줘."
         except _SEARCH_ERRORS:
             if not information_plan.local_recommendation:
                 raise

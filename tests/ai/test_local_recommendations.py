@@ -112,10 +112,12 @@ async def test_discord_local_followups_and_search_audit_are_scoped_to_one_speake
     await rio.send(6, "오늘 사무실에 사람이 별로 없네")
     await rio.send(7, "리스트로")
     request, refs = request_reference(rio.model)
-    assert "local_recommendation_request" not in refs and "tools" not in request
+    assert "local_recommendation_request" not in refs
+    assert all(tool["type"] == "function" for tool in request.get("tools", []))
     await rio.send(8, "점심 뭐 먹지")
     request, refs = request_reference(rio.model)
-    assert "local_recommendation_request" not in refs and "tools" not in request
+    assert "local_recommendation_request" not in refs
+    assert all(tool["type"] == "function" for tool in request.get("tools", []))
 
     events = [json.loads(line)
               for line in Path(rio.bot.settings.event_log_path).read_text().splitlines()]

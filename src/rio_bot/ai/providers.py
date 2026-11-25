@@ -172,8 +172,22 @@ def _gemini_input(value):
         return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
 
     steps = []
+    function_names = {}
     for item in value:
         if not isinstance(item, dict):
+            continue
+        if item.get("type") == "rio_gemini_steps":
+            for step in item["steps"]:
+                if step["type"] == "function_call":
+                    function_names[step["id"]] = step["name"]
+                steps.append(step)
+            continue
+        if item.get("type") == "function_call_output":
+            call_id = item["call_id"]
+            steps.append({
+                "type": "function_result", "call_id": call_id, "name": function_names[call_id],
+                "result": [{"type": "text", "text": item["output"]}],
+            })
             continue
         role = item.get("role", "user")
         content = _gemini_content(item.get("content", ""))
@@ -201,6 +215,12 @@ def _gemini_output(data: dict):
         if step_type == "google_search_call":
             output.append(NS(type="web_search_call", status=step.get("status", "completed")))
             web_search_calls += 1
+            continue
+        if step_type == "function_call":
+            output.append(NS(
+                type="function_call", call_id=step.get("id"), name=step.get("name"),
+                arguments=json.dumps(step.get("arguments", {}), ensure_ascii=False),
+            ))
             continue
         if step_type != "model_output":
             continue
@@ -253,6 +273,7 @@ def _gemini_output(data: dict):
         output=output,
         usage=usage,
     )
+    response._rio_gemini_steps = data.get("steps") or []
     response._rio_web_search_calls = web_search_calls
     response._rio_error_codes = [
         error.get("code") for error in data.get("errors") or []
@@ -303,13 +324,21 @@ class _GeminiResponses:
                 max_output_tokens, self.total_output_tokens)
 
         tools = kwargs.get("tools") or []
-        unknown_tools = [tool for tool in tools if tool.get("type") != "web_search"]
-        if unknown_tools:
-            raise ValueError("Gemini provider는 현재 web_search 서버 도구만 변환합니다.")
+        gemini_tools = []
+        has_search = False
+        for tool in tools:
+            if tool["type"] == "web_search":
+                gemini_tools.append({"type": "google_search", "search_types": ["web_search"]})
+                has_search = True
+            elif tool["type"] == "function":
+                gemini_tools.append({key: tool[key] for key in
+                                     ("type", "name", "description", "parameters")})
+            else:
+                raise ValueError("Unsupported Gemini tool type")
 
-        required_search = bool(tools and kwargs.get("tool_choice") == "required")
-        if tools:
-            payload["tools"] = [{"type": "google_search", "search_types": ["web_search"]}]
+        required_search = has_search and kwargs.get("tool_choice") == "required"
+        if gemini_tools:
+            payload["tools"] = gemini_tools
             if required_search:
                 # OpenAI `required` means that a tool must be used before the final answer.
                 # Gemini `any` is stronger: every model step must be a tool call. With a
@@ -333,7 +362,7 @@ class _GeminiResponses:
         except httpx.HTTPStatusError as exc:
             error = _gemini_http_error(response)
             too_many_calls = (
-                bool(tools)
+                has_search
                 and error.status_code == 400
                 and "too many tool calls" in error.error_message.lower()
             )
