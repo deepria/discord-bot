@@ -76,3 +76,16 @@ LORE_MAX_ITEMS=6
 LORE_MAX_CHARS=3200
 COMMUNITY_LORE=true
 ```
+
+## 모델이 필요할 때 설정집 조회
+
+`LORE_TOOL_ENABLED=false`가 기본값이다. 승인된 시험 환경에서는
+`/config set key:LORE_TOOL_ENABLED value:true`로 모델 선택형 `search_lore`를 시험할 수 있다.
+`false`로 바꾸면 기존의 사전 설정집 선택 경로가 다시 적용된다. 웹 검색이 필요한 요청은 기존 검색을
+사용한다. 도구는 검수 기록의 출처와 정경 여부를 반환하고 관리자 자료에 별도 출처를 붙인다.
+조회 문자열과 원문은 사용량 로그에 기록하지 않는다.
+
+같은 모델과 케이스를 대상으로 `rio-eval --cases evals/character_lore_cases.jsonl`을 실행한다.
+두 번째 실행에는 `--lore-tool`을 추가하고 각각 다른 `--output` 및 `--usage-log`를 지정한다.
+리포트의 기댓값에 따라 답변을 채점하고 같은 케이스의 응답 시간과 입력 토큰을 비교한다.
+조회 자체의 비용은 사용량의 `lore_tool_elapsed_ms`와 모델 왕복 횟수를 함께 확인한다.

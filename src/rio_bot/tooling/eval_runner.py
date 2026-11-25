@@ -115,6 +115,7 @@ def eval_settings(args) -> Settings:
         lore_max_items=int(os.getenv("LORE_MAX_ITEMS", "6")),
         lore_max_chars=int(os.getenv("LORE_MAX_CHARS", "3200")),
         community_lore=community == "true",
+        lore_tool_enabled=getattr(args, "lore_tool", False),
     )
     return replace(base, output_tokens=max(128, min(base.output_tokens, 4096)))
 
@@ -249,6 +250,7 @@ def parser() -> argparse.ArgumentParser:
     root.add_argument("--provider", help="openai, gemini, openrouter. 기본은 LLM_PROVIDER입니다.")
     root.add_argument("--model", help="평가에 사용할 모델. 기본은 LLM_MODEL입니다.")
     root.add_argument("--output", help="결과 JSONL 경로. 같은 이름의 .md 리포트도 생성합니다.")
+    root.add_argument("--lore-tool", action="store_true", help="평가에서 설정집 조회 도구 사용")
     root.add_argument("--usage-log", default="data/logs/eval-usage.jsonl")
     root.add_argument("--validate-only", action="store_true",
                       help="사례 형식만 검사합니다. API key·모델 호출·결과 파일이 필요 없습니다.")
