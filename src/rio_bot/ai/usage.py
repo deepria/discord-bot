@@ -12,6 +12,7 @@ from time import perf_counter
 
 from rio_bot.core.retained_telemetry import RetainedTelemetry
 
+from .local_tools import function_calls
 from .web_search_text import reported_web_searches
 
 _TOKEN_FIELDS = ("input_tokens", "output_tokens", "total_tokens", "cached_tokens", "reasoning_tokens")
@@ -278,13 +279,14 @@ class UsageLogger:
             completed_empty = (
                 provider == "gemini"
                 and getattr(response, "status", None) == "completed"
+                and not function_calls(response)
                 and not _visible_text(response).strip()
             )
             if completed_empty:
                 response = await client.responses.create(**kwargs)
                 responses.append(response)
                 row["empty_response_retries"] = 1
-                if not _visible_text(response).strip():
+                if not function_calls(response) and not _visible_text(response).strip():
                     raise EmptyProviderResponseError(
                         "gemini", str(getattr(response, "status", "unknown")))
 

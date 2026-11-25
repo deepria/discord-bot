@@ -66,6 +66,9 @@ class Store:
                 turn_floor INTEGER NOT NULL, shared_floor INTEGER NOT NULL,
                 replacement_id INTEGER, revised_at REAL NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS chat_history_cutoffs (
+                scope TEXT PRIMARY KEY, cutoff REAL NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS dm_memory_recall (
                 scope TEXT PRIMARY KEY, realm TEXT NOT NULL, user_id TEXT NOT NULL
             );
@@ -118,6 +121,11 @@ class Store:
             INSERT OR IGNORE INTO manual_notes(scope, text)
                 SELECT scope, text FROM notes;
         """)
+        with self.db:
+            self.db.execute(
+                "INSERT OR IGNORE INTO chat_history_cutoffs VALUES ('installed', ?)",
+                (datetime.now(UTC).timestamp(),),
+            )
         self._ensure_column("turns", "turn_id", "TEXT")
         self._ensure_column("turns", "search_outcome", "TEXT")
         self._ensure_column("structured_memory_items", "source_turn_ids", "TEXT NOT NULL DEFAULT ''")
@@ -591,9 +599,31 @@ class Store:
         self._invalidate_memory_turns(lambda active: active.conversation == scope.conversation)
         return True
 
+    def _set_chat_history_cutoff(self, key: str):
+        self.db.execute("INSERT OR REPLACE INTO chat_history_cutoffs VALUES (?, ?)",
+                        (key, datetime.now(UTC).timestamp()))
+
+    def chat_history_bounds(self, scope: Scope) -> tuple[float, float]:
+        rows = dict(self.db.execute(
+            "SELECT scope, cutoff FROM chat_history_cutoffs WHERE scope IN (?, ?, ?, ?, ?)",
+            ("installed", "global", scope.realm, scope.channel, scope.user_note),
+        ))
+        installed = rows.pop("installed")
+        revision = self.db.execute(
+            "SELECT revised_at FROM memory_revisions WHERE scope=?", (scope.conversation,),
+        ).fetchone()
+        return max([*rows.values(), revision[0] if revision else 0]), installed
+
+    def has_retained_history_message(self, scope: Scope, message_id: int) -> bool:
+        return self.db.execute(
+            "SELECT 1 FROM turns WHERE scope=? AND message_id=? AND id>?",
+            (scope.conversation, str(message_id), self._memory_revision(scope)[0]),
+        ).fetchone() is not None
+
     def forget(self, scope: Scope):
         """Delete this user's history and manual notes across channels in the current realm."""
         with self.db:
+            self._set_chat_history_cutoff(scope.user_note)
             for table in ("turns", "summaries", "shared_calls", "shared_summaries"):
                 self.db.execute(f"DELETE FROM {table} WHERE realm=? AND user_id=?",
                                 (scope.realm, str(scope.user_id)))
@@ -618,6 +648,7 @@ class Store:
         prefix = scope.channel + ":user:%"
         deleted = 0
         with self.db:
+            self._set_chat_history_cutoff(scope.channel)
             for table in ("turns", "summaries", "shared_calls", "shared_summaries",
                           "structured_memory_cursors", "memory_revisions", "dm_memory_recall"):
                 cursor = self.db.execute(f"DELETE FROM {table} WHERE scope LIKE ?", (prefix,))
@@ -633,6 +664,7 @@ class Store:
         """Delete all user-owned persistent memory in a guild/realm, preserving realm notes."""
         deleted = 0
         with self.db:
+            self._set_chat_history_cutoff(scope.realm)
             for table in ("turns", "summaries", "shared_calls", "shared_summaries"):
                 cursor = self.db.execute(f"DELETE FROM {table} WHERE realm=?", (scope.realm,))
                 deleted += self._rowcount(cursor)
@@ -658,6 +690,7 @@ class Store:
         """Delete all user-owned persistent memory while preserving config and shared realm notes."""
         deleted = 0
         with self.db:
+            self._set_chat_history_cutoff("global")
             for table in ("turns", "summaries", "shared_calls", "shared_summaries"):
                 cursor = self.db.execute(f"DELETE FROM {table}")
                 deleted += self._rowcount(cursor)

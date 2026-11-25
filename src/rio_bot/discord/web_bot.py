@@ -7,12 +7,14 @@ from time import monotonic
 
 import discord
 
+from rio_bot.ai.chat_history_context import CURRENT_CHAT_HISTORY
 from rio_bot.ai.dm_memory_recall import CURRENT_PRIVATE_DM
 from rio_bot.ai.public_dm_context import CURRENT_PUBLIC_DM_LOOKUP, PublicDMContext
 from rio_bot.ai.vision import CURRENT_VISUAL_INPUTS
 from rio_bot.core.message_provenance import split_inline_quotes
 
 from .bot import RioClient as BaseRioClient
+from .chat_history import ChatHistory
 from .chat_llm import LLM
 from .chatlog_capture import capture_mode
 from .chatlog_capture_commands import install_chatlog_capture
@@ -438,6 +440,8 @@ class RioClient(BaseRioClient):
 
         dm_token = CURRENT_PUBLIC_DM_LOOKUP.set(dm_lookup)
         private_dm_token = CURRENT_PRIVATE_DM.set(scope.conversation if private_dm else None)
+        history = ChatHistory(message, self.user.id, self.store, self.settings, self.events)
+        history_token = CURRENT_CHAT_HISTORY.set(history)
 
         # A text-only bare call stays a bare call and uses the base client's relationship-aware
         # fixed reply. Only a visual-only call gets an explicit visual request so vision reaches
@@ -452,6 +456,7 @@ class RioClient(BaseRioClient):
         finally:
             if original_content is not None:
                 message.content = original_content
+            CURRENT_CHAT_HISTORY.reset(history_token)
             CURRENT_PRIVATE_DM.reset(private_dm_token)
             CURRENT_PUBLIC_DM_LOOKUP.reset(dm_token)
             CURRENT_PUBLIC_CONTEXT_REQUEST.reset(public_token)
