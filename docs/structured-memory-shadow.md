@@ -55,11 +55,14 @@ need separate evaluation. Content review requires its own authorization; retriev
 must remain off until that evaluation passes.
 
 
-## Context and purpose policy v2
+## Context and purpose policy v3
 
-The `context-purpose-v2` extractor reads chronological user/Rio exchanges in the current
+The `context-purpose-v3` extractor reads chronological user/Rio exchanges in the current
 conversation, with one retained preceding exchange for interpretation only. Only complete new
 user turns are eligible sources; the server rejects citations to context-only or omitted turns.
+Standalone requests to stop a topic or analysis in the current conversation are omitted from
+eligible evidence and counted as `temporary_conversation_boundary`. An ongoing interaction
+boundary requires explicit evidence of its intended duration and scope.
 Input is bounded to 3,000–12,000 characters (using the configured history budget within these
 bounds). Oversized exchanges are omitted as a whole, never cut into misleading evidence; a
 batch with no usable evidence advances its shadow cursor without a provider request.
@@ -72,7 +75,7 @@ repair or a guarantee that garbled model prose is detected deterministically.
 The policy separates usefulness and durability from accuracy. One-off menu acceptance, criticism
 of Rio's proposals, temporary work decisions and vague evaluations do not establish lasting
 preferences. Assistant replies are untrusted context, never independent user evidence.
-Existing summary memory and the answer path are unchanged. Version/input-size telemetry contains
+Shadow extraction remains independent of summary memory and the answer path. Version/input-size telemetry contains
 no conversation text or source IDs. Existing candidates are not re-extracted or rewritten.
 
 ## Synthetic extraction evaluation
@@ -95,7 +98,7 @@ contains synthetic candidate summaries for manual review. Count checks (includin
 are automatic, but matching counts never establish semantic correctness: every result is marked
 `manual_review_required`. Missing memory model configuration fails rather than silently evaluating
 the answer model. Provider failures are recorded by exception type only and do not abort other cases.
-Policy v2 and the frozen v1 baseline are selected only in this evaluation tool; production always
+The current policy and the frozen v1 baseline are selectable in this evaluation tool; production always
 uses the current policy. Add `--usage-log` for content-free token and latency comparison.
 
 Legacy turns without an existing processing turn ID are ineligible new evidence and are counted

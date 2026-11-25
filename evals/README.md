@@ -24,9 +24,10 @@ python scripts/run_prompt_injection_eval.py --repeat 2
 
 ## 대화 품질 회귀 평가
 
-`conversation_quality_cases.jsonl`의 Q1~Q9는 모두 합성 사례입니다. 다중 화자 귀속,
+`conversation_quality_cases.jsonl`의 Q1~Q11은 모두 합성 사례입니다. 다중 화자 귀속,
 오귀속 정정, assistant 발화 구분, 표시 이름에 의한 권한 오인, 말투 연속성, 기술적
-과도한 동조, 실제 도구 없는 완료 주장, 최근 자기 발화 조회를 검토합니다.
+과도한 동조, 실제 도구 없는 완료 주장, 최근 자기 발화 조회, 잡담에서의 기억 사용과
+같은 대화에서의 중단 요청을 검토합니다.
 
 형식 검사는 API key 없이 실행하며 provider·운영 DB·Discord를 사용하지 않습니다.
 

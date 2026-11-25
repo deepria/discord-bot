@@ -75,15 +75,17 @@ class EvalRunnerAsyncTests(unittest.IsolatedAsyncioTestCase):
                 await run(args)
             self.assertFalse(output.exists())
 
-    async def test_run_case_passes_channel_context_to_llm(self):
+    async def test_run_case_passes_seed_summary_and_channel_context_to_llm(self):
         class FakeLLM:
             settings = SimpleNamespace(history_turns=12, provider="test", model="fake")
 
             def __init__(self):
                 self.contexts = []
+                self.summaries = []
 
             async def answer(self, store, scope, name, content, **kwargs):
                 self.contexts.append(kwargs["channel_context"])
+                self.summaries.append(store.summary(scope)[0])
                 return "ok"
 
         context = [{"user_id": "99", "name": "A", "role": "user", "content": "직전 발언"}]
@@ -93,6 +95,7 @@ class EvalRunnerAsyncTests(unittest.IsolatedAsyncioTestCase):
             "speaker": "B",
             "input": "배고파",
             "channel_context": context,
+            "conversation_summary": "예전에 아침을 자주 거른다고 했다.",
             "expected": "현재 화자에게 답한다.",
         }
         llm = FakeLLM()
@@ -100,6 +103,8 @@ class EvalRunnerAsyncTests(unittest.IsolatedAsyncioTestCase):
         result = await run_case(llm, case)
 
         self.assertEqual(llm.contexts, [context])
+        self.assertEqual(llm.summaries, [case["conversation_summary"]])
+        self.assertEqual(result["conversation_summary"], case["conversation_summary"])
         self.assertEqual(result["channel_context"], context)
         self.assertEqual(result["responses"], ["ok"])
         self.assertEqual(result["error"], "")
