@@ -3,7 +3,8 @@
 import re
 
 from .ambient_weather import CURRENT_AMBIENT_WEATHER, AmbientWeatherCache
-from .freshness import FreshnessMode, is_live_domain
+from .contextual_routing import is_local_followup, local_area_answer
+from .freshness import FreshnessMode, is_live_domain, is_local_recommendation, local_area
 from .information_evidence import search_mode
 from .information_plan import InformationPlan
 from .information_routing import (
@@ -14,7 +15,8 @@ from .information_routing import (
 )
 from .request_assembly import RequestAssembler
 from .routing_plan import RoutingPlan
-from .rp_output_policy import provenance_mode
+from .rp_output_policy import ProvenanceMode, provenance_mode
+from .search_receipt import SearchOutcome, is_search_audit, search_audit_reply
 from .self_profile_lore import fallback_references
 
 _IN_WORLD_PRESENT_STATE_QUERY = re.compile(
@@ -95,6 +97,28 @@ class InformationPipeline(RequestAssembler):
     def build_information_plan(self, routing: RoutingPlan) -> InformationPlan:
         """Resolve retrieval/search decisions once, before request assembly begins."""
         query = routing.routing_query
+        if is_local_recommendation(routing.visible_content) or (
+            (is_local_followup(routing.visible_content) or local_area_answer(routing.visible_content))
+            and routing.expanded
+            and is_local_recommendation(query)
+        ):
+            area = (
+                local_area(routing.visible_content) or local_area(query)
+                or getattr(self.settings, "runtime_default_location", "")
+            )
+            return InformationPlan(
+                routing=routing,
+                route=InformationRoute.WEB,
+                references=(),
+                freshness=FreshnessMode.REQUIRED,
+                fact_question=False,
+                search_mode="required" if area and self.settings.chat_web_search else "none",
+                provenance=ProvenanceMode.EXPLICIT_SOURCE,
+                local_recommendation=True,
+                local_area=area,
+            )
+        if is_local_recommendation(routing.anchor):
+            query = routing.visible_content
         request = classify_information_request(query)
         references = self.lore_references(query)
         freshness = request.freshness
@@ -128,6 +152,10 @@ class InformationPipeline(RequestAssembler):
         message_id: str | int | None = None,
     ) -> str:
         routing = routing_plan or RoutingPlan(content, content)
+        if is_search_audit(routing.visible_content):
+            previous = store.last_search_outcome(scope) if use_memory else None
+            self.usage.record_search_outcome(SearchOutcome.NOT_RUN, "none")
+            return search_audit_reply(previous)
         information = self.build_information_plan(routing)
         weather = None
         if information.route == InformationRoute.GENERAL:

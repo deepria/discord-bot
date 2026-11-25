@@ -12,6 +12,8 @@ from time import perf_counter
 
 from rio_bot.core.retained_telemetry import RetainedTelemetry
 
+from .web_search_text import reported_web_searches
+
 _TOKEN_FIELDS = ("input_tokens", "output_tokens", "total_tokens", "cached_tokens", "reasoning_tokens")
 
 # Kept temporarily for backwards-compatible imports; runtime search policy now lives in LLM.
@@ -33,6 +35,9 @@ def _chat_web_search_enabled() -> bool:
 
 
 def _web_search_calls(response) -> int:
+    reported = reported_web_searches(response)
+    if reported is not None:
+        return reported
     count = 0
     for item in getattr(response, "output", None) or []:
         item_type = item.get("type") if isinstance(item, dict) else getattr(item, "type", None)
@@ -204,6 +209,12 @@ class UsageLogger:
             yield state
         finally:
             self._turn.reset(token)
+
+    def record_search_outcome(self, outcome: str, decision: str, *, verified_places: int = 0):
+        turn = self._turn.get()
+        if turn is not None:
+            turn.update(search_outcome=str(outcome), search_decision=decision,
+                        verified_places=verified_places)
 
     @contextmanager
     def exchange(self, scope: str):

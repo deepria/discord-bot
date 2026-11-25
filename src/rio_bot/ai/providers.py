@@ -199,7 +199,7 @@ def _gemini_output(data: dict):
     for step in data.get("steps") or []:
         step_type = step.get("type")
         if step_type == "google_search_call":
-            output.append(NS(type="web_search_call"))
+            output.append(NS(type="web_search_call", status=step.get("status", "completed")))
             web_search_calls += 1
             continue
         if step_type != "model_output":
@@ -209,10 +209,12 @@ def _gemini_output(data: dict):
         for block in step.get("content") or []:
             if block.get("type") != "text":
                 continue
-            text = block.get("text") or ""
+            grounded_text = block.get("text") or ""
+            grounded_annotations = block.get("annotations") or []
+            text = grounded_text
             annotations = []
             seen_urls = set()
-            for annotation in block.get("annotations") or []:
+            for annotation in grounded_annotations:
                 if annotation.get("type") != "url_citation":
                     continue
                 url = annotation.get("url")
@@ -230,7 +232,10 @@ def _gemini_output(data: dict):
                     title=annotation.get("title") or "",
                 ))
             text_pieces.append(text)
-            parts.append(NS(type="output_text", text=text, annotations=annotations))
+            parts.append(NS(
+                type="output_text", text=text, annotations=annotations,
+                _rio_grounded_text=grounded_text, _rio_grounded_annotations=grounded_annotations,
+            ))
         if parts:
             output.append(NS(type="message", content=parts))
 

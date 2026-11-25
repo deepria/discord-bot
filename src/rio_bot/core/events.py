@@ -15,7 +15,8 @@ def turn_event_fields(turn_id: str, telemetry: dict, *, status: str, latency_ms:
                       memory_lifecycle: str, error_type: str | None = None,
                       provider: str | None = None, model: str | None = None) -> dict:
     """Build the versioned, content-free Phase 1 turn event payload."""
-    answer = telemetry.get("answer") if isinstance(telemetry, dict) else None
+    telemetry = telemetry if isinstance(telemetry, dict) else {}
+    answer = telemetry.get("answer")
     answer = answer if isinstance(answer, dict) else {}
     token_fields = ("input_tokens", "output_tokens", "total_tokens")
     tokens = {
@@ -36,6 +37,8 @@ def turn_event_fields(turn_id: str, telemetry: dict, *, status: str, latency_ms:
         "latency_ms": latency_ms,
         "tokens": tokens,
         "web_search_calls": answer.get("web_search_calls"),
+        **({key: telemetry[key] for key in ("search_outcome", "search_decision", "verified_places")
+            if key in telemetry}),
         "memory_lifecycle": memory_lifecycle,
         "error_type": error_type,
     }

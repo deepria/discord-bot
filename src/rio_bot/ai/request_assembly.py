@@ -5,6 +5,9 @@ import re
 from collections.abc import Callable
 from datetime import UTC, datetime
 
+import httpx
+from openai import APIError
+
 from ..core.message_provenance import message_segments as parse_message_segments
 from .conversation_boundaries import conversation_boundaries
 from .egress_policy import apply_context_policy
@@ -18,7 +21,9 @@ from .freshness import FreshnessMode
 from .information_plan import InformationPlan
 from .llm import LLM as BaseLLM
 from .llm import POLICY
+from .local_places import LOCAL_PLACE_POLICY, verified_places
 from .model_routing import build_model_plan
+from .providers import ProviderAPIError, ProviderTimeoutError
 from .public_dm_context import (
     CURRENT_PUBLIC_DM_LOOKUP,
     PUBLIC_DM_POLICY,
@@ -28,8 +33,10 @@ from .public_dm_context import (
 from .routing_plan import RoutingPlan
 from .rp_output_policy import hide_web_citations, provenance_instruction
 from .runtime_context import build_runtime_context, runtime_instruction
+from .search_receipt import SearchOutcome, search_execution
 from .semantic_routing import classify_semantic_route
 from .shadow_routing import shadow_telemetry
+from .usage import EmptyProviderResponseError
 from .web_search_runtime import tool_config
 from .web_search_text import response_text
 
@@ -148,6 +155,15 @@ _CURRENT_CHANNEL_SCOPE_QUERY = re.compile(
 )
 _SERVER_RECENT_TURNS = 4
 _SERVER_RECENT_CHARS = 4000
+_LOCAL_SEARCH_REPLY = {
+    SearchOutcome.DISABLED: "검색 기능이 꺼져 있어서 실제 매장을 확인할 수 없어.",
+    SearchOutcome.NOT_RUN: "이번에는 검색이 실행되지 않아서 실제 매장을 확인하지 못했어.",
+    SearchOutcome.FAILED: "검색을 시도했지만 매장 정보를 확인하는 데 실패했어.",
+    SearchOutcome.UNKNOWN: "검색 실행을 확인할 수 없어서 실제 매장을 안내하기 어려워.",
+    SearchOutcome.NO_EVIDENCE: "검색했지만 이름과 위치를 뒷받침하는 출처가 있는 매장을 찾지 못했어.",
+}
+_SEARCH_ERRORS = (APIError, httpx.HTTPError, TimeoutError, ProviderAPIError,
+                  ProviderTimeoutError, EmptyProviderResponseError)
 
 
 class RequestAssembler(BaseLLM):
@@ -314,6 +330,13 @@ class RequestAssembler(BaseLLM):
                     information_plan = replan(expanded)
                     routing_content = expanded.routing_query
 
+        if information_plan.local_recommendation and information_plan.search_mode == "none":
+            if not self.settings.chat_web_search:
+                self.usage.record_search_outcome(SearchOutcome.DISABLED, "none")
+                return _LOCAL_SEARCH_REPLY[SearchOutcome.DISABLED]
+            self.usage.record_search_outcome(SearchOutcome.NOT_RUN, "none")
+            return "어느 지역이나 역 근처에서 찾고 있어?"
+
         summary, summary_through = store.summary(scope) if use_memory else ("", 0)
         saved_turns = store.history(scope) if use_memory else []
         current_channel_only = self._current_channel_scope_only(scope, routing_content)
@@ -423,6 +446,11 @@ class RequestAssembler(BaseLLM):
             ) // 4
         elif public_dm_telemetry:
             public_dm_telemetry["public_dm_estimated_input_tokens"] = 0
+        if information_plan.local_recommendation:
+            context["local_recommendation_request"] = {
+                "query": information_plan.routing.routing_query,
+                "area": information_plan.local_area,
+            }
         context_telemetry = self._channel_context_telemetry(
             channel_context,
             context["channel_recent_messages"],
@@ -461,8 +489,10 @@ class RequestAssembler(BaseLLM):
             instruction_parts.append(LIVE_INFORMATION_POLICY)
         if search_mode in {"auto", "required"}:
             instruction_parts.append(WEB_SEARCH_POLICY)
-        if search_mode == "required":
+        if search_mode == "required" and not information_plan.local_recommendation:
             instruction_parts.append(provenance_instruction(provenance))
+        if information_plan.local_recommendation:
+            instruction_parts.append(LOCAL_PLACE_POLICY)
         if fact_question:
             instruction_parts.append(WORLD_FACT_DETAIL_POLICY)
             if search_mode in {"auto", "required"}:
@@ -507,13 +537,41 @@ class RequestAssembler(BaseLLM):
             "store": False,
             "_rio_telemetry": telemetry,
         }
-        tools = tool_config(search_mode)
+        native_openrouter = information_plan.local_recommendation and self.settings.provider == "openrouter"
+        tools = tool_config(search_mode, native_openrouter=native_openrouter)
         if tools:
             request["tools"] = tools
-            if search_mode == "required":
+            if search_mode == "required" and not native_openrouter:
                 request["tool_choice"] = "required"
 
-        response = await self.usage.request(self.client, "answer", **request)
+        try:
+            response = await self.usage.request(self.client, "answer", **request)
+        except _SEARCH_ERRORS:
+            if not information_plan.local_recommendation:
+                raise
+            self.usage.record_search_outcome(SearchOutcome.FAILED, search_mode)
+            return _LOCAL_SEARCH_REPLY[SearchOutcome.FAILED]
+
+        outcome = search_execution(response, requested=bool(tools), provider=self.settings.provider)
+        if information_plan.local_recommendation:
+            if outcome != SearchOutcome.RAN:
+                self.usage.record_search_outcome(outcome, search_mode)
+                return _LOCAL_SEARCH_REPLY[outcome]
+            places, count, omitted = verified_places(response)
+            if not count:
+                outcome = SearchOutcome.NO_EVIDENCE
+            elif omitted:
+                outcome = SearchOutcome.PARTIAL
+            else:
+                outcome = SearchOutcome.CONFIRMED
+            self.usage.record_search_outcome(outcome, search_mode, verified_places=count)
+            if not count:
+                return _LOCAL_SEARCH_REPLY[outcome]
+            heading = (
+                "출처를 확인할 수 있는 곳만 골랐어." if omitted else "이곳들의 이름과 위치를 확인했어."
+            )
+            return f"{heading}\n{places}"
+        self.usage.record_search_outcome(outcome, search_mode)
         text = response_text(response, hide_citations=hide_web_citations(provenance))
         if response.status != "completed" or not text:
             raise ValueError("No completed model response")

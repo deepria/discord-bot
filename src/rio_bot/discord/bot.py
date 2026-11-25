@@ -601,7 +601,10 @@ class RioClient(discord.Client):
                             )
                         # Commit only after Discord delivery. Never memorize a failed model request.
                         if save_memory and authored_text:
-                            self.store.add(scope, message.id, authored_text, answer, turn_id=turn_id)
+                            self.store.add(
+                                scope, message.id, authored_text, answer, turn_id=turn_id,
+                                search_outcome=turn_telemetry.get("search_outcome"),
+                            )
                             self.store.add_shared_call(
                                 scope, message.id, message.author.display_name, authored_text)
                             for summarize in (self.llm.summarize, self.llm.summarize_shared):
@@ -624,6 +627,8 @@ class RioClient(discord.Client):
                                         )
                                 except Exception as exc:  # noqa: BLE001 - retain the reply path on shadow failure
                                     log.warning("Structured memory extraction deferred (%s)", type(exc).__name__)
+                        else:
+                            self.store.invalidate_last_search_outcome(scope)
                 self.events.emit(
                     "turn.completed",
                     **turn_event_fields(

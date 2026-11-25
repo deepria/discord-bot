@@ -113,10 +113,28 @@ Freshness routing은 기존 Blue Archive lore 정책을 대체하지 않습니�
 
 - OpenAI: Responses API `web_search`
 - Gemini: Google Search
-- OpenRouter: web plugin
+- OpenRouter: 일반 외부 정보에는 기존 web plugin, 실제 매장 추천에는 `openrouter:web_search`
 
 `auto`에서는 tool만 제공하고 `tool_choice=required`를 보내지 않습니다. `required`에서만 강제
 선택합니다. 검색 context는 현재 `low`를 사용합니다.
+
+## 지역 매장과 직전 답변의 검색 기록
+
+`점심 뭐 먹지`에는 메뉴를 제안합니다. 증미역 주변 식당처럼 실제 장소를 요청하면 사용자가
+지정한 지역이나 기본 지역에서 검색합니다. 조건 없이 “가게 이름도”, “리스트로”라고 하면
+같은 화자가 현재 채널 또는 DM에서 요청한 지역과 메뉴 조건을 이어받습니다. 새 주제가
+나오면 이전 조건을 끊습니다. 위치가 비어 있으면 먼저 어느 지역인지 묻습니다.
+
+매장은 실제 검색 기록과 개별 매장 이름·주소에 연결된 제공자 인용이 있을 때만 표시합니다.
+메뉴·평점·영업 정보도 해당 항목에 직접 연결된 인용이 필요합니다. 인용이 달린 매장만
+보여주고, 검색이 실패하거나 검증 가능한 결과가 없으면 각각의 상태를 알립니다.
+검증은 제공자가 반환한 인용 범위와 출처 표시에 기반합니다. 출처 페이지를 다시 열어
+영업이나 주소를 별도로 재검증하는 경로는 이번 기능에 포함되지 않습니다.
+[OpenAI 검색 인용](https://developers.openai.com/api/docs/guides/tools-web-search) · [Gemini 검색 인용](https://ai.google.dev/gemini-api/docs/google-search?hl=id) · [OpenRouter 검색 사용량](https://openrouter.ai/docs/guides/features/server-tools/web-search#usage-tracking)
+
+“찾아봤어?”는 같은 화자의 같은 채널 또는 DM에서 마지막으로 전달하고 기록한 대화
+답변의 검색 결과를 조회합니다. 기억 읽기가 꺼졌거나 검색 실행을 확인할 기록이 없으면
+확인할 수 없다고 답합니다. 이 질문에는 새 검색을 실행하지 않습니다.
 
 ## 현재 정보의 신뢰 기준
 
@@ -131,7 +149,7 @@ Freshness routing은 기존 Blue Archive lore 정책을 대체하지 않습니�
 `data/logs/usage.jsonl`의 각 API row에는 다음 필드가 기록됩니다.
 
 - `web_search_used`: 해당 logical response에서 실제 검색을 사용했는지
-- `web_search_calls`: 생성된 `web_search_call` output item 수
+- `web_search_calls`: `web_search_call` output item 수 또는 OpenRouter가 보고한 서버 검색 요청 수
 
 `discord-usage.jsonl`에는 한 Discord 응답에 딸린 모든 API 호출의 `web_search_calls` 합계가
 기록됩니다. 사용자 메시지, 검색어, 검색 결과 URL은 usage telemetry에 저장하지 않습니다.
