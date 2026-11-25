@@ -1,8 +1,19 @@
 import sqlite3
 import unicodedata
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
+from weakref import WeakSet
 
+from .conversation_boundaries import is_standalone_boundary
+from .memory_evidence import evidence_rejection, explicit_boundary
 from .routing import Scope
+
+
+@dataclass(eq=False)
+class MemoryTurn:
+    scope: Scope
+    valid: bool = True
 
 
 class Store:
@@ -14,6 +25,7 @@ class Store:
         self.db = sqlite3.connect(path)
         self.db.row_factory = sqlite3.Row
         self.history_turns = history_turns
+        self._memory_turns: WeakSet[MemoryTurn] = WeakSet()
         self.db.executescript("""
             PRAGMA journal_mode=WAL;
             PRAGMA busy_timeout=5000;
@@ -48,6 +60,11 @@ class Store:
                 scope TEXT PRIMARY KEY, realm TEXT NOT NULL, user_id TEXT NOT NULL,
                 through_id INTEGER NOT NULL DEFAULT 0,
                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS memory_revisions (
+                scope TEXT PRIMARY KEY, realm TEXT NOT NULL, user_id TEXT NOT NULL,
+                turn_floor INTEGER NOT NULL, shared_floor INTEGER NOT NULL,
+                replacement_id INTEGER, revised_at REAL NOT NULL
             );
             CREATE TABLE IF NOT EXISTS structured_memory_items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, owner_id TEXT NOT NULL,
@@ -149,15 +166,51 @@ class Store:
                               (scope.conversation,)).fetchone()
         return (row[0], row[1]) if row else ("", 0)
 
+    def _memory_revision(self, scope: Scope):
+        row = self.db.execute(
+            "SELECT turn_floor, shared_floor, replacement_id FROM memory_revisions WHERE scope=?",
+            (scope.conversation,),
+        ).fetchone()
+        return tuple(row) if row else (0, 0, None)
+
+    def memory_turn(self, scope: Scope) -> MemoryTurn:
+        turn = MemoryTurn(scope)
+        self._memory_turns.add(turn)
+        return turn
+
+    def _invalidate_memory_turns(self, matches):
+        for turn in list(self._memory_turns):
+            if matches(turn.scope):
+                turn.valid = False
+
+    def context_after_memory_revision(self, scope: Scope, rows: list[dict]) -> list[dict]:
+        revision = self.db.execute(
+            "SELECT revised_at FROM memory_revisions WHERE scope=?", (scope.conversation,),
+        ).fetchone()
+        if not revision:
+            return rows
+        selected = []
+        for row in rows:
+            timestamp = row.get("unix_time")
+            if timestamp is None:
+                try:
+                    at = datetime.fromisoformat(row.get("at", ""))
+                    timestamp = at.timestamp() if at.tzinfo is not None else None
+                except (ValueError, TypeError):
+                    continue
+            if isinstance(timestamp, (int, float)) and timestamp > revision["revised_at"]:
+                selected.append(row)
+        return selected
+
     def history(self, scope: Scope):
         return list(reversed(self.db.execute(
-            "SELECT * FROM turns WHERE scope=? ORDER BY id DESC LIMIT ?",
-            (scope.conversation, self.history_turns)).fetchall()))
+            "SELECT * FROM turns WHERE scope=? AND id>? ORDER BY id DESC LIMIT ?",
+            (scope.conversation, self._memory_revision(scope)[0], self.history_turns)).fetchall()))
 
     def pending(self, scope: Scope):
         _, through = self.summary(scope)
         return self.db.execute("SELECT * FROM turns WHERE scope=? AND id>? ORDER BY id",
-                               (scope.conversation, through)).fetchall()
+                               (scope.conversation, max(through, self._memory_revision(scope)[0]))).fetchall()
 
     def seen(self, message_id: int):
         return self.db.execute("SELECT 1 FROM turns WHERE message_id=?",
@@ -196,6 +249,9 @@ class Store:
                             (scope.conversation, scope.conversation, self.history_turns))
 
     def save_summary(self, scope: Scope, text: str, through: int):
+        floor = self._memory_revision(scope)[0]
+        if floor and through <= floor:
+            return
         exportable = self.summary_exportable(scope) and all(
             row["exportable"] for row in self.pending(scope) if row["id"] <= through)
         with self.db:
@@ -217,23 +273,36 @@ class Store:
         if not 2 <= limit <= 8:
             raise ValueError("structured memory batch limit must be 2~8")
         return self.db.execute("SELECT * FROM turns WHERE scope=? AND id>? ORDER BY id LIMIT ?",
-                               (scope.conversation, self.structured_memory_cursor(scope), limit)).fetchall()
+                               (scope.conversation, max(self.structured_memory_cursor(scope),
+                                                        self._memory_revision(scope)[0]), limit)).fetchall()
 
     def structured_memory_context(self, scope: Scope, *, before_id: int):
         """One retained preceding exchange, for interpretation only, never new evidence."""
         return self.db.execute(
-            "SELECT * FROM turns WHERE scope=? AND id<? ORDER BY id DESC LIMIT 1",
-            (scope.conversation, before_id)).fetchall()
+            "SELECT * FROM turns WHERE scope=? AND id>? AND id<? ORDER BY id DESC LIMIT 1",
+            (scope.conversation, self._memory_revision(scope)[0], before_id)).fetchall()
+
+    def summary_batch_is_current(self, scope: Scope, pending, *, shared: bool = False) -> bool:
+        current = self.pending_shared(scope) if shared else self.pending(scope)
+        ids = {row["id"] for row in current}
+        return all(row["id"] in ids for row in pending)
 
     def save_structured_memory(self, scope: Scope, *, through_id: int, items: list[dict]):
         pending = self.pending_structured_memory(scope)
-        sources = {str(row["message_id"]) for row in pending if row["id"] <= through_id}
+        sources = {str(row["message_id"]): row for row in pending if row["id"] <= through_id}
         if through_id not in {int(row["id"]) for row in pending}:
             raise ValueError("structured memory cursor must end inside the pending batch")
         normalized = [self._validate_structured_item(scope, item, sources) for item in items]
         accepted, rejected = [], {}
         for item in normalized:
             reason = self._structured_memory_rejection_reason(item["content"])
+            source_rows = [sources[value] for value in item["source_message_ids"]]
+            if not reason:
+                reason = self._evidence_rejection(item["kind"], source_rows)
+            if not reason and scope.public_at_capture and (
+                scope.guild_id is None or not all(self._public_source(row) for row in source_rows)
+            ):
+                reason = "unverified_capture_visibility"
             if reason:
                 rejected[reason] = rejected.get(reason, 0) + 1
             else:
@@ -244,16 +313,7 @@ class Store:
         }
         with self.db:
             for item in accepted:
-                self.db.execute(
-                    "INSERT INTO structured_memory_items(owner_id,origin_realm,origin_channel_id,"
-                    "origin_public_at_capture,kind,content,disclosure,source_message_ids,confidence,"
-                    "source_turn_ids,owner_type,status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-                    (str(scope.user_id), scope.realm, str(scope.channel_id), int(scope.public_at_capture),
-                     item["kind"], item["content"], item["disclosure"],
-                     ",".join(item["source_message_ids"]), item["confidence"],
-                     ",".join(turn_ids.get(message_id, "") for message_id in item["source_message_ids"]),
-                     "user", "active"),
-                )
+                self._insert_structured_memory(scope, item, turn_ids)
             self.db.execute(
                 "INSERT INTO structured_memory_cursors(scope,realm,user_id,through_id,updated_at) "
                 "VALUES (?,?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(scope) DO UPDATE SET "
@@ -261,6 +321,39 @@ class Store:
                 (scope.conversation, scope.realm, str(scope.user_id), through_id),
             )
         return {"candidates": len(normalized), "written": len(accepted), "rejected": rejected}
+
+    @staticmethod
+    def _evidence_rejection(kind, rows):
+        for row in rows:
+            if not row["turn_id"]:
+                return "missing_turn_provenance"
+            if is_standalone_boundary(row["content"]):
+                return "temporary_conversation_boundary"
+            reason = evidence_rejection(row["content"])
+            if reason:
+                return reason
+        if kind == "boundary" and not any(explicit_boundary(row["content"]) for row in rows):
+            return "missing_durable_boundary"
+        return None
+
+    def _insert_structured_memory(self, scope, item, turn_ids):
+        cursor = self.db.execute(
+            "INSERT INTO structured_memory_items(owner_id,origin_realm,origin_channel_id,"
+            "origin_public_at_capture,kind,content,disclosure,source_message_ids,confidence,"
+            "source_turn_ids,owner_type,status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            (str(scope.user_id), scope.realm, str(scope.channel_id), int(scope.public_at_capture),
+             item["kind"], item["content"], item["disclosure"],
+             ",".join(item["source_message_ids"]), item["confidence"],
+             ",".join(turn_ids[message_id] for message_id in item["source_message_ids"]),
+             "user", "active"),
+        )
+        return cursor.lastrowid
+
+    def _public_source(self, row) -> bool:
+        return bool(row["exportable"] or self.db.execute(
+            "SELECT 1 FROM shared_calls WHERE scope=? AND user_id=? AND message_id=?",
+            (row["scope"], row["user_id"], row["message_id"]),
+        ).fetchone())
 
     @staticmethod
     def _structured_memory_rejection_reason(content: str) -> str | None:
@@ -307,38 +400,161 @@ class Store:
                 "source_message_ids": source_ids, "confidence": float(confidence)}
 
     def active_structured_memory(self, scope: Scope):
-        """Read-only Phase 5 retrieval candidate helper; Phase 4 never calls it for answers."""
+        """Inventory for shadow evaluation. Use verified_structured_memory for disclosure."""
         return self.db.execute(
             "SELECT * FROM structured_memory_items WHERE owner_id=? AND origin_realm=? "
             "AND status='active' ORDER BY id DESC",
             (str(scope.user_id), scope.realm),
         ).fetchall()
 
-    def supersede_structured_memory(self, scope: Scope, item_id: int, replacement_id: int) -> bool:
-        with self.db:
-            replacement = self.db.execute(
-                "SELECT 1 FROM structured_memory_items WHERE id=? AND owner_id=? "
-                "AND origin_realm=? AND status='active'",
-                (replacement_id, str(scope.user_id), scope.realm),
-            ).fetchone()
-            if replacement is None:
-                return False
-            cursor = self.db.execute(
-                "UPDATE structured_memory_items SET status='superseded', superseded_by=?, "
-                "updated_at=CURRENT_TIMESTAMP WHERE id=? AND owner_id=? AND origin_realm=? "
-                "AND status='active'",
-                (replacement_id, item_id, str(scope.user_id), scope.realm),
+    def _owned_structured_item(self, scope: Scope, item_id: int):
+        return self.db.execute(
+            "SELECT * FROM structured_memory_items WHERE id=? AND owner_id=? AND origin_realm=? "
+            "AND origin_channel_id=? AND owner_type='user' AND status='active'",
+            (item_id, str(scope.user_id), scope.realm, str(scope.channel_id)),
+        ).fetchone()
+
+    def _verified_sources(self, scope, item):
+        message_ids = item["source_message_ids"].split(",")
+        turn_ids = item["source_turn_ids"].split(",")
+        floor, _, replacement_id = self._memory_revision(scope)
+        if (
+            len(message_ids) != len(turn_ids) or not 1 <= len(message_ids) <= 8
+            or len(set(message_ids)) != len(message_ids) or not all(message_ids) or not all(turn_ids)
+            or item["origin_public_at_capture"] not in (0, 1)
+            or self._structured_memory_rejection_reason(item["content"])
+        ):
+            return []
+        marks = ",".join("?" for _ in message_ids)
+        sources = {
+            row["message_id"]: row for row in self.db.execute(
+                f"SELECT t.*, EXISTS(SELECT 1 FROM shared_calls c WHERE c.scope=t.scope "
+                f"AND c.message_id=t.message_id AND c.user_id=t.user_id) AS shared "
+                f"FROM turns t WHERE t.scope=? AND t.realm=? AND t.user_id=? "
+                f"AND t.message_id IN ({marks})",
+                (scope.conversation, scope.realm, str(scope.user_id), *message_ids),
             )
-        return self._rowcount(cursor) == 1
+        }
+        public = item["origin_public_at_capture"] == 1
+        if item["disclosure"] != ("channel" if public else "owner_private"):
+            return []
+        if public and scope.guild_id is None:
+            return []
+        verified = []
+        for message_id, turn_id in zip(message_ids, turn_ids):
+            row = sources.get(message_id)
+            if (
+                row is None or row["turn_id"] != turn_id
+                or (row["id"] <= floor and item["id"] != replacement_id)
+                or (public and not (row["exportable"] or row["shared"]))
+            ):
+                return []
+            verified.append(row)
+        return [] if self._evidence_rejection(item["kind"], verified) else verified
+
+    def verified_structured_memory(self, scope: Scope, *, limit: int = 12):
+        """Disclose candidates only in the owning conversation with retained source pairs."""
+        if limit < 1:
+            return []
+        rows = self.db.execute(
+            "SELECT * FROM structured_memory_items WHERE owner_id=? AND origin_realm=? "
+            "AND origin_channel_id=? AND owner_type='user' AND status='active' ORDER BY id DESC",
+            (str(scope.user_id), scope.realm, str(scope.channel_id)),
+        )
+        verified = []
+        for row in rows:
+            if self._verified_sources(scope, row):
+                verified.append(row)
+                if len(verified) >= limit:
+                    break
+        return verified
+
+    def _revise_memory(self, scope, replacement_id=None, *, correction=""):
+        turn_floor = self.db.execute(
+            "SELECT COALESCE(MAX(id),0) FROM turns WHERE scope=?", (scope.conversation,),
+        ).fetchone()[0]
+        shared_floor = self.db.execute(
+            "SELECT COALESCE(MAX(id),0) FROM shared_calls WHERE scope=?", (scope.conversation,),
+        ).fetchone()[0]
+        old_turn_floor, old_shared_floor, _ = self._memory_revision(scope)
+        turn_floor, shared_floor = max(turn_floor, old_turn_floor), max(shared_floor, old_shared_floor)
+        self.db.execute(
+            "INSERT OR REPLACE INTO memory_revisions VALUES (?,?,?,?,?,?,?)",
+            (scope.conversation, scope.realm, str(scope.user_id), turn_floor, shared_floor,
+             replacement_id, datetime.now(UTC).timestamp()),
+        )
+        for table in ("summaries", "shared_summaries"):
+            self.db.execute(f"DELETE FROM {table} WHERE scope=?", (scope.conversation,))
+        if correction:
+            # Seed from the newly confirmed user utterance only, never from its old reply.
+            self.db.execute(
+                "INSERT INTO summaries VALUES (?,?,?,?,?,0)",
+                (scope.conversation, scope.realm, str(scope.user_id), correction, turn_floor),
+            )
+
+    def supersede_structured_memory(self, scope: Scope, item_id: int, replacement_id: int) -> bool:
+        original = self._owned_structured_item(scope, item_id)
+        replacement = self._owned_structured_item(scope, replacement_id)
+        if original is None or replacement is None or replacement["kind"] != original["kind"]:
+            return False
+        original_sources = self._verified_sources(scope, original)
+        replacement_sources = self._verified_sources(scope, replacement)
+        if not original_sources or not replacement_sources or (
+            min(row["id"] for row in replacement_sources) <= max(row["id"] for row in original_sources)
+        ):
+            return False
+        with self.db:
+            self.db.execute(
+                "UPDATE structured_memory_items SET status='superseded', superseded_by=?, "
+                "updated_at=CURRENT_TIMESTAMP WHERE id=?", (replacement_id, item_id),
+            )
+            self._revise_memory(scope, replacement_id)
+        self._invalidate_memory_turns(lambda active: active.conversation == scope.conversation)
+        return True
+
+    def correct_structured_memory(self, scope: Scope, item_id: int, message_id: str) -> bool:
+        """Replace a DM item from the latest user-authored, owner-confirmed source."""
+        original = self._owned_structured_item(scope, item_id)
+        if scope.guild_id is not None or original is None:
+            return False
+        original_sources = self._verified_sources(scope, original)
+        turns = self.history(scope)
+        if not original_sources or not turns:
+            return False
+        source = turns[-1]
+        if (
+            source["message_id"] != message_id or source["id"] <= max(row["id"] for row in original_sources)
+            or self._evidence_rejection(original["kind"], [source])
+            or self._structured_memory_rejection_reason(source["content"])
+            or not 1 <= len(source["content"].strip()) <= 600
+            or source["content"].strip() == original["content"]
+        ):
+            return False
+        item = self._validate_structured_item(scope, {
+            "kind": original["kind"], "content": source["content"], "source_message_ids": [message_id],
+            "disclosure": "owner_private", "confidence": 1.0,
+        }, {message_id})
+        with self.db:
+            replacement_id = self._insert_structured_memory(scope, item, {message_id: source["turn_id"]})
+            self.db.execute(
+                "UPDATE structured_memory_items SET status='superseded', superseded_by=?, "
+                "updated_at=CURRENT_TIMESTAMP WHERE id=?", (replacement_id, item_id),
+            )
+            self._revise_memory(scope, replacement_id, correction=item["content"])
+        self._invalidate_memory_turns(lambda active: active.conversation == scope.conversation)
+        return True
 
     def delete_structured_memory(self, scope: Scope, item_id: int) -> bool:
+        if self._owned_structured_item(scope, item_id) is None:
+            return False
         with self.db:
-            cursor = self.db.execute(
+            self.db.execute(
                 "UPDATE structured_memory_items SET status='deleted', updated_at=CURRENT_TIMESTAMP "
-                "WHERE id=? AND owner_id=? AND origin_realm=? AND status!='deleted'",
-                (item_id, str(scope.user_id), scope.realm),
+                "WHERE id=?", (item_id,),
             )
-        return self._rowcount(cursor) == 1
+            self._revise_memory(scope)
+        self._invalidate_memory_turns(lambda active: active.conversation == scope.conversation)
+        return True
 
     def forget(self, scope: Scope):
         """Delete this user's history and manual notes across channels in the current realm."""
@@ -350,8 +566,11 @@ class Store:
                             (scope.realm, str(scope.user_id)))
             self.db.execute("DELETE FROM structured_memory_cursors WHERE realm=? AND user_id=?",
                             (scope.realm, str(scope.user_id)))
+            self.db.execute("DELETE FROM memory_revisions WHERE realm=? AND user_id=?",
+                            (scope.realm, str(scope.user_id)))
             self.db.execute("DELETE FROM manual_notes WHERE scope=?", (scope.user_note,))
             self.db.execute("DELETE FROM notes WHERE scope=?", (scope.user_note,))
+        self._invalidate_memory_turns(lambda active: active.user_note == scope.user_note)
 
     @staticmethod
     def _rowcount(cursor) -> int:
@@ -362,13 +581,15 @@ class Store:
         prefix = scope.channel + ":user:%"
         deleted = 0
         with self.db:
-            for table in ("turns", "summaries", "shared_calls", "shared_summaries"):
+            for table in ("turns", "summaries", "shared_calls", "shared_summaries",
+                          "structured_memory_cursors", "memory_revisions"):
                 cursor = self.db.execute(f"DELETE FROM {table} WHERE scope LIKE ?", (prefix,))
                 deleted += self._rowcount(cursor)
             cursor = self.db.execute(
                 "DELETE FROM structured_memory_items WHERE origin_realm=? AND origin_channel_id=?",
                 (scope.realm, str(scope.channel_id)))
             deleted += self._rowcount(cursor)
+        self._invalidate_memory_turns(lambda active: active.channel == scope.channel)
         return deleted
 
     def purge_realm_memory(self, scope: Scope) -> int:
@@ -383,12 +604,15 @@ class Store:
             deleted += self._rowcount(cursor)
             cursor = self.db.execute("DELETE FROM structured_memory_cursors WHERE realm=?", (scope.realm,))
             deleted += self._rowcount(cursor)
+            cursor = self.db.execute("DELETE FROM memory_revisions WHERE realm=?", (scope.realm,))
+            deleted += self._rowcount(cursor)
             cursor = self.db.execute(
                 "DELETE FROM manual_notes WHERE scope LIKE ?", (scope.realm + ":user:%",))
             deleted += self._rowcount(cursor)
             cursor = self.db.execute(
                 "DELETE FROM notes WHERE scope LIKE ?", (scope.realm + ":user:%",))
             deleted += self._rowcount(cursor)
+        self._invalidate_memory_turns(lambda active: active.realm == scope.realm)
         return deleted
 
     def purge_all_memory(self) -> int:
@@ -402,10 +626,13 @@ class Store:
             deleted += self._rowcount(cursor)
             cursor = self.db.execute("DELETE FROM structured_memory_cursors")
             deleted += self._rowcount(cursor)
+            cursor = self.db.execute("DELETE FROM memory_revisions")
+            deleted += self._rowcount(cursor)
             cursor = self.db.execute("DELETE FROM manual_notes WHERE instr(scope, ':user:') > 0")
             deleted += self._rowcount(cursor)
             cursor = self.db.execute("DELETE FROM notes WHERE instr(scope, ':user:') > 0")
             deleted += self._rowcount(cursor)
+        self._invalidate_memory_turns(lambda _active: True)
         return deleted
 
     def add_shared_call(self, scope, message_id, name, content):
@@ -427,9 +654,13 @@ class Store:
 
     def pending_shared(self, scope):
         return self.db.execute("SELECT * FROM shared_calls WHERE scope=? AND id>? ORDER BY id",
-                               (scope.conversation, self.shared_summary(scope)[1])).fetchall()
+                               (scope.conversation, max(self.shared_summary(scope)[1],
+                                                        self._memory_revision(scope)[1]))).fetchall()
 
     def save_shared_summary(self, scope, name, text, through):
+        floor = self._memory_revision(scope)[1]
+        if floor and through <= floor:
+            return
         with self.db:
             self.db.execute("INSERT OR REPLACE INTO shared_summaries VALUES (?,?,?,?,?,?)",
                             (scope.conversation, scope.realm, str(scope.user_id), name,
@@ -441,6 +672,8 @@ class Store:
                             else ("user_id=?", str(user_id)))
         rows = self.db.execute(
             "SELECT scope, user_id, MAX(id) AS recent FROM shared_calls WHERE " + condition +
+            " AND id>COALESCE((SELECT shared_floor FROM memory_revisions m "
+            "WHERE m.scope=shared_calls.scope),0)"
             " GROUP BY scope,user_id ORDER BY recent DESC LIMIT 30", (value,)).fetchall()
         return [Scope(int(r["scope"].split(":")[1]), int(r["scope"].split(":")[3]),
                       int(r["user_id"])) for r in rows]
@@ -448,7 +681,9 @@ class Store:
     def recent_public_sources(self, user_id: int, *, since: str, until: str) -> list[Scope]:
         rows = self.db.execute(
             "SELECT scope FROM shared_calls WHERE user_id=? AND realm LIKE 'guild:%' "
-            "AND created_at BETWEEN ? AND ? GROUP BY scope "
+            "AND created_at BETWEEN ? AND ? "
+            "AND id>COALESCE((SELECT shared_floor FROM memory_revisions m "
+            "WHERE m.scope=shared_calls.scope),0) GROUP BY scope "
             "ORDER BY MAX(created_at) DESC, MAX(id) DESC LIMIT 30",
             (str(user_id), since, until),
         ).fetchall()
@@ -465,15 +700,19 @@ class Store:
             "LEFT JOIN turns t ON t.message_id=c.message_id AND t.scope=c.scope "
             "AND t.user_id=c.user_id AND t.exportable=1 "
             "WHERE c.scope=? AND c.realm=? AND c.user_id=? AND c.created_at BETWEEN ? AND ? "
+            "AND c.id>? "
             "ORDER BY c.created_at DESC, c.id DESC LIMIT 2",
-            (source.conversation, source.realm, str(user_id), since, until),
+            (source.conversation, source.realm, str(user_id), since, until,
+             self._memory_revision(source)[1]),
         ).fetchall()
 
     def public_context(self, allowed_scopes):
         context = []
         for source in allowed_scopes[:4]:
-            rows = self.db.execute("SELECT * FROM shared_calls WHERE scope=? ORDER BY id DESC LIMIT 2",
-                                   (source.conversation,)).fetchall()
+            rows = self.db.execute(
+                "SELECT * FROM shared_calls WHERE scope=? AND id>? ORDER BY id DESC LIMIT 2",
+                (source.conversation, self._memory_revision(source)[1]),
+            ).fetchall()
             context.append({"source": source.conversation, "user_id": str(source.user_id),
                             "name": rows[0]["name"] if rows else "",
                             "summary": self.shared_summary(source)[0],

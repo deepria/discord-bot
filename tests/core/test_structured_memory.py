@@ -11,8 +11,8 @@ def make_item(message_id, disclosure="channel", content="간결한 답변을 선
 
 def make_store(scope):
     store = Store(":memory:")
-    store.add(scope, 101, "첫 발화", "첫 답변")
-    store.add(scope, 102, "둘째 발화", "둘째 답변")
+    store.add(scope, 101, "첫 발화", "첫 답변", turn_id="turn-101")
+    store.add(scope, 102, "둘째 발화", "둘째 답변", turn_id="turn-102")
     return store
 
 
@@ -24,7 +24,7 @@ def test_structured_memory_saves_provenance_and_independent_cursor():
     assert store.structured_memory_cursor(scope) == 2
     assert row["owner_id"] == "20"
     assert row["source_message_ids"] == "101"
-    assert row["source_turn_ids"] == ""
+    assert row["source_turn_ids"] == "turn-101"
     assert row["status"] == "active"
     assert store.summary(scope) == ("", 0)
 
@@ -69,7 +69,8 @@ def test_supersession_requires_an_active_replacement_owned_by_the_same_user():
     scope = Scope(1, 10, 20, public_at_capture=True)
     store = make_store(scope)
     store.save_structured_memory(scope, through_id=2, items=[make_item(101), make_item(102)])
-    first, replacement = [row["id"] for row in store.active_structured_memory(scope)]
+    replacement, first = [row["id"] for row in store.active_structured_memory(scope)]
+    assert store.supersede_structured_memory(scope, replacement, first) is False
     assert store.supersede_structured_memory(scope, first, replacement) is True
     row = store.db.execute("SELECT status, superseded_by FROM structured_memory_items WHERE id=?", (first,)).fetchone()
     assert tuple(row) == ("superseded", replacement)

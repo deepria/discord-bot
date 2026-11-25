@@ -5,9 +5,10 @@ from datetime import UTC, datetime
 
 from discord.utils import snowflake_time
 
-from .conversation_boundaries import is_standalone_boundary
+from ..core.conversation_boundaries import is_standalone_boundary
+from ..core.memory_evidence import evidence_rejection
 
-POLICY_VERSION = "context-purpose-v3"
+POLICY_VERSION = "context-purpose-v4"
 
 POLICY = """Select memories that help Rio understand this user across future conversations.
 Accuracy alone is not a reason to retain a fact. Keep only clearly durable, useful user facts,
@@ -85,8 +86,10 @@ def build_extraction_input(pending, context, *, capture: str, max_chars: int = 1
             reason = "missing_turn_provenance"
         elif is_standalone_boundary(entry["user"]):
             reason = "temporary_conversation_boundary"
-        elif not fits():
-            reason = "context_budget"
+        else:
+            reason = evidence_rejection(entry["user"])
+            if reason is None and not fits():
+                reason = "context_budget"
         if reason:
             payload["eligible_source_message_ids"].pop()
             entry.update(user="", rio="", complete=False, omitted_reason=reason)

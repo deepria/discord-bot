@@ -55,14 +55,15 @@ need separate evaluation. Content review requires its own authorization; retriev
 must remain off until that evaluation passes.
 
 
-## Context and purpose policy v3
+## Context and purpose policy v4
 
-The `context-purpose-v3` extractor reads chronological user/Rio exchanges in the current
+The `context-purpose-v4` extractor reads chronological user/Rio exchanges in the current
 conversation, with one retained preceding exchange for interpretation only. Only complete new
 user turns are eligible sources; the server rejects citations to context-only or omitted turns.
 Standalone requests to stop a topic or analysis in the current conversation are omitted from
 eligible evidence and counted as `temporary_conversation_boundary`. An ongoing interaction
-boundary requires explicit evidence of its intended duration and scope.
+boundary requires explicit evidence of its intended duration and scope. Quoted or narrated
+turns, attributable third-party speech, and clearly temporary moods are ineligible evidence.
 Input is bounded to 3,000–12,000 characters (using the configured history budget within these
 bounds). Oversized exchanges are omitted as a whole, never cut into misleading evidence; a
 batch with no usable evidence advances its shadow cursor without a provider request.
@@ -77,6 +78,28 @@ of Rio's proposals, temporary work decisions and vague evaluations do not establ
 preferences. Assistant replies are untrusted context, never independent user evidence.
 Shadow extraction remains independent of summary memory and the answer path. Version/input-size telemetry contains
 no conversation text or source IDs. Existing candidates are not re-extracted or rewritten.
+
+## Provenance and revision contract
+
+`verified_structured_memory(scope)` is the disclosure contract for the next reading phase.
+It requires an active user-owned item in the exact owner, realm, and origin channel. Each source
+requires a retained user turn with matching Discord message and processing turn IDs. For public
+capture, a linked shared call or an exportable turn must also attest to its visibility. Legacy
+items with incomplete provenance and items whose source has aged out are excluded.
+
+In a one-to-one DM, the owner can list verified items or confirm a revision. A correction uses
+the latest retained authored user message as the replacement evidence. It seeds the summary
+with that statement only. Revocation clears the legacy summary and advances a conversation
+watermark. Older unsegmented history, replies and candidates remain outside the answer and
+extraction paths for that conversation. New summaries are built from post-revision user turns,
+with the confirmed correction as the initial summary when one exists. The revision applies to its
+origin conversation. Previously copied text in another conversation has no source link for this
+operation to follow. Notes and Discord messages have their own deletion controls.
+
+The database adds a revision table on startup without backfilling existing memories.
+`/memory clear` and admin purge remove the revision record, stored items and extraction cursor
+within the selected scope. A summary committing after a revision or purge must still have the
+same eligible source batch. Automatic structured recall remains a separate deployment step.
 
 ## Synthetic extraction evaluation
 

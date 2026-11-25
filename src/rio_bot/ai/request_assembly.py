@@ -8,8 +8,8 @@ from datetime import UTC, datetime
 import httpx
 from openai import APIError
 
+from ..core.conversation_boundaries import conversation_boundaries
 from ..core.message_provenance import message_segments as parse_message_segments
-from .conversation_boundaries import conversation_boundaries
 from .egress_policy import apply_context_policy
 from .factual_challenge import (
     FACTUAL_CHALLENGE_POLICY,
@@ -308,7 +308,7 @@ class RequestAssembler(BaseLLM):
         semantic_route = await classify_semantic_route(
             self.usage, self.client, self.settings, routing_content, information_plan,
         )
-        channel_context = channel_context or []
+        channel_context = store.context_after_memory_revision(scope, channel_context or [])
         dm_lookup = CURRENT_PUBLIC_DM_LOOKUP.get()
         public_dm = PublicDMContext()
         if use_memory and scope.guild_id is None and dm_lookup is not None and not (
