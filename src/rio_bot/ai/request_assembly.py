@@ -23,10 +23,12 @@ from .factual_challenge import (
 from .forward_context import CURRENT_FORWARD_CONTEXT, FORWARD_POLICY
 from .freshness import FreshnessMode
 from .information_plan import InformationPlan
+from .information_routing import InformationRoute
 from .llm import LLM as BaseLLM
 from .llm import POLICY
 from .local_places import LOCAL_PLACE_POLICY, verified_places
 from .local_tools import LocalToolAccessChanged, request_with_local_tools
+from .lore_tool import LORE_TOOL_POLICY, register_lore_tool
 from .model_routing import build_model_plan
 from .providers import ProviderAPIError, ProviderTimeoutError
 from .public_dm_context import (
@@ -380,6 +382,13 @@ class RequestAssembler(BaseLLM):
         freshness = information_plan.freshness
         fact_question = information_plan.fact_question
         search_mode = information_plan.search_mode
+        lore_on_demand = (
+            self.settings.lore_tool_enabled and self.settings.lore_max_items > 0
+            and self.settings.lore_max_chars > 0 and search_mode == "none"
+            and information_plan.route in {InformationRoute.LOCAL_LORE, InformationRoute.LOCAL_THEN_WEB}
+        )
+        if lore_on_demand:
+            references = []
         provenance = information_plan.provenance
         cross_channel_memory = use_memory and not current_channel_only
         relationship = self.relationship(scope)
@@ -535,8 +544,10 @@ class RequestAssembler(BaseLLM):
             instruction_parts.append(WORLD_FACT_DETAIL_POLICY)
             if search_mode in {"auto", "required"}:
                 instruction_parts.append(WORLD_WEB_SEARCH_POLICY)
-        if references:
+        if references or lore_on_demand:
             instruction_parts.append(LORE_CONTINUITY_POLICY)
+        if lore_on_demand:
+            instruction_parts.append(LORE_TOOL_POLICY)
         dynamic = self.instructions.active_text()
         if dynamic:
             instruction_parts.append(dynamic)
@@ -585,14 +596,16 @@ class RequestAssembler(BaseLLM):
                 request["tool_choice"] = "required"
 
         history = CURRENT_CHAT_HISTORY.get()
-        local_tools = ()
+        local_tools = (register_lore_tool(self, telemetry),) if lore_on_demand else ()
+        if lore_on_demand:
+            telemetry["lore_tool_enabled"] = True
         if (not tools and not information_plan.local_recommendation and use_memory
                 and history is not None and history.scope.conversation == scope.conversation
                 and str(history.message.id) == str(message_id) and history.enabled()):
-            local_tools = (history.tool,)
+            local_tools += (history.tool,)
             request["instructions"] += "\n\n" + HISTORY_POLICY
-            if self.settings.provider == "openai":
-                request["include"] = ["reasoning.encrypted_content"]
+        if local_tools and self.settings.provider == "openai":
+            request["include"] = ["reasoning.encrypted_content"]
 
         async def send(**kwargs):
             return await self.usage.request(self.client, "answer", **kwargs)
@@ -600,7 +613,7 @@ class RequestAssembler(BaseLLM):
         try:
             response = await request_with_local_tools(send, request, local_tools)
         except LocalToolAccessChanged:
-            return "기록에 접근할 수 있는 범위가 바뀌었어. 다시 물어봐 줘."
+            return "참고자료를 확인할 수 있는 범위가 바뀌었어. 다시 물어봐 줘."
         except _SEARCH_ERRORS:
             if not information_plan.local_recommendation:
                 raise

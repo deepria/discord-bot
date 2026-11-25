@@ -44,6 +44,7 @@ RUNTIME_SETTING_SPECS: dict[str, RuntimeSettingSpec] = {
     ),
     "chat_web_search": RuntimeSettingSpec("chat_web_search", "CHAT_WEB_SEARCH", "bool"),
     "community_lore": RuntimeSettingSpec("community_lore", "COMMUNITY_LORE", "bool"),
+    "lore_tool_enabled": RuntimeSettingSpec("lore_tool_enabled", "LORE_TOOL_ENABLED", "bool"),
     "output_tokens": RuntimeSettingSpec(
         "output_tokens", "MAX_OUTPUT_TOKENS", "int", minimum=128, maximum=4096
     ),
