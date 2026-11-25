@@ -4,7 +4,13 @@ import re
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 
-from .contextual_routing import build_query, is_followup
+from .contextual_routing import (
+    build_query,
+    can_inherit_local_anchor,
+    is_followup,
+    is_local_followup,
+)
+from .freshness import local_area
 from .routing_plan import RoutingPlan
 
 CURRENT_PUBLIC_DM_LOOKUP = ContextVar("current_public_dm_lookup", default=None)
@@ -21,6 +27,9 @@ _CONTINUATION = re.compile(
     r"^\s*(?:(?:그럼|그러면|그래서|근데)[,\s]+)?"
     r"(?:그\s*(?:얘기|이야기|주제|근처|동네|장소)|거기|그쪽)"
 )
+_RESUME_LATER = re.compile(
+    r"(?:(?:내일|나중에|다음에|이따)\s*)?(?:이어서|마저)\s*(?:얘기|이야기)\s*하자[.!~\s]*"
+)
 
 
 @dataclass
@@ -32,14 +41,21 @@ class PublicDMContext:
 
 def public_dm_routing(routing: RoutingPlan, recent: list[dict]) -> RoutingPlan:
     current = routing.visible_content
-    if not recent or not (_CONTINUATION.search(current) or is_followup(current)):
+    local_followup = is_local_followup(current)
+    if not recent or not (_CONTINUATION.search(current) or is_followup(current) or local_followup):
+        return routing
+    if local_followup and (routing.expanded or local_area(current)):
         return routing
     if routing.anchor and not _CONTINUATION.search(routing.anchor):
         return routing
     latest_source = recent[-1]["source"]
     own_turns = [row["user"].strip() for row in recent if row["source"] == latest_source]
-    per_turn = 800 // len(own_turns)
-    anchor = "\n".join(text[:per_turn] for text in own_turns if text)
-    if not anchor:
+    if local_followup:
+        anchor = next((text[:800] for text in reversed(own_turns)
+                       if text and not (is_local_followup(text) or _RESUME_LATER.fullmatch(text))), "")
+    else:
+        per_turn = 800 // len(own_turns)
+        anchor = "\n".join(text[:per_turn] for text in own_turns if text)
+    if not anchor or (local_followup and not can_inherit_local_anchor(current, anchor)):
         return routing
     return RoutingPlan(current, build_query(current, anchor), anchor)

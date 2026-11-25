@@ -19,6 +19,8 @@ class InformationPlan:
     fact_question: bool
     search_mode: str
     provenance: ProvenanceMode
+    local_recommendation: bool = False
+    local_area: str = ""
 
 
 __all__ = ["InformationPlan"]

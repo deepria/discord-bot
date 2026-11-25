@@ -23,6 +23,7 @@ class Store:
                 scope TEXT NOT NULL, realm TEXT NOT NULL, user_id TEXT NOT NULL,
                 message_id TEXT NOT NULL UNIQUE, turn_id TEXT,
                 content TEXT NOT NULL, reply TEXT NOT NULL, exportable INTEGER NOT NULL,
+                search_outcome TEXT,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
             CREATE INDEX IF NOT EXISTS turns_scope ON turns(scope, id);
@@ -98,6 +99,7 @@ class Store:
                 SELECT scope, text FROM notes;
         """)
         self._ensure_column("turns", "turn_id", "TEXT")
+        self._ensure_column("turns", "search_outcome", "TEXT")
         self._ensure_column("structured_memory_items", "source_turn_ids", "TEXT NOT NULL DEFAULT ''")
         self._ensure_column("structured_memory_items", "owner_type", "TEXT NOT NULL DEFAULT 'user'")
         self._ensure_column("structured_memory_items", "status", "TEXT NOT NULL DEFAULT 'active'")
@@ -161,16 +163,32 @@ class Store:
         return self.db.execute("SELECT 1 FROM turns WHERE message_id=?",
                                (str(message_id),)).fetchone() is not None
 
+    def last_search_outcome(self, scope: Scope) -> str | None:
+        row = self.db.execute(
+            "SELECT search_outcome FROM turns WHERE scope=? AND user_id=? ORDER BY id DESC LIMIT 1",
+            (scope.conversation, str(scope.user_id)),
+        ).fetchone()
+        return row["search_outcome"] if row else None
+
+    def invalidate_last_search_outcome(self, scope: Scope) -> None:
+        """An untracked reply must supersede any older recorded search outcome."""
+        with self.db:
+            self.db.execute(
+                "UPDATE turns SET search_outcome=NULL WHERE search_outcome IS NOT NULL AND id=("
+                "SELECT id FROM turns WHERE scope=? AND user_id=? ORDER BY id DESC LIMIT 1)",
+                (scope.conversation, str(scope.user_id)),
+            )
+
     def add(self, scope: Scope, message_id: int, content: str, reply: str,
-            *, turn_id: str | None = None):
+            *, turn_id: str | None = None, search_outcome: str | None = None):
         exportable = scope.public_at_capture and self.summary_exportable(scope)
         exportable = exportable and all(row["exportable"] for row in self.history(scope))
         with self.db:
             self.db.execute(
-                "INSERT INTO turns(scope,realm,user_id,message_id,turn_id,content,reply,exportable) "
-                "VALUES (?,?,?,?,?,?,?,?)",
+                "INSERT INTO turns(scope,realm,user_id,message_id,turn_id,content,reply,exportable,"
+                "search_outcome) VALUES (?,?,?,?,?,?,?,?,?)",
                 (scope.conversation, scope.realm, str(scope.user_id), str(message_id), turn_id,
-                 content, reply, int(exportable)),
+                 content, reply, int(exportable), search_outcome),
             )
             # Bound raw retention even if the summary API keeps failing.
             self.db.execute("DELETE FROM turns WHERE scope=? AND id NOT IN "

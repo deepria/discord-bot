@@ -49,6 +49,10 @@ def trace_record(row):
         result[key] = label(row.get(key))
     for key in ("latency_ms", "web_search_calls"):
         result[key] = number(row.get(key))
+    if "search_outcome" in row:
+        result["search_outcome"] = label(row.get("search_outcome"))
+        result["search_decision"] = label(row.get("search_decision"))
+        result["verified_places"] = number(row.get("verified_places"))
     routing = row.get("routing")
     if isinstance(routing, dict):
         result["routing"] = {"web": routing.get("web") if type(routing.get("web")) is bool

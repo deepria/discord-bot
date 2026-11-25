@@ -65,8 +65,47 @@ _LOCATION_FILLER = re.compile(
 )
 
 
+_LOCAL_BUSINESS = re.compile(
+    r"(?:맛집|식당|음식점|카페|가게|매장|상호|밥집|"
+    r"(?:파는|먹을|먹기\s*좋은|갈)\s*(?:곳|데|집))"
+)
+_LOCAL_REQUEST = re.compile(r"(?:추천|찾아|알려|있어|없어|어디|영업시간|몇\s*(?:곳|군데)|가볼|이름)")
+_MAJOR_CITY = re.compile(r"\b(?:서울|부산|대구|인천|광주|대전|울산|세종|제주)(?=에|의|\s|$)")
+_LOCAL_AREA_MARKER = re.compile(r"\b[가-힣A-Za-z0-9·-]+(?:역|동|구|시|군|읍|면|거리|시장)(?=에|에서|의|\s|$)")
+_LOCAL_NEARBY = re.compile(r"(?:근처|주변|인근|부근|가까운|동네|이쪽|그쪽|거기|여기)")
+_LOCAL_AREA_PREFIX = re.compile(
+    r"([가-힣A-Za-z0-9·-]{2,}(?:[ \t]+[가-힣A-Za-z0-9·-]+){0,2})"
+    r"\s*(?:근처|주변|인근|부근)"
+)
+_NON_AREAS = re.compile(
+    r"(?:거기|여기|저기|이쪽|그쪽|동네|직장|회사|사무실|학교|집|근처|주변|"
+    r"도시|전국|식당|음식점|카페|가게|매장|맛집)$"
+)
+
+
+def local_area(text: str) -> str:
+    for match in _LOCAL_AREA_PREFIX.finditer(text):
+        candidate = match.group(1).split()[-1]
+        if not _NON_AREAS.fullmatch(candidate):
+            return candidate
+    marked = next((match[0] for match in _LOCAL_AREA_MARKER.finditer(text)
+                   if not _NON_AREAS.fullmatch(match[0])), "")
+    city = _MAJOR_CITY.search(text)
+    return marked or (city[0] if city else "")
+
+
+def is_local_recommendation(text: str) -> bool:
+    if not _LOCAL_BUSINESS.search(text):
+        return False
+    has_area = local_area(text) or _LOCAL_NEARBY.search(text)
+    if not has_area and _LOCATION_DEPENDENT.search(text) and not re.search(r"추천|몇\s*(?:곳|군데)", text):
+        return False
+    # A request for menu ideas stays general unless it actually asks about venues.
+    return bool(_LOCAL_REQUEST.search(text) or re.search(r"(?:맛집|식당|카페)\s*[?？.!]*$", text))
+
+
 def is_live_domain(content: str) -> bool:
-    return bool(_LIVE_DOMAIN.search(content))
+    return bool(_LIVE_DOMAIN.search(content)) or is_local_recommendation(content)
 
 
 def is_location_dependent(content: str) -> bool:
@@ -100,6 +139,9 @@ def classify_freshness(content: str) -> FreshnessMode:
         return FreshnessMode.CLOCK
     if _ROLEPLAY_NOW.search(text):
         return FreshnessMode.STATIC
+
+    if is_local_recommendation(text):
+        return FreshnessMode.REQUIRED
 
     questionish = bool(_QUESTIONISH.search(text))
     if questionish and is_live_domain(text):

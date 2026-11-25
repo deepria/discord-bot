@@ -29,6 +29,8 @@
 
 - `status`: `ok` 또는 `error`
 - `memory_lifecycle`: `not_requested`, `written`, `not_written`
+- 검색 상태를 확인한 답변에는 `search_decision`, `search_outcome`, `verified_places`도 기록합니다.
+  각각 검색 판정, 실행·근거 상태, 보여준 매장 수를 나타냅니다. 검색어나 출처 URL은 포함하지 않습니다.
 - 모르는 token, routing, provider 값은 `null`이다. 필드의 존재 여부로 의미를 바꾸지 않는다.
 - `turn.started`, 기존 호환 event(`turn_started`, `turn_completed`, `turn_failed`), AI request event에도
   가능한 경우 같은 `turn_id`를 기록한다.

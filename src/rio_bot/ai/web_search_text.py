@@ -24,6 +24,13 @@ def _field(value, name, default=None):
     return getattr(value, name, default)
 
 
+def reported_web_searches(response) -> int | None:
+    """Return OpenRouter's optional server-tool usage counter."""
+    details = _field(_field(response, "usage"), "server_tool_use_details")
+    count = _field(details, "web_search_requests")
+    return count if type(count) is int and count >= 0 else None
+
+
 def _remove_annotation_spans(text: str, annotations) -> str:
     spans = []
     for annotation in annotations or []:
