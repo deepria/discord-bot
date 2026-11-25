@@ -147,6 +147,7 @@ class InformationPipeline(RequestAssembler):
                 quoted_text=quoted_text,
                 message_segments=message_segments,
                 message_id=message_id,
+                replan=self.build_information_plan,
             )
         finally:
             CURRENT_AMBIENT_WEATHER.reset(token)

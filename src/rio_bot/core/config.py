@@ -95,7 +95,7 @@ class Settings:
     context_path: str = ""
     call_prefixes: tuple[str, ...] = ("리오야",)
     dm_always_reply: bool = False
-    public_memory_in_dm: bool = True
+    public_memory_in_dm: bool = False
     external_context_policy: str = "bot_interactions_only"
     allowed_guild_ids: frozenset[int] = frozenset()
     cooldown: float = 5
@@ -241,7 +241,7 @@ class Settings:
         dm = os.getenv("DM_ALWAYS_REPLY", "false").lower()
         if dm not in {"true", "false"}:
             raise ValueError("DM_ALWAYS_REPLY는 true 또는 false여야 합니다.")
-        public_memory = os.getenv("PUBLIC_SERVER_MEMORY_IN_DM", "true").lower()
+        public_memory = os.getenv("PUBLIC_SERVER_MEMORY_IN_DM", "false").lower()
         if public_memory not in {"true", "false"}:
             raise ValueError("PUBLIC_SERVER_MEMORY_IN_DM은 true 또는 false여야 합니다.")
         external_context_policy = parse_external_context_policy(

@@ -1,11 +1,15 @@
+import asyncio
 import logging
 import re
 from contextvars import ContextVar
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
+from time import monotonic
 
 import discord
 
+from rio_bot.ai.public_dm_context import CURRENT_PUBLIC_DM_LOOKUP, PublicDMContext
 from rio_bot.ai.vision import CURRENT_VISUAL_INPUTS
+from rio_bot.core.message_provenance import split_inline_quotes
 
 from .bot import RioClient as BaseRioClient
 from .chat_llm import LLM
@@ -36,6 +40,9 @@ _BROAD_SERVER_MEMORY_QUERY = re.compile(
     r"누가.*(?:말했|얘기했))",
     re.IGNORECASE,
 )
+_PUBLIC_DM_TIMEOUT = 2.0
+_PUBLIC_DM_SOURCES = 4
+_PUBLIC_DM_CHARS = 4000
 
 
 def _augment_empty_call(content: str, text: str | None, has_visuals: bool) -> str | None:
@@ -90,9 +97,7 @@ class RioClient(BaseRioClient):
 
     async def public_sources(self, user_id: int, guild_id: int | None = None):
         enabled, requested_ids = CURRENT_PUBLIC_CONTEXT_REQUEST.get()
-        if not enabled:
-            return []
-        if guild_id is None and not self.settings.public_memory_in_dm:
+        if not enabled or guild_id is None:
             return []
 
         requested = None if requested_ids is None else set(requested_ids)
@@ -100,19 +105,8 @@ class RioClient(BaseRioClient):
         for source in self.store.public_candidates(user_id, guild_id):
             if requested is not None and source.user_id not in requested:
                 continue
-            if (
-                self.settings.allowed_guild_ids
-                and source.guild_id not in self.settings.allowed_guild_ids
-            ):
-                continue
-            guild = self.get_guild(source.guild_id)
-            if guild is None or guild.unavailable:
-                continue
-            channel = guild.get_channel(source.channel_id)
-            if not isinstance(channel, discord.TextChannel):
-                continue
-            public = channel.permissions_for(guild.default_role)
-            if not (public.view_channel and public.read_message_history):
+            guild, channel, _ = self._public_channel(source)
+            if channel is None:
                 continue
             if source.guild_id not in members:
                 try:
@@ -130,6 +124,159 @@ class RioClient(BaseRioClient):
             if len(allowed) == 4:
                 break
         return allowed
+
+    def _public_channel(self, source):
+        if self.settings.allowed_guild_ids and source.guild_id not in self.settings.allowed_guild_ids:
+            return None, None, "guild_not_allowed"
+        guild = self.get_guild(source.guild_id)
+        if guild is None or guild.unavailable:
+            return None, None, "guild_unavailable"
+        channel = guild.get_channel(source.channel_id)
+        if not isinstance(channel, discord.TextChannel):
+            return guild, None, "not_text_channel"
+        public = channel.permissions_for(guild.default_role)
+        if not (public.view_channel and public.read_message_history):
+            return guild, None, "not_public"
+        return guild, channel, ""
+
+    def _public_dm_enabled(self, scope):
+        return (scope.guild_id is None and self.settings.public_memory_in_dm
+                and self.store.memory_mode(scope) in {"normal", "read_only"})
+
+    async def public_dm_context(self, scope, excluded_ids, *, explicit_summary):
+        started = monotonic()
+        excluded = {}
+        result = PublicDMContext()
+        try:
+            async with asyncio.timeout(_PUBLIC_DM_TIMEOUT):
+                if self._public_dm_enabled(scope):
+                    result = await self._read_public_dm(scope, excluded_ids, explicit_summary, excluded)
+                else:
+                    excluded["disabled"] = 1
+        except Exception as exc:  # noqa: BLE001 - keep the answer path and redact content.
+            excluded["timeout" if isinstance(exc, TimeoutError) else "lookup_error"] = 1
+        result.telemetry = {
+            "public_dm_sources": len({row["source"] for row in result.recent}),
+            "public_dm_turns": len(result.recent),
+            "public_dm_summary_sources": len(result.summaries),
+            "public_dm_excluded": excluded,
+            "public_dm_lookup_ms": round((monotonic() - started) * 1000),
+        }
+        return result
+
+    async def _read_public_dm(self, scope, excluded_ids, explicit_summary, excluded):
+        def exclude(reason):
+            excluded[reason] = excluded.get(reason, 0) + 1
+
+        now = datetime.now(UTC)
+        window = {
+            "since": (now - timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S"),
+            "until": now.strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        recent_sources = self.store.recent_public_sources(scope.user_id, **window)
+        summary_sources = (
+            self.store.public_candidates(scope.user_id) if explicit_summary else []
+        )
+        candidates = dict.fromkeys(recent_sources + summary_sources)
+        members, verified, summary_allowed = {}, {}, []
+        for source in candidates:
+            want_recent = source in recent_sources and len(verified) < _PUBLIC_DM_SOURCES
+            want_summary = source in summary_sources and len(summary_allowed) < _PUBLIC_DM_SOURCES
+            if not (want_recent or want_summary):
+                continue
+            guild, channel, reason = self._public_channel(source)
+            if source.user_id != scope.user_id or channel is None:
+                exclude(reason or "wrong_owner")
+                continue
+            if not self.store.chat_log_enabled(source):
+                exclude("chat_log_off")
+                continue
+            if guild.id not in members:
+                try:
+                    members[guild.id] = await guild.fetch_member(scope.user_id)
+                except discord.NotFound:
+                    members[guild.id] = None
+                except discord.HTTPException:
+                    exclude("member_lookup_failed")
+                    continue
+            member = members[guild.id]
+            if member is None or member.id != scope.user_id:
+                exclude("not_member")
+                continue
+            permissions = channel.permissions_for(member)
+            if not (permissions.view_channel and permissions.read_message_history):
+                exclude("no_read_access")
+                continue
+            if want_recent:
+                rows = self.store.recent_public_turns(source, scope.user_id, **window)
+                ids = set()
+                for row in rows:
+                    message_id = row["message_id"]
+                    if message_id in excluded_ids:
+                        exclude("duplicate")
+                        continue
+                    try:
+                        original = await channel.fetch_message(int(message_id))
+                    except discord.NotFound:
+                        exclude("message_missing")
+                        continue
+                    except discord.HTTPException:
+                        exclude("message_lookup_failed")
+                        continue
+                    if original.author.id != scope.user_id:
+                        exclude("wrong_owner")
+                        continue
+                    ids.add(message_id)
+                if ids:
+                    verified[source] = ids
+            if want_summary and self.store.shared_summary(source)[0]:
+                summary_allowed.append(source)
+
+        if not self._public_dm_enabled(scope):
+            exclude("disabled")
+            return PublicDMContext()
+
+        # Recheck policy, cached permissions and the database after all Discord awaits.
+        # A reset or policy change during the lookup must win before any text leaves the bot.
+        window["since"] = (datetime.now(UTC) - timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
+        recent, summaries = [], []
+        for source in dict.fromkeys([*verified, *summary_allowed]):
+            guild, channel, reason = self._public_channel(source)
+            if channel is None or not self.store.chat_log_enabled(source):
+                exclude(reason or "chat_log_off")
+                continue
+            permissions = channel.permissions_for(members[guild.id])
+            if not (permissions.view_channel and permissions.read_message_history):
+                exclude("no_read_access")
+                continue
+            if source in verified:
+                for row in self.store.recent_public_turns(source, scope.user_id, **window):
+                    if row["message_id"] in verified[source]:
+                        recent.append({
+                            "source": source.conversation, "user_id": str(scope.user_id),
+                            "message_id": row["message_id"], "at": row["created_at"],
+                            "user": row["content"],
+                            **({"rio": row["reply"]} if row["reply"] else {}),
+                        })
+            if source in summary_allowed:
+                summary, _ = self.store.shared_summary(source)
+                if summary:
+                    summaries.append({"source": source.conversation, "user_id": str(scope.user_id),
+                                      "summary": summary})
+
+        chosen, seen, used = [], set(excluded_ids), 0
+        for row in sorted(recent, key=lambda row: (row["at"], int(row["message_id"])), reverse=True):
+            if row["message_id"] in seen:
+                exclude("duplicate")
+                continue
+            size = len(row["user"]) + len(row.get("rio", ""))
+            if used + size > _PUBLIC_DM_CHARS:
+                exclude("character_budget")
+                continue
+            seen.add(row["message_id"])
+            chosen.append(row)
+            used += size
+        return PublicDMContext(recent=list(reversed(chosen)), summaries=summaries)
 
     async def hydrate_recent_history(self, message, scope):
         """Backfill the bounded history while respecting the active capture policy."""
@@ -272,6 +419,22 @@ class RioClient(BaseRioClient):
         reply_token = REPLY_CONTEXT.set(tuple(replied))
         visual_token = CURRENT_VISUAL_INPUTS.set(tuple(visuals))
         public_token = CURRENT_PUBLIC_CONTEXT_REQUEST.set(public_request)
+        dm_lookup = None
+        if (
+            scope.guild_id is None
+            and getattr(message.channel, "type", None) == discord.ChannelType.private
+        ):
+            authored, _ = split_inline_quotes(text or "")
+            explicit_summary = bool(_PUBLIC_MEMORY_QUERY.search(authored))
+
+            async def dm_lookup(request_scope, excluded_ids):
+                if request_scope.conversation != scope.conversation:
+                    return PublicDMContext()
+                return await self.public_dm_context(
+                    request_scope, excluded_ids, explicit_summary=explicit_summary,
+                )
+
+        dm_token = CURRENT_PUBLIC_DM_LOOKUP.set(dm_lookup)
 
         # A text-only bare call stays a bare call and uses the base client's relationship-aware
         # fixed reply. Only a visual-only call gets an explicit visual request so vision reaches
@@ -286,6 +449,7 @@ class RioClient(BaseRioClient):
         finally:
             if original_content is not None:
                 message.content = original_content
+            CURRENT_PUBLIC_DM_LOOKUP.reset(dm_token)
             CURRENT_PUBLIC_CONTEXT_REQUEST.reset(public_token)
             CURRENT_VISUAL_INPUTS.reset(visual_token)
             REPLY_CONTEXT.reset(reply_token)

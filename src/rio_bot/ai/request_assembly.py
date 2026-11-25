@@ -2,6 +2,7 @@
 
 import json
 import re
+from collections.abc import Callable
 from datetime import UTC, datetime
 
 from ..core.message_provenance import message_segments as parse_message_segments
@@ -17,6 +18,13 @@ from .information_plan import InformationPlan
 from .llm import LLM as BaseLLM
 from .llm import POLICY
 from .model_routing import build_model_plan
+from .public_dm_context import (
+    CURRENT_PUBLIC_DM_LOOKUP,
+    PUBLIC_DM_POLICY,
+    PublicDMContext,
+    public_dm_routing,
+)
+from .routing_plan import RoutingPlan
 from .rp_output_policy import hide_web_citations, provenance_instruction
 from .runtime_context import build_runtime_context, runtime_instruction
 from .semantic_routing import classify_semantic_route
@@ -253,6 +261,7 @@ class RequestAssembler(BaseLLM):
         quoted_text: str = "",
         message_segments: list[dict[str, str]] | None = None,
         message_id: str | int | None = None,
+        replan: Callable[[RoutingPlan], InformationPlan] | None = None,
     ) -> str:
         if information_plan is None:
             raise ValueError("Request assembly requires an InformationPlan")
@@ -261,8 +270,32 @@ class RequestAssembler(BaseLLM):
         visible_content = routing.visible_content
         routing_content = routing.routing_query
 
-        summary, summary_through = store.summary(scope) if use_memory else ("", 0)
+        semantic_route = await classify_semantic_route(
+            self.usage, self.client, self.settings, routing_content, information_plan,
+        )
         channel_context = channel_context or []
+        dm_lookup = CURRENT_PUBLIC_DM_LOOKUP.get()
+        public_dm = PublicDMContext()
+        if use_memory and scope.guild_id is None and dm_lookup is not None and not (
+            self._recent_speaker_query(routing_content)
+        ):
+            excluded_ids = {str(row["message_id"]) for row in store.history(scope)}
+            excluded_ids.update(
+                str(row["message_id"]) for row in channel_context if row.get("message_id")
+            )
+            excluded_ids.add(str(message_id or ""))
+            public_dm = await dm_lookup(scope, excluded_ids)
+            public_dm.recent = self.authorized_context(scope, [
+                row for row in public_dm.recent if row.get("user_id") == str(scope.user_id)
+            ])
+            public_context = public_dm.summaries
+            if replan is not None:
+                expanded = public_dm_routing(routing, public_dm.recent)
+                if expanded != routing:
+                    information_plan = replan(expanded)
+                    routing_content = expanded.routing_query
+
+        summary, summary_through = store.summary(scope) if use_memory else ("", 0)
         current_channel_only = self._current_channel_scope_only(scope, routing_content)
         recent_speaker_query = self._recent_speaker_query(routing_content)
         history = []
@@ -353,6 +386,18 @@ class RequestAssembler(BaseLLM):
             scope.user_id,
             getattr(self.settings, "external_context_policy", "bot_interactions_only"),
         )
+        public_dm_telemetry = dict(public_dm.telemetry)
+        if public_dm.recent:
+            context["public_dm_recent_conversation"] = public_dm.recent
+            fragment = json.dumps(
+                {"public_dm_recent_conversation": public_dm.recent},
+                ensure_ascii=False, separators=(",", ":"),
+            )
+            public_dm_telemetry["public_dm_estimated_input_tokens"] = (
+                len(fragment.encode("utf-8")) + 3
+            ) // 4
+        elif public_dm_telemetry:
+            public_dm_telemetry["public_dm_estimated_input_tokens"] = 0
         context_telemetry = self._channel_context_telemetry(
             channel_context,
             context["channel_recent_messages"],
@@ -380,6 +425,8 @@ class RequestAssembler(BaseLLM):
         ]
         if current_channel_only:
             instruction_parts.append(CURRENT_CHANNEL_SCOPE_POLICY)
+        if public_dm.recent:
+            instruction_parts.append(PUBLIC_DM_POLICY)
         if is_factual_challenge(routing_content):
             instruction_parts.append(FACTUAL_CHALLENGE_POLICY)
         if is_speaker_attribution_correction(routing_content):
@@ -400,25 +447,19 @@ class RequestAssembler(BaseLLM):
         if dynamic:
             instruction_parts.append(dynamic)
 
-        semantic_route = await classify_semantic_route(
-            self.usage,
-            self.client,
-            self.settings,
-            routing_content,
-            information_plan,
-        )
         model_plan = build_model_plan(
             self.settings,
             content=routing_content,
             information=information_plan,
             channel_context=channel_context,
             public_context=public_context,
-            history_turns=history_turn_count + len(server_recent),
+            history_turns=history_turn_count + len(server_recent) + len(public_dm.recent),
             semantic_route=semantic_route,
         )
         telemetry = model_plan.telemetry()
         telemetry["provider"] = self.settings.provider
         telemetry.update(context_telemetry)
+        telemetry.update(public_dm_telemetry)
         if semantic_route:
             telemetry["semantic_route_mode"] = getattr(self.settings, "semantic_routing_mode", "off")
             telemetry["semantic_route_tier"] = semantic_route.get("tier")
@@ -430,7 +471,7 @@ class RequestAssembler(BaseLLM):
             information=information_plan,
             channel_context=channel_context,
             public_context=public_context,
-            history_turns=history_turn_count + len(server_recent),
+            history_turns=history_turn_count + len(server_recent) + len(public_dm.recent),
         ))
         request = {
             "model": model_plan.model,

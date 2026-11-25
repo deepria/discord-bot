@@ -56,7 +56,7 @@ def test_settings_load_uses_code_defaults_when_runtime_env_is_absent(monkeypatch
     assert settings.call_prefixes == ("리오야",)
     assert settings.dm_always_reply is False
     assert settings.always_reply_channel_ids == ()
-    assert settings.public_memory_in_dm is True
+    assert settings.public_memory_in_dm is False
     assert settings.external_context_policy == "bot_interactions_only"
     assert settings.model_routing_mode == "fixed"
     assert settings.model_routing_smart_threshold == 2.0
@@ -96,7 +96,7 @@ def test_runtime_settings_fall_back_to_code_defaults_without_db_override():
         settings = RuntimeSettings(_base(), store)
         assert settings.call_prefixes == ("리오야",)
         assert settings.dm_always_reply is False
-        assert settings.public_memory_in_dm is True
+        assert settings.public_memory_in_dm is False
         assert settings.chat_web_search is True
         assert settings.community_lore is True
         assert settings.output_tokens == 1000
