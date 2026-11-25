@@ -129,3 +129,15 @@ provider 선택은 실제 Discord 답변, 장기 기억 요약, runtime knowledg
 끌 수 있습니다. provider마다 모델이 system instruction, 긴 문맥, 검색 결과, 이미지 입력을 따르는
 방식이 다르므로 모델을 바꾼 뒤에는 주요 `rio-eval`과 함께 실제 Discord smoke test를 다시 실행하는
 것을 권장합니다.
+
+## Discord 음성 첨부
+
+Gemini 답변은 현재 호출의 오디오와 정책상 허용된 현재 채널의 명시적 답장 오디오를 읽을 수 있습니다.
+Discord 음성 메시지의 Ogg Opus, PCM WAV, FLAC을 지원합니다. 한 답변에서 최대 두 파일,
+전체 4 MiB, 파일당 120초까지 사용합니다. 첨부마다 읽기 대기 시간은 최대 3초입니다.
+업로드 형식과 길이를 검증할 수 없거나 제한을 초과하면 답변에 파일의 존재와 확인 가능한 길이만
+전달합니다. OpenAI와 OpenRouter에서는 첨부 원본을 읽지 않습니다.
+
+오디오는 Gemini Interactions의 해당 답변 요청에만 포함됩니다. 최근 대화를 자동으로 훑어 오디오를
+가져오지 않습니다. 원본과 CDN 주소를 기록하거나, 오디오에서 파생된 답변을 장기 기억과 최근 채널
+문맥에 넣지 않습니다. [Gemini 오디오 입력](https://ai.google.dev/gemini-api/docs/audio)

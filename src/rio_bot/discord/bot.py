@@ -10,6 +10,7 @@ from uuid import uuid4
 
 import discord
 
+from rio_bot.ai.audio_context import CURRENT_AUDIO_CONTEXT
 from rio_bot.ai.chat_history_context import CURRENT_CHAT_HISTORY
 from rio_bot.ai.egress_policy import filter_channel_context
 from rio_bot.ai.forward_context import CURRENT_FORWARD_CONTEXT
@@ -529,8 +530,10 @@ class RioClient(discord.Client):
                 if key in self.cooldowns:
                     return
                 self.cooldowns[key] = now
-                has_forward = bool(CURRENT_FORWARD_CONTEXT.get())
-                if not text and not has_forward:
+                has_explicit_context = bool(
+                    CURRENT_FORWARD_CONTEXT.get() or CURRENT_AUDIO_CONTEXT.get()
+                )
+                if not text and not has_explicit_context:
                     await self.send_text(
                         message.channel,
                         _bare_call_reply(scope),
@@ -578,7 +581,7 @@ class RioClient(discord.Client):
                                 duration_ms=round((time.monotonic() - request_started) * 1000),
                             )
                             history = CURRENT_CHAT_HISTORY.get()
-                            reference_derived = has_forward or (history is not None and history.used)
+                            reference_derived = has_explicit_context or (history is not None and history.used)
                             current = {e["id"] for e in await self.emoji_registry.catalog(message.channel)}
                             if not memory_turn.valid:
                                 answer = "기억이 갱신됐어요. 다시 말해 주세요."
