@@ -123,6 +123,7 @@ class Settings:
     allow_user_mentions: bool = True
     shutdown_grace_seconds: float = 50.0
     always_reply_channel_ids: tuple[int, ...] = ()
+    lore_tool_enabled: bool = False
 
     def api_key_for(self, provider: str) -> str:
         provider = _provider(provider, "provider")
@@ -250,6 +251,9 @@ class Settings:
         community_lore = os.getenv("COMMUNITY_LORE", "true").lower()
         if community_lore not in {"true", "false"}:
             raise ValueError("COMMUNITY_LORE는 true 또는 false여야 합니다.")
+        lore_tool = os.getenv("LORE_TOOL_ENABLED", "false").strip().lower()
+        if lore_tool not in {"true", "false"}:
+            raise ValueError("LORE_TOOL_ENABLED는 true 또는 false여야 합니다.")
         chat_web_search = os.getenv("CHAT_WEB_SEARCH", "true").lower()
         if chat_web_search not in {"true", "false"}:
             raise ValueError("CHAT_WEB_SEARCH는 true 또는 false여야 합니다.")
@@ -332,6 +336,7 @@ class Settings:
             lore_max_items=int(os.getenv("LORE_MAX_ITEMS", "6")),
             lore_max_chars=int(os.getenv("LORE_MAX_CHARS", "3200")),
             community_lore=community_lore == "true",
+            lore_tool_enabled=lore_tool == "true",
             chat_web_search=chat_web_search == "true",
             allow_user_mentions=allow_user_mentions == "true",
             runtime_timezone=runtime_timezone,

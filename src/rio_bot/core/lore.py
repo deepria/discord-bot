@@ -143,7 +143,8 @@ class LoreIndex:
         return {token.casefold() for token in _TOKEN.findall(text) if token.casefold() not in _STOPWORDS}
 
     def search(self, query: str, *, limit: int = 6, chars: int = 3200,
-               include_community: bool = True, include_reference_only: bool = False) -> list[dict]:
+               include_community: bool = True, include_reference_only: bool = False,
+               include_source: bool = False) -> list[dict]:
         if limit <= 0 or chars <= 0:
             return []
         folded = query.casefold()
@@ -192,6 +193,11 @@ class LoreIndex:
                     "content": record["summary"], "awareness": record["knowledge"],
                     "time": record["timeline"],
                 }
+                if include_source:
+                    source = record["source"]
+                    item["source"] = {key: source[key] for key in ("type", "title", "locator", "url")
+                                      if key in source}
+                    item["canon"] = evidence_type not in REFERENCE_ONLY_FACT_TYPES | {"unknown"}
                 if evidence_type == "unknown":
                     # Existing prompt policy already treats interpretations as non-facts; this flag makes
                     # the negative/unknown claim explicit without inventing a new model-facing kind.
