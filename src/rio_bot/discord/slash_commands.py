@@ -27,6 +27,7 @@ HELP_TEXT = """일반 대화는 @멘션, 답장 핑, 또는 메시지 맨 앞의
 `/memory show` — 현재 채널의 내 요약과 개인 메모 확인
 `/memory note` / `/memory note-clear` — 개인 메모 설정/삭제
 `/memory clear` — 현재 서버 또는 DM에서 내 장기 기억 삭제
+`/memory items` / `correct` / `withdraw` — 1:1 DM에서 내 기억 항목 확인·정정·철회
 `/memory server-show` / `server-note` / `server-clear` — 서버 공통 메모
 `/memory mode` / `status` / `overview` — 봇 관리자용 장기 기억 설정
 `/memory purge` — 봇 관리자용 범위별 사용자 장기 기억 초기화
@@ -50,6 +51,16 @@ def _scope(interaction: discord.Interaction) -> Scope:
     if interaction.channel_id is None:
         raise ValueError("채널 안에서 실행해 주세요.")
     return Scope(interaction.guild_id, interaction.channel_id, interaction.user.id)
+
+
+def _personal_dm_scope(interaction: discord.Interaction) -> Scope:
+    scope = _scope(interaction)
+    if (
+        scope.guild_id is not None
+        or getattr(getattr(interaction, "channel", None), "type", None) != discord.ChannelType.private
+    ):
+        raise ValueError("리오와의 1:1 DM에서 사용해 주세요.")
+    return scope
 
 
 def _is_bot_admin(client, user_id: int) -> bool:
@@ -204,6 +215,80 @@ def upgrade_memory_group(client):
             ephemeral=True,
         )
 
+    @app_commands.command(name="items", description="이 DM에서 출처가 확인된 내 기억 항목 보기")
+    async def items(interaction: discord.Interaction):
+        try:
+            scope = _personal_dm_scope(interaction)
+        except ValueError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+            return
+        rows = client.store.verified_structured_memory(scope, limit=5)
+        pages = [
+            f"항목 {row['id']} · {row['kind']}\n{row['content']}\n"
+            f"근거 메시지 {row['source_message_ids'].replace(',', ', ')}"
+            for row in rows
+        ]
+        await _send_ephemeral_pages(interaction, pages or ["이 DM에 출처가 확인된 기억이 없어요."])
+
+    @app_commands.command(name="correct", description="이 DM의 최신 본인 메시지로 내 기억 항목 정정")
+    @app_commands.describe(
+        item_id="items에 표시된 기억 항목 번호",
+        source_message_id="이 DM에서 리오에게 보낸 최신 정정 메시지 ID",
+        confirm="정정을 적용하고 이전 요약을 폐기하려면 true",
+    )
+    async def correct(interaction: discord.Interaction, item_id: int, source_message_id: str,
+                      confirm: bool = False):
+        try:
+            scope = _personal_dm_scope(interaction)
+        except ValueError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+            return
+        if not confirm:
+            await interaction.response.send_message(
+                "정정하려면 항목 번호와 최신 정정 메시지 ID를 넣고 confirm을 true로 선택해 주세요. "
+                "이전 요약은 폐기하고 정정 문장과 이후 대화로 새로 만들어요.", ephemeral=True,
+            )
+            return
+        await interaction.response.defer(ephemeral=True)
+        async with client.channel_lock(scope), _user_lock(client, scope):
+            writes = MemoryMode(client.store.memory_mode(scope)).writes
+            changed = writes and client.store.correct_structured_memory(
+                scope, item_id, source_message_id.strip(),
+            )
+        if not writes:
+            text = "현재 모드에서는 새 기억을 저장할 수 없어요."
+        elif changed:
+            text = "정정했어요. 이전 요약과 대화 문맥은 제외하고 정정 문장을 기준으로 다시 시작해요."
+        else:
+            text = "이 DM의 기억 항목 번호와 저장된 본인 최신 정정 메시지 ID를 확인해 주세요."
+        await interaction.followup.send(text, ephemeral=True)
+
+    @app_commands.command(name="withdraw", description="이 DM의 내 기억 항목 철회")
+    @app_commands.describe(
+        item_id="items에 표시된 기억 항목 번호",
+        confirm="철회를 적용하고 이전 요약을 폐기하려면 true",
+    )
+    async def withdraw(interaction: discord.Interaction, item_id: int, confirm: bool = False):
+        try:
+            scope = _personal_dm_scope(interaction)
+        except ValueError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+            return
+        if not confirm:
+            await interaction.response.send_message(
+                "철회하려면 confirm을 true로 선택해 주세요. 이전 요약도 함께 폐기해요.",
+                ephemeral=True,
+            )
+            return
+        await interaction.response.defer(ephemeral=True)
+        async with client.channel_lock(scope), _user_lock(client, scope):
+            changed = client.store.delete_structured_memory(scope, item_id)
+        await interaction.followup.send(
+            "철회했어요. 이전 요약과 대화 문맥은 제외하고 이후 대화로 기억을 다시 만들어요."
+            if changed else "이 DM에서 철회할 수 있는 내 기억 항목을 찾지 못했어요.",
+            ephemeral=True,
+        )
+
     @app_commands.command(name="server-show", description="현재 서버의 공통 메모 확인")
     async def server_show(interaction: discord.Interaction):
         try:
@@ -260,7 +345,8 @@ def upgrade_memory_group(client):
             client.store.set_note(scope.realm, "")
         await interaction.response.send_message("서버 공통 메모를 삭제했어요.", ephemeral=True)
 
-    for command in (show, note, note_clear, clear, server_show, server_note, server_clear):
+    for command in (show, note, note_clear, clear, items, correct, withdraw,
+                    server_show, server_note, server_clear):
         group.add_command(command)
 
     return group

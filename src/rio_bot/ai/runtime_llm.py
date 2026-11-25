@@ -1,7 +1,7 @@
 import json
 
+from ..core.conversation_boundaries import is_standalone_boundary
 from .auto_reply import clearly_addressed_to_other
-from .conversation_boundaries import is_standalone_boundary
 from .information_pipeline import InformationPipeline
 from .llm import SUMMARY_POLICY as BASE_SUMMARY_POLICY
 from .model_routing import build_memory_model_plan
@@ -104,6 +104,7 @@ class LLM(InformationPipeline):
         message_segments: list[dict[str, str]] | None = None,
         message_id: str | int | None = None,
     ) -> str:
+        channel_context = store.context_after_memory_revision(scope, channel_context or [])
         plan = build_routing_plan(
             store,
             scope,
@@ -179,7 +180,10 @@ class LLM(InformationPipeline):
                 "provider": self.settings.memory_provider or self.settings.provider,
             },
         )
-        if response.status == "completed" and response.output_text.strip():
+        if (
+            response.status == "completed" and response.output_text.strip()
+            and store.summary_batch_is_current(scope, pending)
+        ):
             store.save_summary(scope, response.output_text.strip()[:1500], pending[-1]["id"])
         await self.extract_structured_memory(store, scope)
 
@@ -278,7 +282,10 @@ class LLM(InformationPipeline):
                 "provider": self.settings.memory_provider or self.settings.provider,
             },
         )
-        if response.status == "completed" and response.output_text.strip():
+        if (
+            response.status == "completed" and response.output_text.strip()
+            and store.summary_batch_is_current(scope, pending, shared=True)
+        ):
             store.save_shared_summary(
                 scope,
                 pending[-1]["name"],

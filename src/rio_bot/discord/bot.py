@@ -547,6 +547,7 @@ class RioClient(discord.Client):
                 with exchange:
                     async with self.slots:
                         async with message.channel.typing():
+                            memory_turn = self.store.memory_turn(scope)
                             sources = await self.public_sources(scope.user_id, guild_id) if use_memory else []
                             context = self.store.public_context(sources) if use_memory else []
                             emoji_catalog = await self.emoji_registry.catalog(message.channel)
@@ -574,6 +575,8 @@ class RioClient(discord.Client):
                                 duration_ms=round((time.monotonic() - request_started) * 1000),
                             )
                             current = {e["id"] for e in await self.emoji_registry.catalog(message.channel)}
+                            if not memory_turn.valid:
+                                answer = "기억이 갱신됐어요. 다시 말해 주세요."
                             answer = render_emojis(answer, [e for e in emoji_catalog if e["id"] in current])
                             answer = neutralize_mentions(answer)
                             if not answer:
@@ -581,8 +584,11 @@ class RioClient(discord.Client):
                             sent = await message.channel.send(
                                 next(chunks(answer)), allowed_mentions=self.safe_allowed_mentions)
                             for part in list(chunks(answer))[1:]:
+                                if not memory_turn.valid:
+                                    break
                                 await message.channel.send(
                                     part, allowed_mentions=self.safe_allowed_mentions)
+                            save_memory = save_memory and memory_turn.valid
                             self.events.emit(
                                 "discord_response_sent",
                                 turn_id=turn_id,
@@ -590,7 +596,7 @@ class RioClient(discord.Client):
                                 response_message_id=str(sent.id),
                                 response_chars=len(answer),
                             )
-                            if guild_id is not None and use_chat_log:
+                            if guild_id is not None and use_chat_log and memory_turn.valid:
                                 self.recent.add(scope, sent.id, "리오", answer, role="assistant")
                             self.events.emit(
                                 "turn_completed",
@@ -627,7 +633,7 @@ class RioClient(discord.Client):
                                         )
                                 except Exception as exc:  # noqa: BLE001 - retain the reply path on shadow failure
                                     log.warning("Structured memory extraction deferred (%s)", type(exc).__name__)
-                        else:
+                        elif memory_turn.valid:
                             self.store.invalidate_last_search_outcome(scope)
                 self.events.emit(
                     "turn.completed",

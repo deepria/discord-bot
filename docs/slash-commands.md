@@ -18,14 +18,23 @@ production entrypoint에서 더 이상 해석하지 않습니다. 일반 대화 
 | `/memory note text:<내용>` | 같은 서버의 내 응답에 사용할 개인 메모 교체 |
 | `/memory note-clear` | 개인 메모 삭제 |
 | `/memory clear confirm:true` | 해당 서버 또는 DM에서의 내 대화 기록·자동 요약·개인 메모 삭제 |
+| `/memory items` | 1:1 DM에서 출처가 확인된 내 구조화 기억과 근거 메시지 ID 보기 |
+| `/memory correct item_id:<번호> source_message_id:<ID> confirm:true` | 같은 DM의 최신 본인 발화로 항목 정정 |
+| `/memory withdraw item_id:<번호> confirm:true` | 같은 DM의 내 항목 철회 |
 | `/memory server-show` | 현재 서버 공통 메모 확인 |
 | `/memory server-note text:<내용>` | 서버 공통 메모 교체. Discord `Manage Server` 권한 필요 |
 | `/memory server-clear` | 서버 공통 메모 삭제. Discord `Manage Server` 권한 필요 |
 
-`/memory clear`는 해당 사용자의 지속 장기 기억만 삭제하며 최근 채널 대화 문맥은 유지합니다.
+`/memory clear`는 해당 사용자의 구조화 기억과 정정·철회 기록을 포함한 지속 장기 기억을
+삭제합니다. 최근 채널 대화 문맥은 별도로 유지합니다.
 
-장기 기억 최종 모드에서 쓰기가 꺼져 있으면 `/memory note`와 `/memory server-note`는 새 데이터를
-저장하지 않습니다.
+정정할 때는 먼저 같은 DM에서 새 내용을 리오에게 말한 다음 저장된 그 메시지의 ID와 항목 번호를
+넣습니다. 정정과 철회는 출처를 나눌 수 없는 예전 요약 전체를 폐기합니다. 이후 요약은 정정할 때
+확인한 본인 발화와 변경 이후의 대화를 기준으로 다시 작성합니다. 철회는 항목을 답변 후보에서
+제외하며, 저장된 원문까지 삭제하려면 `/memory clear`를 사용합니다.
+
+장기 기억 최종 모드에서 쓰기가 꺼져 있으면 `/memory correct`, `/memory note`,
+`/memory server-note`는 새 데이터를 저장하지 않습니다.
 
 ## 봇 관리자 장기 기억 설정
 

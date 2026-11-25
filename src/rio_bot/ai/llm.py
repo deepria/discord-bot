@@ -254,7 +254,10 @@ class LLM:
             model=model_plan.model, instructions=SUMMARY_POLICY,
             input=payload_text, max_output_tokens=model_plan.max_output_tokens, store=False,
             _rio_telemetry=model_plan.telemetry())
-        if response.status == "completed" and response.output_text.strip():
+        if (
+            response.status == "completed" and response.output_text.strip()
+            and store.summary_batch_is_current(scope, pending)
+        ):
             store.save_summary(scope, response.output_text.strip()[:1500], pending[-1]["id"])
 
     async def summarize_shared(self, store, scope):
@@ -274,6 +277,9 @@ class LLM:
             "기억하세요. 제3자의 발언이나 사실은 저장하지 마세요.",
             input=payload_text, max_output_tokens=model_plan.max_output_tokens, store=False,
             _rio_telemetry=model_plan.telemetry())
-        if response.status == "completed" and response.output_text.strip():
+        if (
+            response.status == "completed" and response.output_text.strip()
+            and store.summary_batch_is_current(scope, pending, shared=True)
+        ):
             store.save_shared_summary(scope, pending[-1]["name"], response.output_text.strip(),
                                       pending[-1]["id"])

@@ -4,7 +4,7 @@ import re
 import unicodedata
 from datetime import UTC, datetime, timedelta
 
-from ..core.message_provenance import message_segments
+from .message_provenance import message_segments
 
 BOUNDARY_WINDOW = timedelta(minutes=15)
 
