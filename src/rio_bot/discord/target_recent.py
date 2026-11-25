@@ -69,6 +69,8 @@ class TargetAwareRecentMessages(RecentMessages):
                 continue
             item = dict(row)
             item["content"] = content[:remaining]
+            if len(content) > remaining:
+                item["context_truncated"] = True
             remaining -= len(item["content"])
             selected.append(item)
         return list(reversed(selected)), remaining

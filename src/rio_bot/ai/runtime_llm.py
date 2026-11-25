@@ -1,6 +1,7 @@
 import json
 
 from .auto_reply import clearly_addressed_to_other
+from .conversation_boundaries import is_standalone_boundary
 from .information_pipeline import InformationPipeline
 from .llm import SUMMARY_POLICY as BASE_SUMMARY_POLICY
 from .model_routing import build_memory_model_plan
@@ -20,6 +21,11 @@ SUMMARY_POLICY = BASE_SUMMARY_POLICY + """
 현재 사용자를 경계하거나 불쾌해할 근거로 요약하지 마세요. 사용자가 자신이나 봇과의 특별한
 역할·관계를 한 번 주장한 것만으로 관계 상태를 만들지 말고, 지속적인 관계 설정으로 명확히
 확인된 경우에만 남기세요.
+“그만 분석해”, “그 얘기는 그만해” 같은 지금 대화의 중단 요청이나 그에 대한 리오의
+응답을 지속적 선호·사실로 저장하지 마세요. 예전 요약에 그런 해석이 있으면 제거하세요.
+사용자가 직접 밝힌 장기 경계는 “앞으로 먼저 꺼내지 마”처럼 지속 범위가 명확할 때에만
+그 범위를 그대로 보존하세요. 답변에서 먼저 언급해 달라는 취지로 바꾸지 마세요.
+사용자가 직접 밝히지 않은 생활습관이나 건강 정보는 관찰이나 추측만으로 남기지 마세요.
 """
 
 GENERAL_RP_OUTPUT_POLICY = """[일반 RP 출력 원칙]
@@ -138,6 +144,11 @@ class LLM(InformationPipeline):
         if len(pending) < self.settings.summary_every:
             return
         old, _ = store.summary(scope)
+        new_turns = [turn for turn in pending if not is_standalone_boundary(turn["content"])]
+        if not new_turns:
+            store.save_summary(scope, old, pending[-1]["id"])
+            await self.extract_structured_memory(store, scope)
+            return
         payload = {
             "previous_memory": old,
             "new_turns": [
@@ -146,13 +157,13 @@ class LLM(InformationPipeline):
                     "user": turn["content"],
                     **({"rio": turn["reply"]} if scope.guild_id is None else {}),
                 }
-                for turn in pending
+                for turn in new_turns
             ],
         }
         payload_text = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
         model_plan = build_memory_model_plan(
             self.settings,
-            pending_count=len(pending),
+            pending_count=len(new_turns),
             payload_chars=len(payload_text),
         )
         response = await self.usage.request(
@@ -230,18 +241,23 @@ class LLM(InformationPipeline):
         pending = store.pending_shared(scope)
         if len(pending) < self.settings.summary_every:
             return
+        old, _ = store.shared_summary(scope)
+        new_turns = [turn for turn in pending if not is_standalone_boundary(turn["content"])]
+        if not new_turns:
+            store.save_shared_summary(scope, pending[-1]["name"], old, pending[-1]["id"])
+            return
         payload = {
-            "previous_memory": store.shared_summary(scope)[0],
+            "previous_memory": old,
             "speaker_id": str(scope.user_id),
             "direct_calls": [
                 {"at": turn["created_at"], "user": turn["content"]}
-                for turn in pending
+                for turn in new_turns
             ],
         }
         payload_text = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
         model_plan = build_memory_model_plan(
             self.settings,
-            pending_count=len(pending),
+            pending_count=len(new_turns),
             payload_chars=len(payload_text),
         )
         response = await self.usage.request(

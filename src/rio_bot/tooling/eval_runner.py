@@ -42,6 +42,10 @@ def read_cases(path: Path) -> list[dict]:
                 raise ValueError(f"{path}:{number}: turns는 비어 있지 않은 문자열 배열이어야 합니다.")
         elif not isinstance(case.get("input"), str) or not case["input"].strip():
             raise ValueError(f"{path}:{number}: input 또는 turns가 필요합니다.")
+        if "conversation_summary" in case and not (
+            isinstance(case["conversation_summary"], str) and case["conversation_summary"].strip()
+        ):
+            raise ValueError(f"{path}:{number}: conversation_summary는 문자열이어야 합니다.")
         mode = case.get("mode", "dm")
         if mode not in {"dm", "special_dm", "server"}:
             raise ValueError(f"{path}:{number}: mode는 dm, special_dm, server 중 하나여야 합니다.")
@@ -135,7 +139,10 @@ async def run_case(llm: LLM, case: dict) -> dict:
     responses = []
     error = ""
     channel_context = case.get("channel_context", [])
+    summary = case.get("conversation_summary", "")
     try:
+        if summary:
+            store.save_summary(scope, summary, 0)
         for index, turn in enumerate(case_turns(case), 1):
             reply = await llm.answer(
                 store, scope, case.get("speaker", "테스트 사용자"), turn,
@@ -153,6 +160,7 @@ async def run_case(llm: LLM, case: dict) -> dict:
         "input": case.get("input", ""),
         "turns": case_turns(case),
         "channel_context": channel_context,
+        **({"conversation_summary": summary} if summary else {}),
         "expected": case["expected"],
         "responses": responses,
         "error": error,
@@ -181,6 +189,8 @@ def write_results(results: list[dict], output: Path) -> tuple[Path, Path]:
     ]
     for row in results:
         lines += [f"## {row['id']} ({row['mode']})", "", f"**Expected:** {row['expected']}", ""]
+        if row.get("conversation_summary"):
+            lines += ["**Conversation summary**", "", row["conversation_summary"], ""]
         if row["channel_context"]:
             context_text = json.dumps(row["channel_context"], ensure_ascii=False, indent=2)
             lines += ["**Channel context**", "", "```json", context_text, "```", ""]

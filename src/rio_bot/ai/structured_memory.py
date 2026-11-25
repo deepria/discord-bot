@@ -5,7 +5,9 @@ from datetime import UTC, datetime
 
 from discord.utils import snowflake_time
 
-POLICY_VERSION = "context-purpose-v2"
+from .conversation_boundaries import is_standalone_boundary
+
+POLICY_VERSION = "context-purpose-v3"
 
 POLICY = """Select memories that help Rio understand this user across future conversations.
 Accuracy alone is not a reason to retain a fact. Keep only clearly durable, useful user facts,
@@ -22,6 +24,8 @@ repeatedly recommending soup or sandwiches is NOT evidence that the user eats or
 Accepting grilled fish for today's lunch is NOT a durable preference. A one-off project decision,
 complaint, vague product evaluation, temporary plan, or passing observation usually needs no
 long-term memory. Do not turn a work refusal into a personality trait or permanent boundary.
+A request to stop a topic or analysis now is local to that conversation. A lasting interaction
+boundary needs the user's explicit ongoing intent and must retain the stated scope.
 Long-standing experience may be useful when explicitly stated, but do not invent skills or interests.
 Do not promote quotes, jokes, hypothetical actions, RP events, third-party claims, or another bot's
 behavior into this user's facts. Preserve observer, subject, scope, conditions, and uncertainty.
@@ -76,7 +80,13 @@ def build_extraction_input(pending, context, *, capture: str, max_chars: int = 1
         entry = turn(row)
         payload["turns"].append(entry)
         payload["eligible_source_message_ids"].append(entry["message_id"])
-        reason = "missing_turn_provenance" if not row["turn_id"] else "context_budget" if not fits() else None
+        reason = None
+        if not row["turn_id"]:
+            reason = "missing_turn_provenance"
+        elif is_standalone_boundary(entry["user"]):
+            reason = "temporary_conversation_boundary"
+        elif not fits():
+            reason = "context_budget"
         if reason:
             payload["eligible_source_message_ids"].pop()
             entry.update(user="", rio="", complete=False, omitted_reason=reason)
