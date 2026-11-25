@@ -38,6 +38,7 @@ class Store:
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
             CREATE INDEX IF NOT EXISTS shared_calls_scope ON shared_calls(scope, id);
+            CREATE INDEX IF NOT EXISTS shared_calls_owner_time ON shared_calls(user_id, created_at);
             CREATE TABLE IF NOT EXISTS shared_summaries (
                 scope TEXT PRIMARY KEY, realm TEXT NOT NULL, user_id TEXT NOT NULL,
                 name TEXT NOT NULL, text TEXT NOT NULL, through_id INTEGER NOT NULL
@@ -425,6 +426,30 @@ class Store:
             " GROUP BY scope,user_id ORDER BY recent DESC LIMIT 30", (value,)).fetchall()
         return [Scope(int(r["scope"].split(":")[1]), int(r["scope"].split(":")[3]),
                       int(r["user_id"])) for r in rows]
+
+    def recent_public_sources(self, user_id: int, *, since: str, until: str) -> list[Scope]:
+        rows = self.db.execute(
+            "SELECT scope FROM shared_calls WHERE user_id=? AND realm LIKE 'guild:%' "
+            "AND created_at BETWEEN ? AND ? GROUP BY scope "
+            "ORDER BY MAX(created_at) DESC, MAX(id) DESC LIMIT 30",
+            (str(user_id), since, until),
+        ).fetchall()
+        return [Scope(int(row["scope"].split(":")[1]), int(row["scope"].split(":")[3]), user_id)
+                for row in rows]
+
+    def recent_public_turns(self, source: Scope, user_id: int, *, since: str, until: str):
+        if source.guild_id is None or source.user_id != user_id:
+            return []
+        # A shared call is the capture-time proof that the user's own input was public.
+        # The reply has a separate export check since it may depend on earlier turns.
+        return self.db.execute(
+            "SELECT c.message_id, c.created_at, c.content, t.reply FROM shared_calls c "
+            "LEFT JOIN turns t ON t.message_id=c.message_id AND t.scope=c.scope "
+            "AND t.user_id=c.user_id AND t.exportable=1 "
+            "WHERE c.scope=? AND c.realm=? AND c.user_id=? AND c.created_at BETWEEN ? AND ? "
+            "ORDER BY c.created_at DESC, c.id DESC LIMIT 2",
+            (source.conversation, source.realm, str(user_id), since, until),
+        ).fetchall()
 
     def public_context(self, allowed_scopes):
         context = []

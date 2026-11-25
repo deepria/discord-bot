@@ -191,7 +191,8 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.store = Store(":memory:")
         self.llm = NS(answer=AsyncMock(return_value="안녕"), summarize=AsyncMock(), summarize_shared=AsyncMock(), close=AsyncMock())
-        self.bot = RioClient(Settings("test", "test", cooldown=0), store=self.store, llm=self.llm)
+        self.bot = RioClient(Settings("test", "test", cooldown=0, public_memory_in_dm=True),
+                             store=self.store, llm=self.llm)
         self.bot._connection.user = NS(id=99)
         self.channel = MagicMock(spec=discord.TextChannel)
         self.channel.id = 10
