@@ -7,6 +7,7 @@ from time import monotonic
 
 import discord
 
+from rio_bot.ai.audio_context import CURRENT_AUDIO_CONTEXT
 from rio_bot.ai.chat_history_context import CURRENT_CHAT_HISTORY
 from rio_bot.ai.dm_memory_recall import CURRENT_PRIVATE_DM
 from rio_bot.ai.egress_policy import strict_policy
@@ -15,6 +16,7 @@ from rio_bot.ai.public_dm_context import CURRENT_PUBLIC_DM_LOOKUP, PublicDMConte
 from rio_bot.ai.vision import CURRENT_VISUAL_INPUTS
 from rio_bot.core.message_provenance import split_inline_quotes
 
+from .audio import collect_audio
 from .bot import RioClient as BaseRioClient
 from .chat_history import ChatHistory
 from .chat_llm import LLM
@@ -385,23 +387,25 @@ class RioClient(BaseRioClient):
         reply_author_id = None
         visuals = []
         forwarded = []
+        audio = []
         if text is not None:
             try:
                 reply_target = await resolve_reply_target(message)
                 if getattr(message, "type", discord.MessageType.reply) == discord.MessageType.reply:
                     reply_author_id = getattr(getattr(reply_target, "author", None), "id", None)
                 replied = reply_context_rows(reply_target, self.user.id)
-                forwarded = await forward_context_rows(message, message, "current_forward")
-                if is_forward(reply_target) and (
+                explicit_reference_allowed = reply_author_id is not None and (
                     reply_author_id == scope.user_id
-                    or (
-                        not direct_only and not strict_policy(self.settings.external_context_policy)
-                    )
+                    or (not direct_only and not strict_policy(self.settings.external_context_policy))
                     or trigger_text(
                         reply_target, self.user.id, self.settings.dm_always_reply,
                         self.settings.call_prefixes,
                     ) is not None
-                ):
+                )
+                audio_reply = reply_target if explicit_reference_allowed else None
+                audio = await collect_audio(message, audio_reply, provider=self.settings.provider)
+                forwarded = await forward_context_rows(message, message, "current_forward")
+                if explicit_reference_allowed and is_forward(reply_target):
                     forwarded.extend(await forward_context_rows(
                         reply_target, message, "explicit_reply", limit=2 - len(forwarded),
                     ))
@@ -439,6 +443,7 @@ class RioClient(BaseRioClient):
         target_token = TARGET_CONTEXT.set(tuple(sampled))
         reply_token = REPLY_CONTEXT.set(tuple(replied))
         forward_token = CURRENT_FORWARD_CONTEXT.set(tuple(forwarded))
+        audio_token = CURRENT_AUDIO_CONTEXT.set(tuple(audio))
         visual_token = CURRENT_VISUAL_INPUTS.set(tuple(visuals))
         public_token = CURRENT_PUBLIC_CONTEXT_REQUEST.set(public_request)
         dm_lookup = None
@@ -462,10 +467,10 @@ class RioClient(BaseRioClient):
         history = ChatHistory(message, self.user.id, self.store, self.settings, self.events)
         history_token = CURRENT_CHAT_HISTORY.set(history)
 
-        # Forward evidence already reaches the model separately from the user's own words.
+        # Explicit references reach the model separately from the user's own words.
         # A bare call with only visuals uses the existing visual prompt.
         original_content = None
-        augmented_content = _augment_empty_call(message.content, text, bool(visuals) and not forwarded)
+        augmented_content = _augment_empty_call(message.content, text, bool(visuals) and not (forwarded or audio))
         if augmented_content is not None:
             original_content = message.content
             message.content = augmented_content
@@ -479,6 +484,7 @@ class RioClient(BaseRioClient):
             CURRENT_PUBLIC_DM_LOOKUP.reset(dm_token)
             CURRENT_PUBLIC_CONTEXT_REQUEST.reset(public_token)
             CURRENT_VISUAL_INPUTS.reset(visual_token)
+            CURRENT_AUDIO_CONTEXT.reset(audio_token)
             CURRENT_FORWARD_CONTEXT.reset(forward_token)
             REPLY_CONTEXT.reset(reply_token)
             TARGET_CONTEXT.reset(target_token)

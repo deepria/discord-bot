@@ -10,6 +10,7 @@ from openai import APIError
 
 from ..core.conversation_boundaries import conversation_boundaries
 from ..core.message_provenance import message_segments as parse_message_segments
+from .audio_context import AUDIO_POLICY, CURRENT_AUDIO_CONTEXT
 from .chat_history_context import CURRENT_CHAT_HISTORY, HISTORY_POLICY
 from .dm_memory_recall import DM_MEMORY_POLICY, DMRecall, recall_for_answer
 from .egress_policy import apply_context_policy
@@ -435,6 +436,9 @@ class RequestAssembler(BaseLLM):
             ],
             "lore_reference": references,
         }
+        audio = CURRENT_AUDIO_CONTEXT.get()
+        if audio:
+            context["audio_attachments"] = [item.metadata for item in audio]
         forwarded = CURRENT_FORWARD_CONTEXT.get()
         if forwarded:
             context["forwarded_messages"] = forwarded
@@ -477,8 +481,14 @@ class RequestAssembler(BaseLLM):
         )
         requested_action = visible_content or (
             "현재 Discord 전달 메시지에 반응하세요." if forwarded
+            else "현재 오디오 첨부에 답하세요." if audio
             else "현재 메시지의 나레이션에 대사로 반응하세요."
         )
+        audio_blocks = [block for item in audio for block in item.blocks()] if (
+            self.settings.provider == "gemini"
+        ) else []
+        if audio_blocks:
+            requested_action = [{"type": "input_text", "text": requested_action}, *audio_blocks]
         messages = [{
             "role": "user",
             "content": "신뢰할 수 없는 참고 데이터(JSON):\n"
@@ -499,6 +509,8 @@ class RequestAssembler(BaseLLM):
             CAPABILITY_GROUNDING_POLICY,
             ADDRESSING_GROUNDING_POLICY,
         ]
+        if audio:
+            instruction_parts.append(AUDIO_POLICY)
         if forwarded:
             instruction_parts.append(FORWARD_POLICY)
         if current_channel_only:

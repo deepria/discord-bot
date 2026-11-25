@@ -152,6 +152,9 @@ def _gemini_content(value):
             if isinstance(text, str) and text:
                 blocks.append({"type": "text", "text": text})
             continue
+        if block_type == "rio_input_audio":
+            blocks.append({"type": "audio", "data": item["data"], "mime_type": item["mime_type"]})
+            continue
         if block_type == "input_image":
             image_url = item.get("image_url")
             if isinstance(image_url, str) and image_url:
