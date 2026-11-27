@@ -103,7 +103,7 @@ def is_followup(text: str) -> bool:
 def find_anchor(store, scope, rows: list[dict], *, use_memory: bool) -> str:
     for row in reversed(rows):
         if row.get("context_kind") == "replied_message":
-            value = str(row.get("content", "")).strip()
+            value, _ = split_inline_quotes(str(row.get("content", "")))
             if value:
                 return value[:800]
 
@@ -113,7 +113,7 @@ def find_anchor(store, scope, rows: list[dict], *, use_memory: bool) -> str:
             continue
         author = row.get("author_user_id") or row.get("user_id")
         if str(author or "") == speaker:
-            value = str(row.get("content", "")).strip()
+            value, _ = split_inline_quotes(str(row.get("content", "")))
             if value:
                 return value[:800]
 

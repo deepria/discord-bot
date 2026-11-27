@@ -1,4 +1,4 @@
-from rio_bot.core.message_provenance import split_inline_quotes
+from rio_bot.core.message_provenance import observable_discord_text, split_inline_quotes
 from rio_bot.core.recent import RecentMessages
 from rio_bot.core.routing import Scope
 
@@ -30,9 +30,21 @@ def test_recent_context_preserves_narration_for_scene_continuity():
     recent = RecentMessages()
     scope = Scope(1, 10, 100)
 
-    recent.add(scope, 1, "사용자", "> 제3자의 비밀\n내 의견은 아니야")
+    recent.add(scope, 1, "사용자", "> 선생은 조용히 웃었다.\n> 제3자의 비밀\n안녕")
+    recent.add(scope, 2, "사용자", ">>> 선생은 비밀을 지키기로 마음먹었다.")
 
-    assert [row["content"] for row in recent.context(scope, 2)] == ["> 제3자의 비밀\n내 의견은 아니야"]
+    assert [row["content"] for row in recent.context(scope, 3)] == ["> 선생은 조용히 웃었다.\n안녕"]
+
+
+def test_mixed_private_clause_and_nested_quote_are_excluded():
+    assert observable_discord_text("> 계좌를 조사하기로 다짐하며 웃었다.") == ""
+    assert observable_discord_text(
+        '> 선생은 "비밀을 지킨다. 문을 열었다."라고 생각했다.\n'
+        "안녕"
+    ) == "안녕"
+    assert observable_discord_text(
+        "> 선생은 손을 흔들었다. 마음속으로 웃고 싶었다."
+    ) == "> 선생은 손을 흔들었다."
 
 
 def test_segments_preserve_dialogue_and_scene_order_and_code():

@@ -3,20 +3,25 @@ from contextvars import ContextVar
 
 import discord
 
-from rio_bot.core.message_provenance import split_inline_quotes
+from rio_bot.core.message_provenance import observable_discord_text
 
 from .forward_context import is_forward
+from .routing import trigger_text
 
 log = logging.getLogger("rio")
 
 REPLY_CONTEXT = ContextVar("reply_context", default=())
 
 
-def _row(target, bot_id: int) -> dict | None:
-    content, _ = split_inline_quotes(getattr(target, "content", "") or "")
+def _row(target, bot_id: int, call_prefixes: tuple[str, ...]) -> dict | None:
     author = getattr(target, "author", None)
     user_id = getattr(author, "id", None)
-    if not content or author is None or user_id is None:
+    raw = getattr(target, "content", "") or ""
+    if not raw or author is None or user_id is None:
+        return None
+    triggered = trigger_text(target, bot_id, prefixes=call_prefixes)
+    content = observable_discord_text(raw, triggered_text=triggered).strip()
+    if not content:
         return None
 
     own_bot = user_id == bot_id
@@ -78,8 +83,8 @@ async def resolve_reply_target(message):
     return target
 
 
-def reply_context_rows(target, bot_id: int) -> list[dict]:
-    row = _row(target, bot_id)
+def reply_context_rows(target, bot_id: int, *, call_prefixes=("리오야",)) -> list[dict]:
+    row = _row(target, bot_id, call_prefixes)
     return [row] if row is not None else []
 
 

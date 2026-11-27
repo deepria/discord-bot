@@ -7,7 +7,7 @@ import discord
 
 from rio_bot.core.message_provenance import split_inline_quotes
 
-from .routing import trigger_text
+from .routing import mentioned_user_ids, trigger_text
 
 log = logging.getLogger("rio")
 TARGET_CONTEXT = ContextVar("target_context", default=())
@@ -41,11 +41,15 @@ def retrieval_mode(text: str) -> str | None:
     return None
 
 
-def targets(message, bot_id):
+def targets(message, bot_id, dialogue):
     rows, seen = [], set()
+    mentioned = mentioned_user_ids(dialogue)
     for user in getattr(message, "mentions", ()):
         uid = getattr(user, "id", None)
-        if uid is None or uid in seen or uid in {bot_id, message.author.id} or getattr(user, "bot", False):
+        if (
+            uid not in mentioned or uid in seen or uid in {bot_id, message.author.id}
+            or getattr(user, "bot", False)
+        ):
             continue
         seen.add(uid)
         rows.append(user)
@@ -70,7 +74,7 @@ async def collect(
     mode = retrieval_mode(text)
     if visibility_mode == "off" or getattr(message, "guild", None) is None or mode is None:
         return []
-    selected = targets(message, bot_id)
+    selected = targets(message, bot_id, text)
     if not selected or not hasattr(message.channel, "history"):
         return []
     if hasattr(message.channel, "permissions_for"):
@@ -93,10 +97,14 @@ async def collect(
             uid = getattr(getattr(old, "author", None), "id", None)
             if uid not in chosen or getattr(old, "webhook_id", None) is not None:
                 continue
-            direct_trigger = trigger_text(old, bot_id, False, call_prefixes) is not None
+            triggered = trigger_text(old, bot_id, False, call_prefixes)
+            direct_trigger = triggered is not None
             if visibility_mode == "direct" and not direct_trigger:
                 continue
-            text_value, _ = split_inline_quotes(getattr(old, "content", "") or "")
+            raw = getattr(old, "content", "") or ""
+            text_value, narration = split_inline_quotes(triggered or "")
+            if not narration:
+                text_value, _ = split_inline_quotes(raw)
             if (not text_value or len(found[uid]) >= limits["messages"]
                     or sizes[uid] >= limits["chars"]):
                 continue

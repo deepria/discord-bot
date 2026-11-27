@@ -14,7 +14,11 @@ from rio_bot.ai.audio_context import CURRENT_AUDIO_CONTEXT
 from rio_bot.ai.chat_history_context import CURRENT_CHAT_HISTORY
 from rio_bot.ai.egress_policy import filter_channel_context
 from rio_bot.ai.forward_context import CURRENT_FORWARD_CONTEXT
-from rio_bot.core.message_provenance import message_segments, split_inline_quotes
+from rio_bot.core.message_provenance import (
+    message_segments,
+    observable_discord_text,
+    split_inline_quotes,
+)
 from rio_bot.core.runtime_config import RuntimeSettings
 from rio_bot.core.runtime_settings_service import apply_runtime_side_effects
 from rio_bot.core.runtime_settings_snapshot import policy_snapshot
@@ -28,7 +32,7 @@ from .memory_commands import MemoryCommands, MemoryMode
 from .output_safety import neutralize_mentions
 from .presence import PresenceController
 from .recent import RecentMessages
-from .routing import Scope, chunks, trigger_text
+from .routing import Scope, chunks, mentioned_user_ids, trigger_text
 from .store import Store
 
 log = logging.getLogger("rio")
@@ -283,7 +287,7 @@ class RioClient(discord.Client):
                     historical_scope,
                     old.id,
                     old.author.display_name,
-                    old.content,
+                    observable_discord_text(old.content, triggered_text=historical_text),
                     role="assistant" if own_bot else "user",
                     unix_time=old.created_at.timestamp(),
                     direct_trigger=historical_text is not None,
@@ -412,11 +416,14 @@ class RioClient(discord.Client):
                 self.settings.external_context_policy,
             )
         async with self.slots:
+            mentioned = mentioned_user_ids(text)
             return await classify(
                 current={
                     "speaker_id": str(scope.user_id),
                     "speaker_name": message.author.display_name[:100],
-                    "mentioned_user_ids": [str(user.id) for user in message.mentions[:10]],
+                    "mentioned_user_ids": [
+                        str(user.id) for user in message.mentions if user.id in mentioned
+                    ][:10],
                     "content": text,
                 },
                 recent=recent,
@@ -430,6 +437,8 @@ class RioClient(discord.Client):
                 and guild_id not in self.settings.allowed_guild_ids):
             return
         text = self.message_trigger(message)
+        if text is not None:
+            text = observable_discord_text(text)
         authored_text, _ = split_inline_quotes(text) if text is not None else ("", "")
         if self.pending_count >= 100:
             return

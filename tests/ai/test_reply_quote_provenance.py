@@ -98,7 +98,8 @@ async def test_relationship_uses_current_author_id_not_name_or_guild_permissions
 
 
 @pytest.mark.asyncio
-async def test_narration_is_delivered_in_order_with_dialogue_only_output_policy():
+@pytest.mark.parametrize("marker", [">", ">>>"])
+async def test_private_account_thought_is_absent_from_current_and_recent_model_input(marker):
     from rio_bot.core.message_provenance import message_segments
 
     calls = []
@@ -113,31 +114,44 @@ async def test_narration_is_delivered_in_order_with_dialogue_only_output_policy(
     )
     llm = LLM(Settings("test", "test", external_context_policy="full"), client=client)
     store = Store(":memory:")
-    scene = message_segments("> 선생은 리오를 내려다보며 웃었다.\n> 리오는 웃기로 했다.")
+    farewell = "난 할일이 있어서 오늘은 좀 일찍 가볼게"
+    thought = "선생은 샬레의 권한으로 리오 명의 계좌를 까봐야겠다고 다짐한다."
+    smile = "선생은 리오를 내려다보며 웃었다."
+    scene = message_segments(
+        f"{farewell}\n{marker} {thought}\n{'>' if marker == '>' else ''} {smile}"
+    )
     try:
         await llm.answer(
-            store, Scope(1, 10, 100), "사용자", "", message_segments=scene,
+            store, Scope(1, 10, 100), "사용자", farewell, message_segments=scene,
             channel_context=[{
                 "role": "user", "user_id": "200", "name": "다른 사람",
-                "message_id": "1", "content": "> 문을 열었다.\n안녕",
+                "message_id": "1", "content": f"안녕\n>>> 문을 열었다.\n{thought}",
+            }, {
+                "role": "user", "user_id": "200", "name": "다른 사람",
+                "message_id": "2", "content": f"> {thought}",
             }],
         )
         payload = calls[-1]
         reference = json.loads(payload["input"][0]["content"].split("\n", 1)[1])
         current = reference["current_user_message"]
-        assert current["content"] == ""
-        assert current["message_segments"] == scene
+        assert current["content"] == farewell
+        assert current["message_segments"] == [
+            {"kind": "dialogue", "content": farewell},
+            {"kind": "narration", "content": smile},
+        ]
         assert current["author_id"] == "100"
         assert reference["inline_quoted_text"] == []
         prior, = reference["channel_recent_messages"]
         assert prior["author_id"] == "200"
+        assert prior["content"] == "안녕"
         assert prior["message_segments"] == [
-            {"kind": "narration", "content": "문을 열었다."},
             {"kind": "dialogue", "content": "안녕"},
+            {"kind": "narration", "content": "문을 열었다."},
         ]
-        assert payload["input"][-1]["content"]
+        assert payload["input"][-1]["content"] == farewell
+        assert "계좌" not in json.dumps(payload, ensure_ascii=False)
         assert "리오는 대사로만 답하세요" in payload["instructions"]
-        assert "속마음은 들은 말처럼 다루지" in payload["instructions"]
+        assert "관찰한 행동만으로 속마음이나 의도를 단정하지" in payload["instructions"]
     finally:
         await llm.close()
         store.close()

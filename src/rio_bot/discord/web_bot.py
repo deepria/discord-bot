@@ -14,7 +14,7 @@ from rio_bot.ai.egress_policy import strict_policy
 from rio_bot.ai.forward_context import CURRENT_FORWARD_CONTEXT
 from rio_bot.ai.public_dm_context import CURRENT_PUBLIC_DM_LOOKUP, PublicDMContext
 from rio_bot.ai.vision import CURRENT_VISUAL_INPUTS
-from rio_bot.core.message_provenance import split_inline_quotes
+from rio_bot.core.message_provenance import observable_discord_text, split_inline_quotes
 
 from .audio import collect_audio
 from .bot import RioClient as BaseRioClient
@@ -336,7 +336,7 @@ class RioClient(BaseRioClient):
                         historical_scope,
                         old.id,
                         old.author.display_name,
-                        old.content,
+                        observable_discord_text(old.content, triggered_text=historical_text),
                         role="bot" if other_bot else "user",
                         unix_time=old.created_at.timestamp(),
                         direct_trigger=historical_text is not None,
@@ -351,7 +351,9 @@ class RioClient(BaseRioClient):
     async def on_message(self, message):
         if self.user is None:
             return await super().on_message(message)
-        text = self.message_trigger(message)
+        triggered_text = self.message_trigger(message)
+        text = observable_discord_text(triggered_text) if triggered_text is not None else None
+        authored, _ = split_inline_quotes(text or "")
         scope = Scope(
             message.guild.id if message.guild else None,
             message.channel.id,
@@ -393,7 +395,9 @@ class RioClient(BaseRioClient):
                 reply_target = await resolve_reply_target(message)
                 if getattr(message, "type", discord.MessageType.reply) == discord.MessageType.reply:
                     reply_author_id = getattr(getattr(reply_target, "author", None), "id", None)
-                replied = reply_context_rows(reply_target, self.user.id)
+                replied = reply_context_rows(
+                    reply_target, self.user.id, call_prefixes=self.settings.call_prefixes,
+                )
                 explicit_reference_allowed = reply_author_id is not None and (
                     reply_author_id == scope.user_id
                     or (not direct_only and not strict_policy(self.settings.external_context_policy))
@@ -412,7 +416,7 @@ class RioClient(BaseRioClient):
                 sampled = await collect(
                     message,
                     self.user.id,
-                    text,
+                    authored,
                     direct_only=direct_only,
                     call_prefixes=self.settings.call_prefixes,
                 )
@@ -436,7 +440,7 @@ class RioClient(BaseRioClient):
             except Exception as exc:  # noqa: BLE001 - request-scoped context must fail open.
                 log.warning("Request context collection skipped (%s)", type(exc).__name__)
         public_request = (
-            _public_context_request(scope, text, sampled)
+            _public_context_request(scope, authored, sampled)
             if text is not None
             else (False, ())
         )
@@ -452,7 +456,6 @@ class RioClient(BaseRioClient):
             and getattr(message.channel, "type", None) == discord.ChannelType.private
         )
         if private_dm:
-            authored, _ = split_inline_quotes(text or "")
             explicit_summary = bool(_PUBLIC_MEMORY_QUERY.search(authored))
 
             async def dm_lookup(request_scope, excluded_ids):
@@ -470,7 +473,10 @@ class RioClient(BaseRioClient):
         # Explicit references reach the model separately from the user's own words.
         # A bare call with only visuals uses the existing visual prompt.
         original_content = None
-        augmented_content = _augment_empty_call(message.content, text, bool(visuals) and not (forwarded or audio))
+        visual_call = message.content
+        if triggered_text and not text:
+            visual_call = self.settings.call_prefixes[0] if self.settings.call_prefixes else ""
+        augmented_content = _augment_empty_call(visual_call, text, bool(visuals) and not (forwarded or audio))
         if augmented_content is not None:
             original_content = message.content
             message.content = augmented_content

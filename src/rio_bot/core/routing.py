@@ -1,6 +1,12 @@
 import re
 from dataclasses import dataclass
 
+_USER_MENTION = re.compile(r"<@!?([0-9]{1,20})>")
+
+
+def mentioned_user_ids(content: str) -> set[int]:
+    return {int(value) for value in _USER_MENTION.findall(content)}
+
 
 @dataclass(frozen=True)
 class Scope:
@@ -29,20 +35,21 @@ class Scope:
 def trigger_text(message, bot_id: int, dm_always_reply: bool = False,
                  prefixes: tuple[str, ...] = ("리오야",), *,
                  always_reply_channel_ids: tuple[int, ...] = ()) -> str | None:
-    if message.author.bot or message.webhook_id is not None:
+    if message.author.bot or getattr(message, "webhook_id", None) is not None:
         return None
     raw = message.content.lstrip()
     # Discord includes the replied-to author in mentions only when reply ping is enabled.
     # Do not infer a ping merely from message.reference.
-    ping = any(user.id == bot_id for user in message.mentions)
+    ping = any(user.id == bot_id for user in getattr(message, "mentions", ()))
     matched = max((prefix for prefix in prefixes if raw.startswith(prefix)),
                   key=len, default=None)
     keyword = matched is not None
-    if message.guild is not None and always_reply_channel_ids:
+    guild = getattr(message, "guild", None)
+    if guild is not None and always_reply_channel_ids:
         channel_id = getattr(getattr(message, "channel", None), "id", None)
         if channel_id in always_reply_channel_ids and not (ping or keyword):
             return raw.strip()
-    if not (ping or keyword or (message.guild is None and dm_always_reply)):
+    if not (ping or keyword or (guild is None and dm_always_reply)):
         return None
     raw = re.sub(rf"<@!?{bot_id}>", "", raw).lstrip()
     # Re-check after removing a leading mention, so `<@bot> 리오야 ...` is normalized too.

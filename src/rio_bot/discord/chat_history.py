@@ -10,6 +10,7 @@ import discord
 
 from rio_bot.ai.egress_policy import strict_policy
 from rio_bot.ai.local_tools import LocalTool
+from rio_bot.core.message_provenance import observable_discord_text
 
 from .chatlog_capture import capture_mode
 from .routing import Scope, trigger_text
@@ -236,8 +237,12 @@ class ChatHistory:
                 bounds[old.author.id] = self._bounds(old.author.id)
             if not self._eligible(old, bounds[old.author.id], direct_only=direct_only):
                 continue
-            if query in old.content.casefold():
-                candidates.append(old)
+            triggered = trigger_text(
+                old, self.bot_id, self.settings.dm_always_reply, self.settings.call_prefixes,
+            )
+            visible = observable_discord_text(old.content, triggered_text=triggered)
+            if visible and query in visible.casefold():
+                candidates.append((old, visible))
                 if len(candidates) == _RESULT_LIMIT:
                     break
         if await self._accessible_channel() is None or not self.enabled():
@@ -247,21 +252,21 @@ class ChatHistory:
         records, pending = [], {}
         chars_left = min(4500, self._chars_left)
         more = inspected == _SCAN_LIMIT or len(candidates) == _RESULT_LIMIT
-        for old in candidates:
+        for old, visible in candidates:
             if not self._eligible(old, self._bounds(old.author.id), direct_only=direct_only):
                 continue
             if not chars_left:
                 more = True
                 upper = old.id + 1
                 break
-            content = old.content[:min(1500, chars_left)]
+            content = visible[:min(1500, chars_left)]
             chars_left -= len(content)
             self._chars_left -= len(content)
             pending[old.id] = old
             records.append({
                 "author_user_id": str(old.author.id), "author": old.author.display_name[:80],
                 "message_id": str(old.id), "at": old.created_at.isoformat(),
-                "content": content, "truncated": len(content) < len(old.content),
+                "content": content, "truncated": len(content) < len(visible),
             })
         self._returned.update(pending)
         result = {

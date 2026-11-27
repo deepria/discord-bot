@@ -72,6 +72,17 @@ async def test_time_author_scope_and_partial_pagination():
 
 
 @pytest.mark.asyncio
+async def test_chat_history_cannot_find_or_return_private_narration():
+    lookup, message, rows, _, _ = fixture_history()
+    rows.append(message("안녕\n>>> 선생은 웃었다.\n선생은 리오의 계좌를 확인하기로 다짐했다."))
+    rows.append(message("리오야 > 선생은 리오의 계좌를 확인하기로 다짐했다.", seconds=-70))
+
+    assert (await lookup.run({"query": "계좌"}))["status"] == "empty"
+    result = await lookup.run({})
+    assert [row["content"] for row in result["messages"]] == ["안녕\n> 선생은 웃었다."]
+
+
+@pytest.mark.asyncio
 async def test_preexisting_reset_and_deleted_discord_message(tmp_path):
     path = str(tmp_path / "rio.db")
     lookup, message, rows, _, _ = fixture_history(store=Store(path))

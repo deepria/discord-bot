@@ -2,6 +2,8 @@
 import time
 from collections import OrderedDict, deque
 
+from .message_provenance import observable_discord_text
+
 
 class RecentMessages:
     def __init__(self, limit=30, ttl=900, channels=128, budget=6000):
@@ -30,9 +32,9 @@ class RecentMessages:
         reply_target_user_id=None,
         direct_trigger=False,
     ):
-        # Preserve scene markup in ephemeral context, including narration-only messages.
-        # Request assembly separates narration from spoken dialogue before model delivery.
         content = str(content or "")
+        if role != "assistant":
+            content = observable_discord_text(content)
         if not content:
             return
         now = time.monotonic()
