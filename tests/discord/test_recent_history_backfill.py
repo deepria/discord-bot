@@ -107,6 +107,10 @@ class HistoryBackfillTests(unittest.IsolatedAsyncioTestCase):
         now = datetime.now(UTC)
         channel = FakeHistoryChannel([
             self.old_message(1, "> 선생은 조용히 웃었다.", now - timedelta(minutes=1)),
+            self.old_message(
+                2, "리오야 > 선생은 리오 명의 계좌를 까봐야겠다고 다짐한다.",
+                now - timedelta(seconds=30),
+            ),
         ])
         current = NS(id=10, created_at=now, channel=channel)
         scope = Scope(1, 10, 200, True)

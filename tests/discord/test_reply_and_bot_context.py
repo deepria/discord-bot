@@ -160,12 +160,15 @@ async def test_reply_to_other_bot_is_marked_as_bot_context():
 
 
 @pytest.mark.asyncio
-async def test_reply_quote_keeps_only_the_replied_authors_direct_words():
+async def test_reply_quote_keeps_direct_words_and_observable_narration():
     now = datetime.now(UTC)
     channel = FakeHistoryChannel(10)
     target = NS(
         id=53,
-        content="> 제3자가 말했다는 내용\n이건 답장 대상의 직접 의견",
+        content=(
+            "리오야 > 선생은 리오의 계좌를 확인하기로 다짐했다.\n"
+            "> 선생은 고개를 끄덕였다.\n이건 답장 대상의 직접 의견"
+        ),
         author=NS(id=300, bot=False, display_name="대상", name="대상"),
         webhook_id=None,
         created_at=now,
@@ -181,7 +184,7 @@ async def test_reply_quote_keeps_only_the_replied_authors_direct_words():
 
     rows = await collect_reply_context(message, 99)
 
-    assert rows[0]["content"] == "이건 답장 대상의 직접 의견"
+    assert rows[0]["content"] == "> 선생은 고개를 끄덕였다.\n이건 답장 대상의 직접 의견"
 
 
 @pytest.fixture

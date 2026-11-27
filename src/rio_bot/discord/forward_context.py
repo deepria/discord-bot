@@ -4,6 +4,8 @@ import asyncio
 
 import discord
 
+from rio_bot.core.message_provenance import observable_discord_text
+
 
 def is_forward(message):
     reference = getattr(message, "reference", None)
@@ -56,7 +58,7 @@ async def forward_context_rows(source, request, relation, *, limit=2):
     # An empty or attachment-only snapshot still has a forwarder, but supplies no text evidence.
     rows = []
     for snapshot in snapshots[:limit] or [None]:
-        content = getattr(snapshot, "content", "") or ""
+        content = observable_discord_text(getattr(snapshot, "content", "") or "")
         rows.append({
             "relation": relation,
             "forwarding_message_id": str(source.id),

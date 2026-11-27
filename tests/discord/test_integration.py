@@ -240,7 +240,6 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
         args, kwargs = self.llm.answer.call_args
         self.assertEqual(args[3], "이 주장 맞아?")
         self.assertEqual(kwargs["message_segments"], [
-            {"kind": "narration", "content": quoted},
             {"kind": "dialogue", "content": "이 주장 맞아?"},
         ])
         self.assertEqual(self.store.history(Scope(1, 10, 100))[0]["content"], "이 주장 맞아?")
@@ -255,6 +254,22 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
         ])
         self.assertEqual(self.store.history(Scope(1, 10, 100)), [])
         self.channel.send.assert_awaited()
+
+    async def test_private_narration_is_removed_before_answer_and_next_turn(self):
+        thought = "선생은 샬레의 권한으로 리오 명의 계좌를 까봐야겠다고 다짐한다."
+        farewell = "난 할일이 있어서 오늘은 좀 일찍 가볼게"
+        message = self.message(f"리오야\n> {thought}\n> 선생은 손을 흔들었다.\n{farewell}")
+        await self.bot.on_message(message)
+
+        args, kwargs = self.llm.answer.call_args
+        self.assertEqual(args[3], farewell)
+        self.assertEqual(kwargs["message_segments"], [
+            {"kind": "narration", "content": "선생은 손을 흔들었다."},
+            {"kind": "dialogue", "content": farewell},
+        ])
+        rows = self.bot.recent.context(Scope(1, 10, 100), message.id + 1)
+        current = next(row for row in rows if row["message_id"] == message.id)
+        self.assertEqual(current["content"], f"> 선생은 손을 흔들었다.\n{farewell}")
 
     async def test_passive_narration_does_not_trigger_a_response(self):
         await self.bot.on_message(self.message("> 선생은 조용히 웃었다."))
